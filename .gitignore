@@ -1,0 +1,29 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# harness 실행 로그
+runs/
+
+# 로컬 환경설정(비밀)
+.env
+.omc
+.pytest_cache
+plan
+.agents
+.codex
+.claude
+.ruff_cache
+mcps/*.json
+benchmarks
+.harness
+scenario
+scripts
+tmp.benchmarks
