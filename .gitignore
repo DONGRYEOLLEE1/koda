@@ -28,3 +28,5 @@ benchmarks
 scenario
 scripts
 tmp.benchmarks
+# antigravity(agy) 리뷰 스크래치
+.agy_tmp
