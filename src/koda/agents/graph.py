@@ -309,6 +309,7 @@ async def run_task(
     task: str, ws: Workspace, approver, on_token,
     on_phase=None, settings=None, mcps_dir="mcps", history: list | None = None,
     mcp_tools: list | None = None, run_id: str | None = None,
+    extra_callbacks: list | None = None,
 ) -> dict:
     """단일 턴 실행.
 
@@ -316,6 +317,8 @@ async def run_task(
     mcp_tools: 사전 로드된 MCP 도구(멀티턴 REPL 이 세션당 1회 로드해 재사용 — 툴 목록이
     안정되어야 프롬프트 prefix 캐시가 유지된다). None 이면 mcps_dir 에서 로드한다.
     run_id: artifact 네임스페이스(§2.3). chat 은 세션 id 를 넘겨 턴 간 이어 쓴다.
+    extra_callbacks: langchain config.callbacks 에 추가로 얹을 핸들러(예: TUI 툴 가시화).
+    langfuse 추적과 동일 채널이라 실행 로직을 건드리지 않는다. CLI 는 넘기지 않는다.
     """
     settings = settings or load_model_settings()
     model, provider, _reason = build_model(settings)
@@ -353,7 +356,7 @@ async def run_task(
     # CallbackHandler 가 이 graph 실행을 하나의 langfuse trace 로 자동 기록한다
     # (각 에이전트/툴/모델 호출 = 관측, 단계별 token 사용량 포함).
     # artifact_ns 를 trace metadata 에 실어 langfuse ↔ .koda/artifacts 상호참조를 유지 (리뷰 Low)
-    config = {"callbacks": tracer.callbacks, "run_name": task[:60],
+    config = {"callbacks": [*tracer.callbacks, *(extra_callbacks or [])], "run_name": task[:60],
               "metadata": {"provider": provider, "artifact_ns": artifact_ns}}
     final = await graph.ainvoke({"task": task, "history": history or []}, config=config)
     tracer.flush()

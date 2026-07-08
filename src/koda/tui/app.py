@@ -1,11 +1,12 @@
-"""Textual TUI 앱: 대화 스트림(좌) + 상태/검증/메모리/세션 패널(우) + 입력(하) (§5.3).
+"""Textual TUI 앱: 대화 스트림(전체폭) + 하단 activity·statusline·Footer + 위험 도구 승인 modal.
 
 실행 코어(run_task·PermissionMiddleware·Session·Memory)는 계약 그대로 재사용한다 (§10).
 worker → UI 는 post_message(thread-safe) 메시지만, UI → worker 는 ApprovalRequest.resolve
 (threading.Event) 하나뿐이다 (§5.2 콜백 스레드 안전성).
 
 진행 표시(활동바)는 toad/Claude Code 관례를 따른다: 입력창 바로 위에 스피너 + 현재 단계 +
-경과 초 + (reasoning 중) 토큰 카운트. 상태 라벨은 TUI 전용 — CLI 의 _format_phase 는 불변.
+경과 초 + (reasoning 중) 토큰 카운트. 그 아래 statusline(세션·모델·턴·모드) + Footer(키 힌트).
+상태 라벨은 TUI 전용 — CLI 의 _format_phase 는 불변.
 """
 from __future__ import annotations
 
@@ -17,8 +18,9 @@ from functools import partial
 from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, VerticalScroll
-from textual.widgets import Input, Markdown, Static, TabbedContent, TabPane, Tree
+from textual.containers import VerticalScroll
+from textual.theme import Theme
+from textual.widgets import Footer, Input, Markdown, Static
 
 from ..cli import _err
 from ..mcp import load_mcp_tools
@@ -31,11 +33,13 @@ from .model import (
     PhaseEvent,
     SessionClosed,
     TokenChunk,
+    ToolEnd,
+    ToolStart,
     TurnDone,
     TurnFailed,
 )
 from .runner import APPROVAL_TIMEOUT_S, TuiTurnRunner
-from .widgets import ApprovalModal
+from .widgets import ApprovalModal, ToolBlock
 
 _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"  # rich 'dots' 프레임 — toad/Claude Code 계열 표준 스피너
 
@@ -50,6 +54,23 @@ _PHASE_TUI = {
     "review": ("독립 리뷰", "success"),
 }
 
+# koda 브랜드 다크 테마 (toad 참조: 다크 네이비 배경 · 보라 accent · 민트 그린 성공 · 골드 · 로즈).
+# 색은 Textual 시맨틱 토큰으로만 참조한다(_theme_color) — /theme 로 내장 테마 교체 가능.
+KODA_DARK = Theme(
+    name="koda-dark",
+    primary="#7c74f4",     # 보라 — 브랜딩·강조
+    secondary="#bb9af7",   # 밝은 보라
+    accent="#bb9af7",      # accent 는 아껴 쓴다 (toad 원칙)
+    success="#7ee787",     # 민트 그린 — 성공·셸
+    warning="#e0af68",     # 골드
+    error="#f7768e",       # 로즈 — 경고/실패
+    foreground="#c0caf5",
+    background="#191a24",   # 다크 네이비
+    surface="#22242f",
+    panel="#2a2d3e",
+    dark=True,
+)
+
 
 class KodaTui(App):
     TITLE = "koda"
@@ -58,14 +79,11 @@ class KodaTui(App):
     # 죽는다(실사용 크래시). 선택 기능을 끄면 그 코드 경로 자체가 실행되지 않는다.
     # 복사는 터미널 네이티브 선택(Shift+드래그)으로 여전히 가능하다.
     ALLOW_SELECT = False
-    BINDINGS = [("ctrl+q", "graceful_quit", "저장 후 종료")]
+    BINDINGS = [("ctrl+q", "graceful_quit", "종료")]
     CSS = """
-    #status_strip { height: 1; background: $panel; color: $text-muted; padding: 0 1; }
-    #main { height: 1fr; }
-    #conversation { width: 2fr; padding: 0 1; }
-    #side { width: 1fr; min-width: 30; }
-    #activity_tree { height: 1fr; padding: 0 1; background: transparent; }
+    #conversation { width: 1fr; height: 1fr; padding: 0 1; }
     #activity { height: 1; padding: 0 1; }
+    #statusline { height: 1; background: $panel; color: $text-muted; padding: 0 1; }
     .user-turn { color: $accent; text-style: bold; margin: 1 0 0 0; }
     .turn-footer { color: $text-muted; margin: 0 0 1 0; }
     ApprovalModal { align: center middle; }
@@ -74,13 +92,18 @@ class KodaTui(App):
     #approval_args { color: $text-muted; margin: 1 0; }
     #approval_buttons { height: auto; align-horizontal: center; margin-top: 1; }
     #approval_buttons Button { margin: 0 2; }
+    ToolBlock { border: none; background: transparent; padding: 0; margin: 0; }
+    ToolBlock CollapsibleTitle { color: $text-muted; }
     """
 
     def __init__(self, ws, session, memory, mcp_tools: list, auto_yes: bool,
-                 run_task_fn=None, approval_timeout: float = APPROVAL_TIMEOUT_S):
+                 run_task_fn=None, approval_timeout: float = APPROVAL_TIMEOUT_S,
+                 model_name: str = ""):
         super().__init__()
         self.runner = TuiTurnRunner(self, ws, session, memory, mcp_tools, auto_yes,
                                     run_task_fn=run_task_fn, approval_timeout=approval_timeout)
+        self._model_name = model_name
+        self._mode = "auto" if auto_yes else "manual"  # 승인 모드 뱃지(statusline)
         self._busy = False
         # 이름 주의: `_closing` 은 textual MessagePump 내부 플래그다 — 덮어쓰면 이후
         # post_message 가 모든 메시지를 조용히 드롭한다(행 원인). 그 이름을 쓰지 말 것.
@@ -93,22 +116,17 @@ class KodaTui(App):
         self._spin_i = 0
         self._think_tok = 0          # reasoning 진행 (think:N) — 토큰 도착 시 해제
         self._activity_label = ""    # 현재 단계 라벨
-        self._activity_detail = ""   # 현재 실행 중인 도구명 (툴 롤업)
-        # 우측 상태 트리(turn → phase) 상태 (모두 UI thread 전용)
-        self._turn_node = None       # 현재 턴 루트 노드
-        self._turn_task = ""         # 현재 턴 작업 텍스트(라벨 재구성용)
-        self._phase_node = None      # 현재 단계 노드
-        self._phase_label = ""       # 현재 단계 라벨(스피너 갱신용)
-        self._phase_t0 = 0.0         # 현재 단계 시작 시각
-        self._phase_tools: Counter = Counter()  # 현재 단계 툴 호출 tally(롤업)
+        self._activity_detail = ""   # 현재 실행 중인 도구명
         self._turn_tools: Counter = Counter()    # 턴 전체 툴 tally(활동바 롤업)
+        self._tool_blocks: dict = {}  # run_id → ToolBlock (ToolStart↔ToolEnd 매칭)
         # 슬래시 커맨드 레지스트리 — /help 목록·placeholder 의 단일 출처 (plan/TUI_SLASH_COMMANDS).
         self._commands: dict[str, tuple[str, object]] = {
             "/help": ("사용 가능한 명령 목록", self._cmd_help),
             "/compact": ("대화 이력을 요약으로 압축", self._cmd_compact),
             "/clear": ("새 스레드 시작(대화 맥락 초기화)", self._cmd_clear),
-            "/memory": ("메모리 패널 보기", self._cmd_memory),
+            "/memory": ("메모리 내용 보기", self._cmd_memory),
             "/remember": ("메모리에 저장: /remember <내용>", self._cmd_remember),
+            "/theme": ("테마 변경: /theme <이름> (인자 없으면 목록)", self._cmd_theme),
             "/exit": ("저장 후 종료", self._cmd_exit),
             "/quit": ("저장 후 종료", self._cmd_exit),
         }
@@ -116,43 +134,37 @@ class KodaTui(App):
     # --- 레이아웃 ---
 
     def compose(self) -> ComposeResult:
-        yield Static(self._strip_text("대기 중"), id="status_strip", markup=False)
-        with Horizontal(id="main"):
-            yield VerticalScroll(id="conversation")
-            with TabbedContent(initial="tab_status", id="side"):
-                with TabPane("상태", id="tab_status"):
-                    tree: Tree = Tree("작업", id="activity_tree")
-                    tree.show_root = False
-                    tree.guide_depth = 3
-                    yield tree
-                with TabPane("검증", id="tab_verify"):
-                    yield Static("(검증 결과 없음)", id="verify_panel", markup=False)
-                with TabPane("메모리", id="tab_memory"):
-                    yield Static(self.runner.memory.read() or "(비어 있음)", id="memory_panel", markup=False)
-                with TabPane("세션", id="tab_session"):
-                    yield Static(self._session_text(len(self.runner.session.turns)), id="session_panel", markup=False)
+        yield VerticalScroll(id="conversation")
         yield Static("", id="activity", markup=False)
+        yield Static(self._statusline_text(), id="statusline", markup=False)
         yield Input(placeholder="요청 입력…  (/help 로 명령 목록 · Ctrl+Q 종료)", id="prompt")
+        yield Footer()
 
     def on_mount(self) -> None:
+        self.register_theme(KODA_DARK)
+        self.theme = "koda-dark"
         self.query_one("#activity", Static).display = False
         self._activity_timer = self.set_interval(0.125, self._tick_activity, pause=True)
         self.query_one("#prompt", Input).focus()
 
-    def _strip_text(self, status: str) -> str:
-        return f"koda · 세션 {self.runner.session.id} · {status}"
+    # --- statusline: 세션 · 모델 · 턴 · 모드 · 상태 (toad 하단 statusline) ---
 
-    def _session_text(self, turns: int) -> str:
+    def _statusline_text(self, status: str = "대기 중") -> str:
         s = self.runner.session
-        return (f"세션 id: {s.id}\n턴 수: {turns}\n히스토리 메시지: {len(s.history)}\n\n"
-                f"재개: koda tui --resume {s.id}")
+        parts = [f"koda · {s.id}"]
+        if self._model_name:
+            parts.append(self._model_name)
+        parts.append(f"{len(s.turns)}턴")
+        parts.append(self._mode)
+        parts.append(status)
+        return " · ".join(parts)
+
+    def _set_status(self, status: str) -> None:
+        self.query_one("#statusline", Static).update(self._statusline_text(status))
 
     def _theme_color(self, name: str) -> str:
         """테마 색상 hex 조회. 라이트/다크 자동 적응."""
         return self.theme_variables.get(name, name)
-
-    def _set_status(self, status: str) -> None:
-        self.query_one("#status_strip", Static).update(self._strip_text(status))
 
     # --- 활동바: 스피너 + 단계 + 경과 초 (+ reasoning 토큰) ---
 
@@ -204,17 +216,9 @@ class KodaTui(App):
         if self._think_tok:
             t.append(f" · 생각 중 ~{self._think_tok} tok", style="dim italic")
         self.query_one("#activity", Static).update(t)
-        # 트리의 현재 턴/단계 노드 스피너도 동기 갱신
-        if self._turn_node is not None:
-            self._turn_node.set_label(
-                Text.assemble((f"{self._spin()} ", "bold"), (self._turn_task, "bold")))
-        if self._phase_node is not None:
-            self._phase_node.set_label(self._phase_line())
 
     def on_unmount(self) -> None:
         self._activity_timer.stop()
-
-    # --- 우측 상태 트리 (turn → phase 계층 + 툴 롤업) ---
 
     def _rollup(self, tools: Counter) -> str:
         """툴 호출 tally 를 'read×3 edit×2' 로 압축 (claude-statusbar frequency tally)."""
@@ -222,66 +226,8 @@ class KodaTui(App):
             return ""
         return " · " + " ".join(f"{n}×{c}" if c > 1 else n for n, c in tools.items())
 
-    def _tree(self) -> Tree:
-        return self.query_one("#activity_tree", Tree)
-
     def _spin(self) -> str:
         return _SPINNER[self._spin_i]
-
-    def _phase_line(self, spinner: bool = True) -> Text:
-        head = f"{self._spin()} " if spinner else ""
-        return Text.assemble((head, "bold"), (self._phase_label, ""),
-                             (self._rollup(self._phase_tools), "dim"))
-
-    def _tree_new_turn(self, task: str) -> None:
-        tree = self._tree()
-        for child in list(tree.root.children):   # 이전 턴은 접는다(노트북식 탐색)
-            child.collapse()
-        self._turn_task = task if len(task) <= 34 else task[:33] + "…"
-        self._turn_node = tree.root.add(
-            Text.assemble((f"{self._spin()} ", "bold"), (self._turn_task, "bold")), expand=True)
-        self._phase_node = None
-        self._phase_label = ""
-        self._phase_tools = Counter()
-        self._turn_tools = Counter()
-
-    def _finalize_phase(self, icon: str = "✓") -> None:
-        if self._phase_node is None:
-            return
-        elapsed = int(time.monotonic() - self._phase_t0)
-        color = self._theme_color("success") if icon == "✓" else self._theme_color("error")
-        self._phase_node.set_label(Text.assemble(
-            (f"{icon} ", f"bold {color}"), (self._phase_label, ""),
-            (f" · {elapsed}s", "dim"), (self._rollup(self._phase_tools), "dim")))
-        self._phase_node = None
-
-    def _tree_phase(self, label: str) -> None:
-        if self._turn_node is None:
-            return
-        self._finalize_phase()          # 직전 단계 확정(✓ · 소요)
-        self._phase_label = label
-        self._phase_t0 = time.monotonic()
-        self._phase_tools = Counter()
-        self._phase_node = self._turn_node.add_leaf(self._phase_line())
-
-    def _tree_tool(self, name: str) -> None:
-        self._phase_tools[name] += 1
-        self._turn_tools[name] += 1
-        if self._phase_node is not None:
-            self._phase_node.set_label(self._phase_line())
-
-    def _tree_finish_turn(self, ok: bool, summary: Text) -> None:
-        self._finalize_phase("✓" if ok else "✗")
-        if self._turn_node is None:
-            return
-        icon = "✓" if ok else "✗"
-        color = self._theme_color("success") if ok else self._theme_color("error")
-        head = Text.assemble((f"{icon} ", f"bold {color}"), (self._turn_task, "bold"))
-        head.append_text(summary)
-        self._turn_node.set_label(head)
-        self._turn_node.collapse()
-        self._turn_node = None
-        self._phase_label = ""
 
     # --- 입력/명령 ---
 
@@ -320,24 +266,30 @@ class KodaTui(App):
         try:
             new_id = self.runner.new_thread()
             await self.query_one("#conversation", VerticalScroll).remove_children()
-            self._tree().root.remove_children()      # 상태 트리도 초기화
-            self._turn_node = None
-            self._phase_node = None
             self._activity_off()
-            self.query_one("#session_panel", Static).update(self._session_text(0))
             self._set_status("대기 중")
             self.notify(f"새 스레드 시작 · 세션 {new_id}", timeout=4)
         finally:
             self._busy = False
 
     async def _cmd_memory(self, arg: str) -> None:
-        self.query_one("#memory_panel", Static).update(self.runner.memory.read() or "(비어 있음)")
-        self.query_one(TabbedContent).active = "tab_memory"
+        self.notify(self.runner.memory.read() or "(비어 있음)", title="메모리", timeout=10)
 
     async def _cmd_remember(self, arg: str) -> None:
         saved = self.runner.memory.remember(arg)
-        self.query_one("#memory_panel", Static).update(self.runner.memory.read() or "(비어 있음)")
         self.notify("기억함." if saved else "이미 기억하고 있거나 내용이 비어 있음.", timeout=3)
+
+    async def _cmd_theme(self, arg: str) -> None:
+        # 내장 테마 + koda-dark 중 선택 (opencode/codex /theme 관례).
+        if not arg:
+            self.notify(f"현재: {self.theme}\n사용 가능: {', '.join(sorted(self.available_themes))}",
+                        title="테마", timeout=8)
+            return
+        if arg not in self.available_themes:
+            self.notify(f"알 수 없는 테마: {arg} — /theme 로 목록 확인", severity="warning", timeout=4)
+            return
+        self.theme = arg
+        self.notify(f"테마: {arg}", timeout=3)
 
     async def _cmd_exit(self, arg: str) -> None:
         self._begin_close()
@@ -361,13 +313,17 @@ class KodaTui(App):
         self._stream = Markdown.get_stream(self._answer_md)
         self._set_status("작업 중")
         self._activity_on("시작")
-        self._tree_new_turn(task)
         self.run_worker(partial(self.runner.run_turn, task), thread=True,
                         exclusive=True, group="turn")
 
     def _end_turn(self, status: str = "대기 중") -> None:
         self._busy = False
         self._answer_md = None
+        # 턴 종료 시 미완 툴 블록 정리 — worker 가 툴 도중 죽으면(ToolEnd 미도착) '실행 중'
+        # 스피너가 영구히 남는다(code-review M2). 성공 턴은 이미 비어 no-op.
+        for block in self._tool_blocks.values():
+            block.finish("(중단됨)", ok=False)
+        self._tool_blocks = {}
         self._activity_off()
         self._set_status(status)
         if isinstance(self.screen, ApprovalModal):
@@ -408,28 +364,24 @@ class KodaTui(App):
         if phase.startswith("retry:"):
             await self._reset_draft()  # 1차 시도 부분 스트림 폐기 (renderer 회귀 불변식과 동일)
             reason = phase[6:]
-            self._finalize_phase("✗")           # 직전 단계는 실패로 확정
             self._activity_label = "재시도"
-            self._tree_phase(f"재시도 · {reason}")
             self.notify(f"빈 응답 — 변형 재시도 ({reason})", severity="warning", timeout=4)
             return
         if phase in _PHASE_TUI:
             label, _theme = _PHASE_TUI[phase]
             self._activity_label = label
             self._activity_detail = ""
-            self._tree_phase(label)
             return
         if phase.startswith("tool:"):
             name = phase[5:].removeprefix("workspace_")
             self._activity_detail = name
-            self._tree_tool(name)
+            self._turn_tools[name] += 1  # 활동바 롤업 tally
             return
         if phase.startswith("mcp:"):
             self.notify(phase[4:], timeout=3)
             return
         # 자유 형식 (문맥 압축 중…, 메모리 갱신 중… 등)
         self._activity_label = phase
-        self._tree_phase(phase)
 
     async def _reset_draft(self) -> None:
         self._draft = ""
@@ -454,38 +406,21 @@ class KodaTui(App):
         if verdict:
             footer.append("  ·  ", style="dim")
             verdict_color = self._theme_color("success") if verdict == "pass" else self._theme_color("error")
-            footer.append(f"verdict: {verdict}",
-                          style=f"bold {verdict_color}")
+            footer.append(f"verdict: {verdict}", style=f"bold {verdict_color}")
+        if result.get("verify_detail"):   # 검증 상세는 우측 패널 대신 턴 footer 인라인 (패널 폐지)
+            footer.append(f"\n판정: {result['verify_detail']}", style="dim")
         if result.get("trace_url"):
             footer.append(f"\ntrace: {result['trace_url']}", style="dim")
         if result.get("empty_final"):
-            footer.append(f"\n빈 응답 — 재시도 권장 (사유: {result.get('empty_reason') or 'unknown'})"
-                          " · 히스토리에 저장하지 않음", style=self._theme_color("warning"))
+            reason = result.get("empty_reason") or "unknown"
+            hint = "출력 예산 소진(재시도 권장)" if reason == "length_truncation" else "재시도 권장"
+            footer.append(f"\n빈 응답 — {hint} (사유: {reason}) · 히스토리에 저장하지 않음",
+                          style=self._theme_color("warning"))
+            self.notify(f"빈 응답: {reason} · {hint} · 히스토리 미저장", severity="error", timeout=6)
         conv = self.query_one("#conversation", VerticalScroll)
         await conv.mount(Static(footer, classes="turn-footer"))
         conv.anchor()
-
-        vtext = Text()
-        v_style = f"bold {self._theme_color('success')}" if verdict == "pass" else (f"bold {self._theme_color('error')}" if verdict else "")
-        vtext.append(f"verdict: {verdict or '(없음)'}\n\n", style=v_style)
-        vtext.append(result.get("verify_detail") or "(판정 근거 없음)")
-        self.query_one("#verify_panel", Static).update(vtext)
-        self.query_one("#session_panel", Static).update(self._session_text(msg.turns))
-
-        # 상태 트리 턴 마감 + 예외(빈 응답) 엄격 처리
-        empty = bool(result.get("empty_final"))
-        ok = not empty and verdict in (None, "", "pass")
-        tsummary = Text()
-        tsummary.append(f" · {self._fmt_elapsed(elapsed)}", style="dim")
-        if verdict:
-            tsummary.append(f" · {verdict}", style="dim")
-        if empty:
-            reason = result.get("empty_reason") or "unknown"
-            tsummary.append(f" · 빈 응답({reason})", style="dim")
-            hint = "출력 예산 소진(재시도 권장)" if reason == "length_truncation" else "재시도 권장"
-            self.notify(f"빈 응답: {reason} · {hint} · 히스토리 미저장",
-                        severity="error", timeout=6)
-        self._tree_finish_turn(ok, tsummary)
+        # 세션 턴 수 갱신은 _end_turn 의 _set_status 가 statusline 을 재구성하며 반영한다.
         self._end_turn()
 
     @on(TurnFailed)
@@ -495,7 +430,6 @@ class KodaTui(App):
         err_color = f"bold {self._theme_color('error')}"
         await conv.mount(Static(Text(f"턴 실패: {msg.error}", style=err_color), classes="turn-footer"))
         conv.anchor()
-        self._tree_finish_turn(False, Text(f" · 실패: {msg.error[:60]}", style="dim"))
         self.notify(f"턴 실패: {msg.error}", severity="error", timeout=8)
         self._end_turn()
 
@@ -504,6 +438,23 @@ class KodaTui(App):
         # /compact worker 완료 — busy 해제·입력 재활성(턴과 동일 경로) 후 결과 안내
         self._end_turn()
         self.notify(msg.note, title="문맥 압축", timeout=5)
+
+    # --- 툴 가시화 (ToolActivityHandler 콜백 → 대화 블록) ---
+
+    @on(ToolStart)
+    async def _on_tool_start(self, msg: ToolStart) -> None:
+        # 툴 실행 블록을 대화에 mount(접힘 기본). run_id 로 ToolEnd 와 매칭한다.
+        block = ToolBlock(msg.title)
+        self._tool_blocks[msg.run_id] = block
+        conv = self.query_one("#conversation", VerticalScroll)
+        await conv.mount(block)
+        conv.anchor()
+
+    @on(ToolEnd)
+    async def _on_tool_end(self, msg: ToolEnd) -> None:
+        block = self._tool_blocks.pop(msg.run_id, None)
+        if block is not None:
+            block.finish(msg.output, msg.ok)
 
     @on(ApprovalRequest)
     def _on_approval(self, msg: ApprovalRequest) -> None:
@@ -564,7 +515,16 @@ def run_tui(args) -> int:
         except Exception as e:
             _err(f"  · MCP 로드 실패({type(e).__name__}) — 로컬 도구만 사용")
 
-    app = KodaTui(ws, session, memory, mcp_tools, auto_yes=args.yes)
+    # statusline 에 표시할 활성 모델명 (설정 로드 실패는 _preflight 가 이미 걸러 여기선 방어만)
+    model_name = ""
+    try:
+        from ..config import load_model_settings
+        st = load_model_settings()
+        model_name = st.local_model if st.primary == "local" else st.openai_model
+    except Exception:
+        pass
+
+    app = KodaTui(ws, session, memory, mcp_tools, auto_yes=args.yes, model_name=model_name)
     app.run()
     final = app.runner.session   # /clear 로 세션이 교체됐을 수 있으므로 최종 세션 기준
     if final.history:

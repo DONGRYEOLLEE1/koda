@@ -213,3 +213,52 @@ def test_plan_uses_fast_model_and_retries_on_empty(monkeypatch, tmp_path):
     # 계획 라벨은 바 데이터 라벨(수행 지시는 coder.md 로 이관 — 인라인 프롬프트 제거)
     assert "## 작업 계획\n" in calls[2]
     assert "- [ ] A" in calls[2]
+
+
+# --- 툴 가시화: run_task 가 extra_callbacks 를 config.callbacks 에 얹는다 (TUI 채널) ---
+
+class _NoTracer:
+    callbacks: list = []
+
+    def flush(self):
+        pass
+
+    def trace_url(self):
+        return None
+
+
+def _dummy_settings():
+    from koda.config import ModelSettings
+    return ModelSettings(primary="local", local_api_key="x",
+                         local_base_url="http://localhost:9", local_model="m",
+                         fallback_enabled=False, openai_api_key="x",
+                         openai_base_url="http://localhost:8", openai_model="o")
+
+
+def test_run_task_appends_extra_callbacks_without_touching_core(monkeypatch, tmp_path):
+    """TUI 툴 가시화는 config.callbacks 채널로만 얹힌다(실행 코어·비노출 정책 무변경).
+    콜백 미전달(CLI 경로)이면 추가 핸들러가 없어 기존 동작 그대로다."""
+    captured: dict = {}
+
+    class _FakeGraph:
+        async def ainvoke(self, state, config=None):
+            captured["callbacks"] = list((config or {}).get("callbacks") or [])
+            return {"answer": "완료", "route": "read"}
+
+    monkeypatch.setattr(G, "_build_graph", lambda *a, **k: _FakeGraph())
+    monkeypatch.setattr(G, "build_model", lambda s: (object(), "local", None))
+    monkeypatch.setattr(G, "_no_think", lambda m: m)
+    monkeypatch.setattr(G, "_thinking", lambda m, b: m)
+    monkeypatch.setattr(G, "make_vision_tools", lambda *a, **k: [])
+    monkeypatch.setattr(G, "get_tracer", lambda: _NoTracer())
+
+    settings = _dummy_settings()
+    sentinel = object()
+
+    asyncio.run(G.run_task("q", Workspace(tmp_path), lambda n, a: True, lambda t: None,
+                           settings=settings, mcps_dir=None, extra_callbacks=[sentinel]))
+    assert sentinel in captured["callbacks"]          # TUI 경로: 핸들러 주입됨
+
+    asyncio.run(G.run_task("q", Workspace(tmp_path), lambda n, a: True, lambda t: None,
+                           settings=settings, mcps_dir=None))
+    assert sentinel not in captured["callbacks"]       # CLI 경로: 추가 없음(기존 동작)

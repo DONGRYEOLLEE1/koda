@@ -1,0 +1,964 @@
+diff --git a/src/koda/agents/graph.py b/src/koda/agents/graph.py
+index 1da147b..945c750 100644
+--- a/src/koda/agents/graph.py
++++ b/src/koda/agents/graph.py
+@@ -309,6 +309,7 @@ async def run_task(
+     task: str, ws: Workspace, approver, on_token,
+     on_phase=None, settings=None, mcps_dir="mcps", history: list | None = None,
+     mcp_tools: list | None = None, run_id: str | None = None,
++    extra_callbacks: list | None = None,
+ ) -> dict:
+     """단일 턴 실행.
+ 
+@@ -316,6 +317,8 @@ async def run_task(
+     mcp_tools: 사전 로드된 MCP 도구(멀티턴 REPL 이 세션당 1회 로드해 재사용 — 툴 목록이
+     안정되어야 프롬프트 prefix 캐시가 유지된다). None 이면 mcps_dir 에서 로드한다.
+     run_id: artifact 네임스페이스(§2.3). chat 은 세션 id 를 넘겨 턴 간 이어 쓴다.
++    extra_callbacks: langchain config.callbacks 에 추가로 얹을 핸들러(예: TUI 툴 가시화).
++    langfuse 추적과 동일 채널이라 실행 로직을 건드리지 않는다. CLI 는 넘기지 않는다.
+     """
+     settings = settings or load_model_settings()
+     model, provider, _reason = build_model(settings)
+@@ -353,7 +356,7 @@ async def run_task(
+     # CallbackHandler 가 이 graph 실행을 하나의 langfuse trace 로 자동 기록한다
+     # (각 에이전트/툴/모델 호출 = 관측, 단계별 token 사용량 포함).
+     # artifact_ns 를 trace metadata 에 실어 langfuse ↔ .koda/artifacts 상호참조를 유지 (리뷰 Low)
+-    config = {"callbacks": tracer.callbacks, "run_name": task[:60],
++    config = {"callbacks": [*tracer.callbacks, *(extra_callbacks or [])], "run_name": task[:60],
+               "metadata": {"provider": provider, "artifact_ns": artifact_ns}}
+     final = await graph.ainvoke({"task": task, "history": history or []}, config=config)
+     tracer.flush()
+diff --git a/src/koda/tui/app.py b/src/koda/tui/app.py
+index 8d3bedc..6ccdd06 100644
+--- a/src/koda/tui/app.py
++++ b/src/koda/tui/app.py
+@@ -1,11 +1,12 @@
+-"""Textual TUI 앱: 대화 스트림(좌) + 상태/검증/메모리/세션 패널(우) + 입력(하) (§5.3).
++"""Textual TUI 앱: 대화 스트림(전체폭) + 하단 activity·statusline·Footer + 위험 도구 승인 modal.
+ 
+ 실행 코어(run_task·PermissionMiddleware·Session·Memory)는 계약 그대로 재사용한다 (§10).
+ worker → UI 는 post_message(thread-safe) 메시지만, UI → worker 는 ApprovalRequest.resolve
+ (threading.Event) 하나뿐이다 (§5.2 콜백 스레드 안전성).
+ 
+ 진행 표시(활동바)는 toad/Claude Code 관례를 따른다: 입력창 바로 위에 스피너 + 현재 단계 +
+-경과 초 + (reasoning 중) 토큰 카운트. 상태 라벨은 TUI 전용 — CLI 의 _format_phase 는 불변.
++경과 초 + (reasoning 중) 토큰 카운트. 그 아래 statusline(세션·모델·턴·모드) + Footer(키 힌트).
++상태 라벨은 TUI 전용 — CLI 의 _format_phase 는 불변.
+ """
+ from __future__ import annotations
+ 
+@@ -17,8 +18,9 @@ from functools import partial
+ from rich.text import Text
+ from textual import on
+ from textual.app import App, ComposeResult
+-from textual.containers import Horizontal, VerticalScroll
+-from textual.widgets import Input, Markdown, Static, TabbedContent, TabPane, Tree
++from textual.containers import VerticalScroll
++from textual.theme import Theme
++from textual.widgets import Footer, Input, Markdown, Static
+ 
+ from ..cli import _err
+ from ..mcp import load_mcp_tools
+@@ -31,11 +33,13 @@ from .model import (
+     PhaseEvent,
+     SessionClosed,
+     TokenChunk,
++    ToolEnd,
++    ToolStart,
+     TurnDone,
+     TurnFailed,
+ )
+ from .runner import APPROVAL_TIMEOUT_S, TuiTurnRunner
+-from .widgets import ApprovalModal
++from .widgets import ApprovalModal, ToolBlock
+ 
+ _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"  # rich 'dots' 프레임 — toad/Claude Code 계열 표준 스피너
+ 
+@@ -50,6 +54,23 @@ _PHASE_TUI = {
+     "review": ("독립 리뷰", "success"),
+ }
+ 
++# koda 브랜드 다크 테마 (toad 참조: 다크 네이비 배경 · 보라 accent · 민트 그린 성공 · 골드 · 로즈).
++# 색은 Textual 시맨틱 토큰으로만 참조한다(_theme_color) — /theme 로 내장 테마 교체 가능.
++KODA_DARK = Theme(
++    name="koda-dark",
++    primary="#7c74f4",     # 보라 — 브랜딩·강조
++    secondary="#bb9af7",   # 밝은 보라
++    accent="#bb9af7",      # accent 는 아껴 쓴다 (toad 원칙)
++    success="#7ee787",     # 민트 그린 — 성공·셸
++    warning="#e0af68",     # 골드
++    error="#f7768e",       # 로즈 — 경고/실패
++    foreground="#c0caf5",
++    background="#191a24",   # 다크 네이비
++    surface="#22242f",
++    panel="#2a2d3e",
++    dark=True,
++)
++
+ 
+ class KodaTui(App):
+     TITLE = "koda"
+@@ -58,14 +79,11 @@ class KodaTui(App):
+     # 죽는다(실사용 크래시). 선택 기능을 끄면 그 코드 경로 자체가 실행되지 않는다.
+     # 복사는 터미널 네이티브 선택(Shift+드래그)으로 여전히 가능하다.
+     ALLOW_SELECT = False
+-    BINDINGS = [("ctrl+q", "graceful_quit", "저장 후 종료")]
++    BINDINGS = [("ctrl+q", "graceful_quit", "종료")]
+     CSS = """
+-    #status_strip { height: 1; background: $panel; color: $text-muted; padding: 0 1; }
+-    #main { height: 1fr; }
+-    #conversation { width: 2fr; padding: 0 1; }
+-    #side { width: 1fr; min-width: 30; }
+-    #activity_tree { height: 1fr; padding: 0 1; background: transparent; }
++    #conversation { width: 1fr; height: 1fr; padding: 0 1; }
+     #activity { height: 1; padding: 0 1; }
++    #statusline { height: 1; background: $panel; color: $text-muted; padding: 0 1; }
+     .user-turn { color: $accent; text-style: bold; margin: 1 0 0 0; }
+     .turn-footer { color: $text-muted; margin: 0 0 1 0; }
+     ApprovalModal { align: center middle; }
+@@ -74,13 +92,18 @@ class KodaTui(App):
+     #approval_args { color: $text-muted; margin: 1 0; }
+     #approval_buttons { height: auto; align-horizontal: center; margin-top: 1; }
+     #approval_buttons Button { margin: 0 2; }
++    ToolBlock { border: none; background: transparent; padding: 0; margin: 0; }
++    ToolBlock CollapsibleTitle { color: $text-muted; }
+     """
+ 
+     def __init__(self, ws, session, memory, mcp_tools: list, auto_yes: bool,
+-                 run_task_fn=None, approval_timeout: float = APPROVAL_TIMEOUT_S):
++                 run_task_fn=None, approval_timeout: float = APPROVAL_TIMEOUT_S,
++                 model_name: str = ""):
+         super().__init__()
+         self.runner = TuiTurnRunner(self, ws, session, memory, mcp_tools, auto_yes,
+                                     run_task_fn=run_task_fn, approval_timeout=approval_timeout)
++        self._model_name = model_name
++        self._mode = "auto" if auto_yes else "manual"  # 승인 모드 뱃지(statusline)
+         self._busy = False
+         # 이름 주의: `_closing` 은 textual MessagePump 내부 플래그다 — 덮어쓰면 이후
+         # post_message 가 모든 메시지를 조용히 드롭한다(행 원인). 그 이름을 쓰지 말 것.
+@@ -93,22 +116,17 @@ class KodaTui(App):
+         self._spin_i = 0
+         self._think_tok = 0          # reasoning 진행 (think:N) — 토큰 도착 시 해제
+         self._activity_label = ""    # 현재 단계 라벨
+-        self._activity_detail = ""   # 현재 실행 중인 도구명 (툴 롤업)
+-        # 우측 상태 트리(turn → phase) 상태 (모두 UI thread 전용)
+-        self._turn_node = None       # 현재 턴 루트 노드
+-        self._turn_task = ""         # 현재 턴 작업 텍스트(라벨 재구성용)
+-        self._phase_node = None      # 현재 단계 노드
+-        self._phase_label = ""       # 현재 단계 라벨(스피너 갱신용)
+-        self._phase_t0 = 0.0         # 현재 단계 시작 시각
+-        self._phase_tools: Counter = Counter()  # 현재 단계 툴 호출 tally(롤업)
++        self._activity_detail = ""   # 현재 실행 중인 도구명
+         self._turn_tools: Counter = Counter()    # 턴 전체 툴 tally(활동바 롤업)
++        self._tool_blocks: dict = {}  # run_id → ToolBlock (ToolStart↔ToolEnd 매칭)
+         # 슬래시 커맨드 레지스트리 — /help 목록·placeholder 의 단일 출처 (plan/TUI_SLASH_COMMANDS).
+         self._commands: dict[str, tuple[str, object]] = {
+             "/help": ("사용 가능한 명령 목록", self._cmd_help),
+             "/compact": ("대화 이력을 요약으로 압축", self._cmd_compact),
+             "/clear": ("새 스레드 시작(대화 맥락 초기화)", self._cmd_clear),
+-            "/memory": ("메모리 패널 보기", self._cmd_memory),
++            "/memory": ("메모리 내용 보기", self._cmd_memory),
+             "/remember": ("메모리에 저장: /remember <내용>", self._cmd_remember),
++            "/theme": ("테마 변경: /theme <이름> (인자 없으면 목록)", self._cmd_theme),
+             "/exit": ("저장 후 종료", self._cmd_exit),
+             "/quit": ("저장 후 종료", self._cmd_exit),
+         }
+@@ -116,44 +134,38 @@ class KodaTui(App):
+     # --- 레이아웃 ---
+ 
+     def compose(self) -> ComposeResult:
+-        yield Static(self._strip_text("대기 중"), id="status_strip", markup=False)
+-        with Horizontal(id="main"):
+-            yield VerticalScroll(id="conversation")
+-            with TabbedContent(initial="tab_status", id="side"):
+-                with TabPane("상태", id="tab_status"):
+-                    tree: Tree = Tree("작업", id="activity_tree")
+-                    tree.show_root = False
+-                    tree.guide_depth = 3
+-                    yield tree
+-                with TabPane("검증", id="tab_verify"):
+-                    yield Static("(검증 결과 없음)", id="verify_panel", markup=False)
+-                with TabPane("메모리", id="tab_memory"):
+-                    yield Static(self.runner.memory.read() or "(비어 있음)", id="memory_panel", markup=False)
+-                with TabPane("세션", id="tab_session"):
+-                    yield Static(self._session_text(len(self.runner.session.turns)), id="session_panel", markup=False)
++        yield VerticalScroll(id="conversation")
+         yield Static("", id="activity", markup=False)
++        yield Static(self._statusline_text(), id="statusline", markup=False)
+         yield Input(placeholder="요청 입력…  (/help 로 명령 목록 · Ctrl+Q 종료)", id="prompt")
++        yield Footer()
+ 
+     def on_mount(self) -> None:
++        self.register_theme(KODA_DARK)
++        self.theme = "koda-dark"
+         self.query_one("#activity", Static).display = False
+         self._activity_timer = self.set_interval(0.125, self._tick_activity, pause=True)
+         self.query_one("#prompt", Input).focus()
+ 
+-    def _strip_text(self, status: str) -> str:
+-        return f"koda · 세션 {self.runner.session.id} · {status}"
++    # --- statusline: 세션 · 모델 · 턴 · 모드 · 상태 (toad 하단 statusline) ---
+ 
+-    def _session_text(self, turns: int) -> str:
++    def _statusline_text(self, status: str = "대기 중") -> str:
+         s = self.runner.session
+-        return (f"세션 id: {s.id}\n턴 수: {turns}\n히스토리 메시지: {len(s.history)}\n\n"
+-                f"재개: koda tui --resume {s.id}")
++        parts = [f"koda · {s.id}"]
++        if self._model_name:
++            parts.append(self._model_name)
++        parts.append(f"{len(s.turns)}턴")
++        parts.append(self._mode)
++        parts.append(status)
++        return " · ".join(parts)
++
++    def _set_status(self, status: str) -> None:
++        self.query_one("#statusline", Static).update(self._statusline_text(status))
+ 
+     def _theme_color(self, name: str) -> str:
+         """테마 색상 hex 조회. 라이트/다크 자동 적응."""
+         return self.theme_variables.get(name, name)
+ 
+-    def _set_status(self, status: str) -> None:
+-        self.query_one("#status_strip", Static).update(self._strip_text(status))
+-
+     # --- 활동바: 스피너 + 단계 + 경과 초 (+ reasoning 토큰) ---
+ 
+     def _activity_on(self, label: str) -> None:
+@@ -204,85 +216,19 @@ class KodaTui(App):
+         if self._think_tok:
+             t.append(f" · 생각 중 ~{self._think_tok} tok", style="dim italic")
+         self.query_one("#activity", Static).update(t)
+-        # 트리의 현재 턴/단계 노드 스피너도 동기 갱신
+-        if self._turn_node is not None:
+-            self._turn_node.set_label(
+-                Text.assemble((f"{self._spin()} ", "bold"), (self._turn_task, "bold")))
+-        if self._phase_node is not None:
+-            self._phase_node.set_label(self._phase_line())
+ 
+     def on_unmount(self) -> None:
+         self._activity_timer.stop()
+ 
+-    # --- 우측 상태 트리 (turn → phase 계층 + 툴 롤업) ---
+-
+     def _rollup(self, tools: Counter) -> str:
+         """툴 호출 tally 를 'read×3 edit×2' 로 압축 (claude-statusbar frequency tally)."""
+         if not tools:
+             return ""
+         return " · " + " ".join(f"{n}×{c}" if c > 1 else n for n, c in tools.items())
+ 
+-    def _tree(self) -> Tree:
+-        return self.query_one("#activity_tree", Tree)
+-
+     def _spin(self) -> str:
+         return _SPINNER[self._spin_i]
+ 
+-    def _phase_line(self, spinner: bool = True) -> Text:
+-        head = f"{self._spin()} " if spinner else ""
+-        return Text.assemble((head, "bold"), (self._phase_label, ""),
+-                             (self._rollup(self._phase_tools), "dim"))
+-
+-    def _tree_new_turn(self, task: str) -> None:
+-        tree = self._tree()
+-        for child in list(tree.root.children):   # 이전 턴은 접는다(노트북식 탐색)
+-            child.collapse()
+-        self._turn_task = task if len(task) <= 34 else task[:33] + "…"
+-        self._turn_node = tree.root.add(
+-            Text.assemble((f"{self._spin()} ", "bold"), (self._turn_task, "bold")), expand=True)
+-        self._phase_node = None
+-        self._phase_label = ""
+-        self._phase_tools = Counter()
+-        self._turn_tools = Counter()
+-
+-    def _finalize_phase(self, icon: str = "✓") -> None:
+-        if self._phase_node is None:
+-            return
+-        elapsed = int(time.monotonic() - self._phase_t0)
+-        color = self._theme_color("success") if icon == "✓" else self._theme_color("error")
+-        self._phase_node.set_label(Text.assemble(
+-            (f"{icon} ", f"bold {color}"), (self._phase_label, ""),
+-            (f" · {elapsed}s", "dim"), (self._rollup(self._phase_tools), "dim")))
+-        self._phase_node = None
+-
+-    def _tree_phase(self, label: str) -> None:
+-        if self._turn_node is None:
+-            return
+-        self._finalize_phase()          # 직전 단계 확정(✓ · 소요)
+-        self._phase_label = label
+-        self._phase_t0 = time.monotonic()
+-        self._phase_tools = Counter()
+-        self._phase_node = self._turn_node.add_leaf(self._phase_line())
+-
+-    def _tree_tool(self, name: str) -> None:
+-        self._phase_tools[name] += 1
+-        self._turn_tools[name] += 1
+-        if self._phase_node is not None:
+-            self._phase_node.set_label(self._phase_line())
+-
+-    def _tree_finish_turn(self, ok: bool, summary: Text) -> None:
+-        self._finalize_phase("✓" if ok else "✗")
+-        if self._turn_node is None:
+-            return
+-        icon = "✓" if ok else "✗"
+-        color = self._theme_color("success") if ok else self._theme_color("error")
+-        head = Text.assemble((f"{icon} ", f"bold {color}"), (self._turn_task, "bold"))
+-        head.append_text(summary)
+-        self._turn_node.set_label(head)
+-        self._turn_node.collapse()
+-        self._turn_node = None
+-        self._phase_label = ""
+-
+     # --- 입력/명령 ---
+ 
+     @on(Input.Submitted, "#prompt")
+@@ -320,25 +266,31 @@ class KodaTui(App):
+         try:
+             new_id = self.runner.new_thread()
+             await self.query_one("#conversation", VerticalScroll).remove_children()
+-            self._tree().root.remove_children()      # 상태 트리도 초기화
+-            self._turn_node = None
+-            self._phase_node = None
+             self._activity_off()
+-            self.query_one("#session_panel", Static).update(self._session_text(0))
+             self._set_status("대기 중")
+             self.notify(f"새 스레드 시작 · 세션 {new_id}", timeout=4)
+         finally:
+             self._busy = False
+ 
+     async def _cmd_memory(self, arg: str) -> None:
+-        self.query_one("#memory_panel", Static).update(self.runner.memory.read() or "(비어 있음)")
+-        self.query_one(TabbedContent).active = "tab_memory"
++        self.notify(self.runner.memory.read() or "(비어 있음)", title="메모리", timeout=10)
+ 
+     async def _cmd_remember(self, arg: str) -> None:
+         saved = self.runner.memory.remember(arg)
+-        self.query_one("#memory_panel", Static).update(self.runner.memory.read() or "(비어 있음)")
+         self.notify("기억함." if saved else "이미 기억하고 있거나 내용이 비어 있음.", timeout=3)
+ 
++    async def _cmd_theme(self, arg: str) -> None:
++        # 내장 테마 + koda-dark 중 선택 (opencode/codex /theme 관례).
++        if not arg:
++            self.notify(f"현재: {self.theme}\n사용 가능: {', '.join(sorted(self.available_themes))}",
++                        title="테마", timeout=8)
++            return
++        if arg not in self.available_themes:
++            self.notify(f"알 수 없는 테마: {arg} — /theme 로 목록 확인", severity="warning", timeout=4)
++            return
++        self.theme = arg
++        self.notify(f"테마: {arg}", timeout=3)
++
+     async def _cmd_exit(self, arg: str) -> None:
+         self._begin_close()
+ 
+@@ -354,6 +306,7 @@ class KodaTui(App):
+         self._busy = True
+         self.query_one("#prompt", Input).disabled = True
+         self._draft = ""
++        self._tool_blocks = {}   # 새 턴 — 이전 턴 툴 블록 매칭 dict 정리
+         conv = self.query_one("#conversation", VerticalScroll)
+         self._answer_md = Markdown("", classes="answer")
+         await conv.mount(Static(f"» {task}", classes="user-turn", markup=False), self._answer_md)
+@@ -361,7 +314,6 @@ class KodaTui(App):
+         self._stream = Markdown.get_stream(self._answer_md)
+         self._set_status("작업 중")
+         self._activity_on("시작")
+-        self._tree_new_turn(task)
+         self.run_worker(partial(self.runner.run_turn, task), thread=True,
+                         exclusive=True, group="turn")
+ 
+@@ -408,28 +360,24 @@ class KodaTui(App):
+         if phase.startswith("retry:"):
+             await self._reset_draft()  # 1차 시도 부분 스트림 폐기 (renderer 회귀 불변식과 동일)
+             reason = phase[6:]
+-            self._finalize_phase("✗")           # 직전 단계는 실패로 확정
+             self._activity_label = "재시도"
+-            self._tree_phase(f"재시도 · {reason}")
+             self.notify(f"빈 응답 — 변형 재시도 ({reason})", severity="warning", timeout=4)
+             return
+         if phase in _PHASE_TUI:
+             label, _theme = _PHASE_TUI[phase]
+             self._activity_label = label
+             self._activity_detail = ""
+-            self._tree_phase(label)
+             return
+         if phase.startswith("tool:"):
+             name = phase[5:].removeprefix("workspace_")
+             self._activity_detail = name
+-            self._tree_tool(name)
++            self._turn_tools[name] += 1  # 활동바 롤업 tally
+             return
+         if phase.startswith("mcp:"):
+             self.notify(phase[4:], timeout=3)
+             return
+         # 자유 형식 (문맥 압축 중…, 메모리 갱신 중… 등)
+         self._activity_label = phase
+-        self._tree_phase(phase)
+ 
+     async def _reset_draft(self) -> None:
+         self._draft = ""
+@@ -454,38 +402,21 @@ class KodaTui(App):
+         if verdict:
+             footer.append("  ·  ", style="dim")
+             verdict_color = self._theme_color("success") if verdict == "pass" else self._theme_color("error")
+-            footer.append(f"verdict: {verdict}",
+-                          style=f"bold {verdict_color}")
++            footer.append(f"verdict: {verdict}", style=f"bold {verdict_color}")
++        if result.get("verify_detail"):   # 검증 상세는 우측 패널 대신 턴 footer 인라인 (패널 폐지)
++            footer.append(f"\n판정: {result['verify_detail']}", style="dim")
+         if result.get("trace_url"):
+             footer.append(f"\ntrace: {result['trace_url']}", style="dim")
+         if result.get("empty_final"):
+-            footer.append(f"\n빈 응답 — 재시도 권장 (사유: {result.get('empty_reason') or 'unknown'})"
+-                          " · 히스토리에 저장하지 않음", style=self._theme_color("warning"))
++            reason = result.get("empty_reason") or "unknown"
++            hint = "출력 예산 소진(재시도 권장)" if reason == "length_truncation" else "재시도 권장"
++            footer.append(f"\n빈 응답 — {hint} (사유: {reason}) · 히스토리에 저장하지 않음",
++                          style=self._theme_color("warning"))
++            self.notify(f"빈 응답: {reason} · {hint} · 히스토리 미저장", severity="error", timeout=6)
+         conv = self.query_one("#conversation", VerticalScroll)
+         await conv.mount(Static(footer, classes="turn-footer"))
+         conv.anchor()
+-
+-        vtext = Text()
+-        v_style = f"bold {self._theme_color('success')}" if verdict == "pass" else (f"bold {self._theme_color('error')}" if verdict else "")
+-        vtext.append(f"verdict: {verdict or '(없음)'}\n\n", style=v_style)
+-        vtext.append(result.get("verify_detail") or "(판정 근거 없음)")
+-        self.query_one("#verify_panel", Static).update(vtext)
+-        self.query_one("#session_panel", Static).update(self._session_text(msg.turns))
+-
+-        # 상태 트리 턴 마감 + 예외(빈 응답) 엄격 처리
+-        empty = bool(result.get("empty_final"))
+-        ok = not empty and verdict in (None, "", "pass")
+-        tsummary = Text()
+-        tsummary.append(f" · {self._fmt_elapsed(elapsed)}", style="dim")
+-        if verdict:
+-            tsummary.append(f" · {verdict}", style="dim")
+-        if empty:
+-            reason = result.get("empty_reason") or "unknown"
+-            tsummary.append(f" · 빈 응답({reason})", style="dim")
+-            hint = "출력 예산 소진(재시도 권장)" if reason == "length_truncation" else "재시도 권장"
+-            self.notify(f"빈 응답: {reason} · {hint} · 히스토리 미저장",
+-                        severity="error", timeout=6)
+-        self._tree_finish_turn(ok, tsummary)
++        # 세션 턴 수 갱신은 _end_turn 의 _set_status 가 statusline 을 재구성하며 반영한다.
+         self._end_turn()
+ 
+     @on(TurnFailed)
+@@ -495,7 +426,6 @@ class KodaTui(App):
+         err_color = f"bold {self._theme_color('error')}"
+         await conv.mount(Static(Text(f"턴 실패: {msg.error}", style=err_color), classes="turn-footer"))
+         conv.anchor()
+-        self._tree_finish_turn(False, Text(f" · 실패: {msg.error[:60]}", style="dim"))
+         self.notify(f"턴 실패: {msg.error}", severity="error", timeout=8)
+         self._end_turn()
+ 
+@@ -505,6 +435,23 @@ class KodaTui(App):
+         self._end_turn()
+         self.notify(msg.note, title="문맥 압축", timeout=5)
+ 
++    # --- 툴 가시화 (ToolActivityHandler 콜백 → 대화 블록) ---
++
++    @on(ToolStart)
++    async def _on_tool_start(self, msg: ToolStart) -> None:
++        # 툴 실행 블록을 대화에 mount(접힘 기본). run_id 로 ToolEnd 와 매칭한다.
++        block = ToolBlock(msg.title)
++        self._tool_blocks[msg.run_id] = block
++        conv = self.query_one("#conversation", VerticalScroll)
++        await conv.mount(block)
++        conv.anchor()
++
++    @on(ToolEnd)
++    async def _on_tool_end(self, msg: ToolEnd) -> None:
++        block = self._tool_blocks.pop(msg.run_id, None)
++        if block is not None:
++            block.finish(msg.output, msg.ok)
++
+     @on(ApprovalRequest)
+     def _on_approval(self, msg: ApprovalRequest) -> None:
+         # 라벨은 툴 롤업과 무관하게 항상 노출되므로 승인 대기를 라벨로 띄운다(활동바 detail 은
+@@ -564,7 +511,16 @@ def run_tui(args) -> int:
+         except Exception as e:
+             _err(f"  · MCP 로드 실패({type(e).__name__}) — 로컬 도구만 사용")
+ 
+-    app = KodaTui(ws, session, memory, mcp_tools, auto_yes=args.yes)
++    # statusline 에 표시할 활성 모델명 (설정 로드 실패는 _preflight 가 이미 걸러 여기선 방어만)
++    model_name = ""
++    try:
++        from ..config import load_model_settings
++        st = load_model_settings()
++        model_name = st.local_model if st.primary == "local" else st.openai_model
++    except Exception:
++        pass
++
++    app = KodaTui(ws, session, memory, mcp_tools, auto_yes=args.yes, model_name=model_name)
+     app.run()
+     final = app.runner.session   # /clear 로 세션이 교체됐을 수 있으므로 최종 세션 기준
+     if final.history:
+diff --git a/src/koda/tui/model.py b/src/koda/tui/model.py
+index 5652876..96bf2e4 100644
+--- a/src/koda/tui/model.py
++++ b/src/koda/tui/model.py
+@@ -69,3 +69,27 @@ class CompactDone(Message):
+     def __init__(self, note: str) -> None:
+         self.note = note
+         super().__init__()
++
++
++class ToolStart(Message):
++    """툴 실행 시작 (langchain on_tool_start). run_id 로 ToolEnd 와 매칭한다.
++
++    title 은 도구별 템플릿으로 만든 표시용 라벨(예: '$ pytest -q', '읽기 · calc.py').
++    raw args 는 싣지 않는다 — 승인/비노출 정책과 무관한 표시 전용 채널이다.
++    """
++
++    def __init__(self, run_id: str, name: str, title: str) -> None:
++        self.run_id = run_id
++        self.name = name
++        self.title = title
++        super().__init__()
++
++
++class ToolEnd(Message):
++    """툴 실행 종료. output 은 redaction+길이 절단이 끝난 표시용 문자열, ok 는 성공 여부."""
++
++    def __init__(self, run_id: str, output: str, ok: bool = True) -> None:
++        self.run_id = run_id
++        self.output = output
++        self.ok = ok
++        super().__init__()
+diff --git a/src/koda/tui/runner.py b/src/koda/tui/runner.py
+index 8fb6cfb..fc61e7c 100644
+--- a/src/koda/tui/runner.py
++++ b/src/koda/tui/runner.py
+@@ -24,6 +24,7 @@ from .model import (
+     TurnDone,
+     TurnFailed,
+ )
++from .tool_handler import ToolActivityHandler
+ 
+ APPROVAL_TIMEOUT_S = 600.0  # modal 무응답은 deny — 위험 도구가 무기한 대기하지 않는다
+ 
+@@ -76,6 +77,8 @@ class TuiTurnRunner:
+                     history=self.session.history, mcp_tools=self.mcp_tools,
+                     mcps_dir=None,  # MCP 는 세션당 1회 사전 로드 (AC 10)
+                     run_id=self.session.id,  # artifact 를 세션 단위로 이어 쓴다
++                    # 툴 가시화: langfuse 와 동일한 config.callbacks 채널로만 관측(실행 로직 무변경).
++                    extra_callbacks=[ToolActivityHandler(post)],
+                 ),
+                 lambda p: post(PhaseEvent(p)),
+             ))
+diff --git a/src/koda/tui/tool_handler.py b/src/koda/tui/tool_handler.py
+new file mode 100644
+index 0000000..aaaafea
+--- /dev/null
++++ b/src/koda/tui/tool_handler.py
+@@ -0,0 +1,80 @@
++"""langchain 콜백 핸들러: 툴 실행 시작/종료를 TUI 메시지(ToolStart/ToolEnd)로 변환한다.
++
++**설계 핵심(plan/TUI_UI_OVERHAUL.md)**: astream_agent·graph 노드·run_task 의 스트리밍 로직을
++건드리지 않는다. koda 는 이미 langfuse CallbackHandler 를 config.callbacks 로 넘겨 모든 툴 호출
++입출력을 관측한다 — 툴 렌더링도 같은 채널에 얹는다. TUI 전용이므로 CLI(run/chat)는 이 핸들러를
++넘기지 않고, 따라서 툴 output 비노출 동작이 그대로 유지된다.
++
++제목은 별도 LLM 호출 없이 **도구별 템플릿**을 완성된 tool input(args)으로 만든다(모델 부담 0).
++"""
++from __future__ import annotations
++
++from langchain_core.callbacks import BaseCallbackHandler
++
++from .model import ToolEnd, ToolStart
++
++_OUTPUT_LIMIT = 2000  # 툴 output 표시 상한 (긴 파일 내용·셸 출력 절단)
++
++
++def _trim(text: str) -> str:
++    return text[:_OUTPUT_LIMIT] + " …(생략)" if len(text) > _OUTPUT_LIMIT else text
++
++
++def tool_title(name: str, args: dict) -> str:
++    """도구 + 완성된 args → 표시용 제목. 모델이 아니라 koda 가 결정론으로 만든다.
++
++    args 가 비거나 예상 키가 없으면 도구 이름으로 폴백 — UI 에 빈 헤더가 나오지 않게.
++    """
++    args = args if isinstance(args, dict) else {}
++    short = name.removeprefix("workspace_")
++    if name == "workspace_run_command":
++        argv = args.get("argv")
++        cmd = " ".join(map(str, argv)) if isinstance(argv, list) else str(argv or "")
++        return f"$ {cmd}".strip() if cmd else "$ (명령)"
++    path = args.get("path")
++    if name == "workspace_read_file":
++        return f"읽기 · {path}" if path else "파일 읽기"
++    if name == "workspace_list_files":
++        return f"목록 · {path or '.'}"
++    if name == "workspace_search_text":
++        q = args.get("query")
++        return f"검색 · {q}" if q else "텍스트 검색"
++    if name == "workspace_edit_file":
++        return f"수정 · {path}" if path else "파일 수정"
++    if name == "workspace_write_file":
++        return f"쓰기 · {path}" if path else "파일 쓰기"
++    if name == "workspace_create_dir":
++        return f"디렉토리 · {path}" if path else "디렉토리 생성"
++    if name == "workspace_delete_path":
++        return f"삭제 · {path}" if path else "삭제"
++    if name == "explore":
++        return "탐색 위임"
++    return short  # MCP·기타 도구는 이름 그대로
++
++
++class ToolActivityHandler(BaseCallbackHandler):
++    """툴 실행을 관측해 TUI 로 post 한다. run_id(툴 실행 단위 UUID)로 start↔end 를 매칭한다.
++
++    post 는 app.post_message(thread-safe) — 콜백은 worker/executor thread 에서 발화하지만
++    runner 의 기존 메시지 계약과 동일하게 안전하다.
++    """
++
++    def __init__(self, post) -> None:
++        self._post = post
++
++    def on_tool_start(self, serialized, input_str, *, run_id=None, inputs=None, **kwargs) -> None:
++        name = (serialized or {}).get("name") or "tool"
++        args = inputs if isinstance(inputs, dict) else {}
++        self._post(ToolStart(str(run_id), name, tool_title(name, args)))
++
++    def on_tool_end(self, output, *, run_id=None, **kwargs) -> None:
++        self._post(ToolEnd(str(run_id), _trim(_to_text(output)), ok=True))
++
++    def on_tool_error(self, error, *, run_id=None, **kwargs) -> None:
++        self._post(ToolEnd(str(run_id), f"오류: {type(error).__name__}: {error}", ok=False))
++
++
++def _to_text(output) -> str:
++    """ToolMessage 나 원시 반환값에서 표시 텍스트를 뽑는다."""
++    content = getattr(output, "content", output)
++    return content if isinstance(content, str) else str(content)
+diff --git a/src/koda/tui/widgets.py b/src/koda/tui/widgets.py
+index a032557..84c6ed3 100644
+--- a/src/koda/tui/widgets.py
++++ b/src/koda/tui/widgets.py
+@@ -6,12 +6,29 @@ import re
+ from textual.app import ComposeResult
+ from textual.containers import Horizontal, Vertical
+ from textual.screen import ModalScreen
+-from textual.widgets import Button, Static
++from textual.widgets import Button, Collapsible, Static
+ 
+ _PREVIEW_LIMIT = 500
+ _SECRET_KEY = re.compile(r"(?i)token|secret|key|password|authorization|credential")
+ 
+ 
++class ToolBlock(Collapsible):
++    """대화 스트림 안의 툴 실행 블록 (toad/Claude Code 식 '가볍게 렌더').
++
++    접힘이 기본 — 헤더에 상태 아이콘 + 제목만, 펼치면 output. ToolStart 로 mount(진행 중 ○),
++    ToolEnd 로 finish(성공 ✓ / 실패 ✗ + output). Collapsible.title 은 reactive 라 갱신 시 재렌더.
++    """
++
++    def __init__(self, title: str) -> None:
++        self._label = title
++        self._body = Static("실행 중…", markup=False)
++        super().__init__(self._body, title=f"○ 🔧 {title}", collapsed=True)
++
++    def finish(self, output: str, ok: bool) -> None:
++        self.title = f"{'✓' if ok else '✗'} 🔧 {self._label}"
++        self._body.update(output or "(출력 없음)")
++
++
+ def _args_preview(tool: str, args: object) -> str:
+     """args 요약 — 길이 제한 + secret 성 키 redaction, raw dump 금지 (§9)."""
+     if tool == "workspace_run_command" and isinstance(args, dict):
+diff --git a/tests/test_graph.py b/tests/test_graph.py
+index c107746..8d1a9f7 100644
+--- a/tests/test_graph.py
++++ b/tests/test_graph.py
+@@ -213,3 +213,52 @@ def test_plan_uses_fast_model_and_retries_on_empty(monkeypatch, tmp_path):
+     # 계획 라벨은 바 데이터 라벨(수행 지시는 coder.md 로 이관 — 인라인 프롬프트 제거)
+     assert "## 작업 계획\n" in calls[2]
+     assert "- [ ] A" in calls[2]
++
++
++# --- 툴 가시화: run_task 가 extra_callbacks 를 config.callbacks 에 얹는다 (TUI 채널) ---
++
++class _NoTracer:
++    callbacks: list = []
++
++    def flush(self):
++        pass
++
++    def trace_url(self):
++        return None
++
++
++def _dummy_settings():
++    from koda.config import ModelSettings
++    return ModelSettings(primary="local", local_api_key="x",
++                         local_base_url="http://localhost:9", local_model="m",
++                         fallback_enabled=False, openai_api_key="x",
++                         openai_base_url="http://localhost:8", openai_model="o")
++
++
++def test_run_task_appends_extra_callbacks_without_touching_core(monkeypatch, tmp_path):
++    """TUI 툴 가시화는 config.callbacks 채널로만 얹힌다(실행 코어·비노출 정책 무변경).
++    콜백 미전달(CLI 경로)이면 추가 핸들러가 없어 기존 동작 그대로다."""
++    captured: dict = {}
++
++    class _FakeGraph:
++        async def ainvoke(self, state, config=None):
++            captured["callbacks"] = list((config or {}).get("callbacks") or [])
++            return {"answer": "완료", "route": "read"}
++
++    monkeypatch.setattr(G, "_build_graph", lambda *a, **k: _FakeGraph())
++    monkeypatch.setattr(G, "build_model", lambda s: (object(), "local", None))
++    monkeypatch.setattr(G, "_no_think", lambda m: m)
++    monkeypatch.setattr(G, "_thinking", lambda m, b: m)
++    monkeypatch.setattr(G, "make_vision_tools", lambda *a, **k: [])
++    monkeypatch.setattr(G, "get_tracer", lambda: _NoTracer())
++
++    settings = _dummy_settings()
++    sentinel = object()
++
++    asyncio.run(G.run_task("q", Workspace(tmp_path), lambda n, a: True, lambda t: None,
++                           settings=settings, mcps_dir=None, extra_callbacks=[sentinel]))
++    assert sentinel in captured["callbacks"]          # TUI 경로: 핸들러 주입됨
++
++    asyncio.run(G.run_task("q", Workspace(tmp_path), lambda n, a: True, lambda t: None,
++                           settings=settings, mcps_dir=None))
++    assert sentinel not in captured["callbacks"]       # CLI 경로: 추가 없음(기존 동작)
+diff --git a/tests/test_tui.py b/tests/test_tui.py
+index f90ffa3..1362c15 100644
+--- a/tests/test_tui.py
++++ b/tests/test_tui.py
+@@ -18,7 +18,9 @@ from koda.cli import main
+ from koda.memory import Memory
+ from koda.session import Session
+ from koda.tui.app import KodaTui
+-from koda.tui.widgets import ApprovalModal, _args_preview
++from koda.tui.model import ToolEnd, ToolStart
++from koda.tui.tool_handler import ToolActivityHandler, tool_title
++from koda.tui.widgets import ApprovalModal, ToolBlock, _args_preview
+ from koda.workspace import Workspace
+ 
+ 
+@@ -63,19 +65,6 @@ def _static_text(widget) -> str:
+     return getattr(r, "plain", None) or str(r)
+ 
+ 
+-def _tree_text(app) -> str:
+-    tree = app.query_one("#activity_tree")
+-    parts = []
+-
+-    def walk(node):
+-        parts.append(str(node.label))
+-        for c in node.children:
+-            walk(c)
+-
+-    walk(tree.root)
+-    return "\n".join(parts)
+-
+-
+ def _notifs(app) -> str:
+     return "\n".join(n.message for n in app._notifications)
+ 
+@@ -92,8 +81,8 @@ def test_boot_widgets_exist(tmp_path):
+         async with app.run_test():
+             assert app.query_one("#prompt") is not None
+             assert app.query_one("#conversation") is not None
+-            assert app.query_one("#activity_tree") is not None
+-            assert "세션" in _static_text(app.query_one("#status_strip"))
++            assert app.query_one("#statusline") is not None
++            assert "koda" in _static_text(app.query_one("#statusline"))
+     asyncio.run(go())
+ 
+ 
+@@ -140,16 +129,12 @@ def test_events_routed(tmp_path):
+         async with app.run_test() as pilot:
+             await _submit(pilot, "수정해줘")
+             assert await _wait(pilot, _turn_done(app))
+-            log = _tree_text(app)
+-            assert "코드 작성" in log                # phase → 트리 단계 노드 (TUI 전용 라벨)
+-            assert "write_file" in log              # tool:* → 단계 노드 롤업 (workspace_ 접두 제거)
+-            assert "length_truncation" in log       # retry → 재시도 단계 노드
+-            assert "생각 중" not in log              # think:* 는 활동바 전용
+-            assert "진행 중…" not in log                   # heartbeat 는 활동바 경과초가 대체
++            # 툴 이벤트는 활동바 롤업 tally 로 누적된다 (workspace_ 접두 제거)
++            assert "write_file" in app._turn_tools
+             assert app._draft == "다시 쓴 본문"             # retry 가 1차 부분 스트림 폐기
+-            verify = _static_text(app.query_one("#verify_panel"))
+-            assert "pass" in verify and "테스트 근거" in verify
++            # 검증 결과·판정 근거·trace 는 우측 패널 폐지 후 턴 footer 에 인라인된다
+             footer = "\n".join(_static_text(w) for w in app.query(".turn-footer"))
++            assert "verdict: pass" in footer and "테스트 근거" in footer
+             assert "trace: http://lf/t/1" in footer
+     asyncio.run(go())
+ 
+@@ -318,12 +303,10 @@ def test_remember_and_memory_commands(tmp_path):
+             await _submit(pilot, "/remember 파이썬 3.14 를 쓴다")
+             await pilot.pause()
+             assert "파이썬 3.14 를 쓴다" in Memory(tmp_path).read()
+-            assert "파이썬 3.14" in _static_text(app.query_one("#memory_panel"))
+             assert "기억함." in _notifs(app)
+             await _submit(pilot, "/memory")
+             await pilot.pause()
+-            from textual.widgets import TabbedContent
+-            assert app.query_one(TabbedContent).active == "tab_memory"
++            assert "파이썬 3.14" in _notifs(app)   # /memory 는 토스트로 내용 표시(패널 폐지)
+     asyncio.run(go())
+ 
+ 
+@@ -564,7 +547,7 @@ def test_slash_commands_do_not_trigger_turn(tmp_path):
+ 
+ 
+ def test_slash_clear_starts_new_thread(tmp_path):
+-    """/clear 는 새 스레드로 진입한다(claude code /clear): 화면·상태트리·세션 히스토리
++    """/clear 는 새 스레드로 진입한다(claude code /clear): 화면·세션 히스토리
+     초기화 + 새 세션 id. 이전 세션은 저장되어 --resume 로 복구 가능."""
+     from textual.containers import VerticalScroll
+ 
+@@ -586,15 +569,14 @@ def test_slash_clear_starts_new_thread(tmp_path):
+             assert await _wait(pilot, lambda: len(conv.children) == 0)
+             assert app.runner.session.id != old_id               # 새 세션(스레드)
+             assert app.runner.session.history == []              # 대화 맥락 초기화
+-            assert len(app.query_one("#activity_tree").root.children) == 0   # 상태 트리도 비움
+             assert Session.load(tmp_path, old_id).history         # 이전 세션은 저장됨(복구 가능)
+ 
+     asyncio.run(go())
+ 
+ 
+-# --- 우측 상태 트리: 계층 + 툴 롤업 + 예외 엄격화 (plan/TUI_UX_REDESIGN.md) ---
++# --- 활동바 툴 롤업 + 예외 엄격화 (우측 패널 폐지 → 활동바/footer/토스트) ---
+ 
+-def test_status_tree_builds_with_tool_rollup(tmp_path):
++def test_activity_tool_rollup(tmp_path):
+     async def fake(task, ws, approver, on_token, on_phase, **kw):
+         on_phase("read")
+         on_phase("edit")
+@@ -609,17 +591,18 @@ def test_status_tree_builds_with_tool_rollup(tmp_path):
+         async with app.run_test() as pilot:
+             await _submit(pilot, "리팩토링")
+             assert await _wait(pilot, _turn_done(app))
+-            text = _tree_text(app)
+-            assert "✓ 리팩토링" in text          # 턴 노드 완료 아이콘
+-            assert "pass" in text                 # verdict 요약
+-            assert "read_file×2" in text          # 완료 유사작업 frequency tally
+-            assert "edit_file" in text
++            # 툴 호출이 활동바 롤업 tally 로 집계된다 (read_file×2, edit_file×1)
++            assert app._turn_tools["read_file"] == 2
++            assert app._turn_tools["edit_file"] == 1
++            assert "read_file×2" in app._rollup(app._turn_tools)   # frequency tally
++            footer = "\n".join(_static_text(w) for w in app.query(".turn-footer"))
++            assert "verdict: pass" in footer
+ 
+     asyncio.run(go())
+ 
+ 
+-def test_status_tree_empty_final_marks_failure_and_notifies(tmp_path):
+-    # 예외 엄격화: 빈 응답(length_truncation) → 턴 노드 ✗ + 사유 + notify(error)
++def test_empty_final_marks_failure_and_notifies(tmp_path):
++    # 예외 엄격화: 빈 응답(length_truncation) → 턴 footer 에 사유 명시 + notify(error)
+     async def fake(task, ws, approver, on_token, on_phase, **kw):
+         on_phase("edit")
+         return _result(final="", route="edit", empty_reason="length_truncation")
+@@ -629,8 +612,8 @@ def test_status_tree_empty_final_marks_failure_and_notifies(tmp_path):
+         async with app.run_test() as pilot:
+             await _submit(pilot, "긴 작업")
+             assert await _wait(pilot, _turn_done(app))
+-            assert "✗ 긴 작업" in _tree_text(app)                  # 실패 아이콘
+-            assert "length_truncation" in _tree_text(app)
++            footer = "\n".join(_static_text(w) for w in app.query(".turn-footer"))
++            assert "length_truncation" in footer                  # 사유 명시
+             assert "length_truncation" in _notifs(app)            # 엄격 예외 알림
+ 
+     asyncio.run(go())
+@@ -649,3 +632,91 @@ def test_activity_on_resets_tool_rollup(tmp_path):
+             assert app._turn_tools == Counter()                    # 롤업 초기화
+             assert "read_file" not in _static_text(app.query_one("#activity"))  # 잔존 없음
+     asyncio.run(go())
++
++
++# --- 하단 statusline + 테마 (toad 참조: 우측 패널 폐지 후 세션 정보/테마) ---
++
++def test_statusline_reflects_session_and_model(tmp_path):
++    async def fake(task, ws, approver, on_token, on_phase, **kw):
++        on_token("답")
++        return _result("완료")
++
++    async def go():
++        session = Session(tmp_path)
++        app = KodaTui(Workspace(tmp_path), session, Memory(tmp_path), [], auto_yes=True,
++                      run_task_fn=fake, model_name="qwen-test")
++        async with app.run_test() as pilot:
++            line = _static_text(app.query_one("#statusline"))
++            assert session.id in line and "qwen-test" in line and "0턴" in line
++            assert "auto" in line                       # 승인 모드 뱃지
++            await _submit(pilot, "안녕")
++            assert await _wait(pilot, _turn_done(app))
++            assert "1턴" in _static_text(app.query_one("#statusline"))  # 턴 후 갱신
++    asyncio.run(go())
++
++
++def test_theme_command_switches_and_defaults_koda_dark(tmp_path):
++    async def go():
++        app = _make_app(tmp_path, None)
++        async with app.run_test() as pilot:
++            assert app.theme == "koda-dark"             # 기본 테마 = koda-dark
++            assert "koda-dark" in app.available_themes
++            await _submit(pilot, "/theme bogus-xyz")    # 알 수 없는 테마 → 경고, 미변경
++            await pilot.pause()
++            assert "알 수 없는 테마" in _notifs(app)
++            assert app.theme == "koda-dark"
++            await _submit(pilot, "/theme textual-dark") # 내장 테마로 전환
++            await pilot.pause()
++            assert app.theme == "textual-dark"
++    asyncio.run(go())
++
++
++# --- Phase 2: 툴 가시화 (제목 템플릿 · 콜백 핸들러 · ToolBlock 렌더) ---
++
++def test_tool_title_templates():
++    # 별도 LLM 호출 없이 도구+완성 args → 표시용 제목. 빈 args 는 도구 이름으로 폴백.
++    assert tool_title("workspace_run_command", {"argv": ["pytest", "-q"]}) == "$ pytest -q"
++    assert tool_title("workspace_read_file", {"path": "a.py"}) == "읽기 · a.py"
++    assert tool_title("workspace_list_files", {}) == "목록 · ."
++    assert tool_title("workspace_search_text", {"query": "foo"}) == "검색 · foo"
++    assert tool_title("workspace_edit_file", {"path": "b.py"}) == "수정 · b.py"
++    assert tool_title("explore", {}) == "탐색 위임"
++    assert tool_title("workspace_read_file", {}) == "파일 읽기"      # 빈 args 폴백
++    assert tool_title("some_mcp_tool", {}) == "some_mcp_tool"       # MCP/기타
++
++
++def test_tool_activity_handler_posts_messages():
++    # 콜백(langchain on_tool_*) → ToolStart/ToolEnd 메시지. run_id 로 매칭.
++    posted: list = []
++    h = ToolActivityHandler(posted.append)
++    h.on_tool_start({"name": "workspace_read_file"}, "a.py", run_id="r1", inputs={"path": "a.py"})
++    h.on_tool_end("파일 내용", run_id="r1")
++    assert isinstance(posted[0], ToolStart) and posted[0].run_id == "r1"
++    assert posted[0].title == "읽기 · a.py"
++    assert isinstance(posted[1], ToolEnd) and posted[1].run_id == "r1"
++    assert posted[1].output == "파일 내용" and posted[1].ok
++    h.on_tool_error(RuntimeError("boom"), run_id="r2")
++    assert posted[2].run_id == "r2" and not posted[2].ok and "boom" in posted[2].output
++
++
++def test_tool_handler_output_trimmed():
++    from koda.tui.tool_handler import _OUTPUT_LIMIT
++    posted: list = []
++    ToolActivityHandler(posted.append).on_tool_end("x" * (_OUTPUT_LIMIT + 500), run_id="r")
++    assert len(posted[0].output) <= _OUTPUT_LIMIT + 12
++    assert posted[0].output.endswith("생략)")
++
++
++def test_tui_tool_blocks_mount_and_finish(tmp_path):
++    # ToolStart → 대화에 ToolBlock(진행 중 ○) mount, ToolEnd → 같은 블록 finish(✓ + output).
++    async def go():
++        app = _make_app(tmp_path, None)
++        async with app.run_test() as pilot:
++            app.post_message(ToolStart("r1", "workspace_read_file", "읽기 · calc.py"))
++            assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
++            block = app.query_one(ToolBlock)
++            assert "읽기 · calc.py" in str(block.title) and "○" in str(block.title)
++            app.post_message(ToolEnd("r1", "파일 12줄", ok=True))
++            assert await _wait(pilot, lambda: "✓" in str(app.query_one(ToolBlock).title))
++            assert app._tool_blocks == {}                 # 매칭 후 dict 에서 pop
++    asyncio.run(go())

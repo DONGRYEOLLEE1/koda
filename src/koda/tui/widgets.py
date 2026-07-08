@@ -6,10 +6,27 @@ import re
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Static
+from textual.widgets import Button, Collapsible, Static
 
 _PREVIEW_LIMIT = 500
 _SECRET_KEY = re.compile(r"(?i)token|secret|key|password|authorization|credential")
+
+
+class ToolBlock(Collapsible):
+    """대화 스트림 안의 툴 실행 블록 (toad/Claude Code 식 '가볍게 렌더').
+
+    접힘이 기본 — 헤더에 상태 아이콘 + 제목만, 펼치면 output. ToolStart 로 mount(진행 중 ○),
+    ToolEnd 로 finish(성공 ✓ / 실패 ✗ + output). Collapsible.title 은 reactive 라 갱신 시 재렌더.
+    """
+
+    def __init__(self, title: str) -> None:
+        self._label = title
+        self._body = Static("실행 중…", markup=False)
+        super().__init__(self._body, title=f"○ 🔧 {title}", collapsed=True)
+
+    def finish(self, output: str, ok: bool) -> None:
+        self.title = f"{'✓' if ok else '✗'} 🔧 {self._label}"
+        self._body.update(output or "(출력 없음)")
 
 
 def _args_preview(tool: str, args: object) -> str:

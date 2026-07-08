@@ -24,6 +24,7 @@ from .model import (
     TurnDone,
     TurnFailed,
 )
+from .tool_handler import ToolActivityHandler
 
 APPROVAL_TIMEOUT_S = 600.0  # modal 무응답은 deny — 위험 도구가 무기한 대기하지 않는다
 
@@ -76,6 +77,8 @@ class TuiTurnRunner:
                     history=self.session.history, mcp_tools=self.mcp_tools,
                     mcps_dir=None,  # MCP 는 세션당 1회 사전 로드 (AC 10)
                     run_id=self.session.id,  # artifact 를 세션 단위로 이어 쓴다
+                    # 툴 가시화: langfuse 와 동일한 config.callbacks 채널로만 관측(실행 로직 무변경).
+                    extra_callbacks=[ToolActivityHandler(post)],
                 ),
                 lambda p: post(PhaseEvent(p)),
             ))

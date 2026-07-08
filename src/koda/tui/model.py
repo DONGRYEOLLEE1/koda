@@ -69,3 +69,27 @@ class CompactDone(Message):
     def __init__(self, note: str) -> None:
         self.note = note
         super().__init__()
+
+
+class ToolStart(Message):
+    """툴 실행 시작 (langchain on_tool_start). run_id 로 ToolEnd 와 매칭한다.
+
+    title 은 도구별 템플릿으로 만든 표시용 라벨(예: '$ pytest -q', '읽기 · calc.py').
+    raw args 는 싣지 않는다 — 승인/비노출 정책과 무관한 표시 전용 채널이다.
+    """
+
+    def __init__(self, run_id: str, name: str, title: str) -> None:
+        self.run_id = run_id
+        self.name = name
+        self.title = title
+        super().__init__()
+
+
+class ToolEnd(Message):
+    """툴 실행 종료. output 은 redaction+길이 절단이 끝난 표시용 문자열, ok 는 성공 여부."""
+
+    def __init__(self, run_id: str, output: str, ok: bool = True) -> None:
+        self.run_id = run_id
+        self.output = output
+        self.ok = ok
+        super().__init__()

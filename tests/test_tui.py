@@ -18,7 +18,9 @@ from koda.cli import main
 from koda.memory import Memory
 from koda.session import Session
 from koda.tui.app import KodaTui
-from koda.tui.widgets import ApprovalModal, _args_preview
+from koda.tui.model import ToolEnd, ToolStart
+from koda.tui.tool_handler import ToolActivityHandler, tool_title
+from koda.tui.widgets import ApprovalModal, ToolBlock, _args_preview
 from koda.workspace import Workspace
 
 
@@ -63,19 +65,6 @@ def _static_text(widget) -> str:
     return getattr(r, "plain", None) or str(r)
 
 
-def _tree_text(app) -> str:
-    tree = app.query_one("#activity_tree")
-    parts = []
-
-    def walk(node):
-        parts.append(str(node.label))
-        for c in node.children:
-            walk(c)
-
-    walk(tree.root)
-    return "\n".join(parts)
-
-
 def _notifs(app) -> str:
     return "\n".join(n.message for n in app._notifications)
 
@@ -92,8 +81,8 @@ def test_boot_widgets_exist(tmp_path):
         async with app.run_test():
             assert app.query_one("#prompt") is not None
             assert app.query_one("#conversation") is not None
-            assert app.query_one("#activity_tree") is not None
-            assert "세션" in _static_text(app.query_one("#status_strip"))
+            assert app.query_one("#statusline") is not None
+            assert "koda" in _static_text(app.query_one("#statusline"))
     asyncio.run(go())
 
 
@@ -140,16 +129,12 @@ def test_events_routed(tmp_path):
         async with app.run_test() as pilot:
             await _submit(pilot, "수정해줘")
             assert await _wait(pilot, _turn_done(app))
-            log = _tree_text(app)
-            assert "코드 작성" in log                # phase → 트리 단계 노드 (TUI 전용 라벨)
-            assert "write_file" in log              # tool:* → 단계 노드 롤업 (workspace_ 접두 제거)
-            assert "length_truncation" in log       # retry → 재시도 단계 노드
-            assert "생각 중" not in log              # think:* 는 활동바 전용
-            assert "진행 중…" not in log                   # heartbeat 는 활동바 경과초가 대체
+            # 툴 이벤트는 활동바 롤업 tally 로 누적된다 (workspace_ 접두 제거)
+            assert "write_file" in app._turn_tools
             assert app._draft == "다시 쓴 본문"             # retry 가 1차 부분 스트림 폐기
-            verify = _static_text(app.query_one("#verify_panel"))
-            assert "pass" in verify and "테스트 근거" in verify
+            # 검증 결과·판정 근거·trace 는 우측 패널 폐지 후 턴 footer 에 인라인된다
             footer = "\n".join(_static_text(w) for w in app.query(".turn-footer"))
+            assert "verdict: pass" in footer and "테스트 근거" in footer
             assert "trace: http://lf/t/1" in footer
     asyncio.run(go())
 
@@ -318,12 +303,10 @@ def test_remember_and_memory_commands(tmp_path):
             await _submit(pilot, "/remember 파이썬 3.14 를 쓴다")
             await pilot.pause()
             assert "파이썬 3.14 를 쓴다" in Memory(tmp_path).read()
-            assert "파이썬 3.14" in _static_text(app.query_one("#memory_panel"))
             assert "기억함." in _notifs(app)
             await _submit(pilot, "/memory")
             await pilot.pause()
-            from textual.widgets import TabbedContent
-            assert app.query_one(TabbedContent).active == "tab_memory"
+            assert "파이썬 3.14" in _notifs(app)   # /memory 는 토스트로 내용 표시(패널 폐지)
     asyncio.run(go())
 
 
@@ -564,7 +547,7 @@ def test_slash_commands_do_not_trigger_turn(tmp_path):
 
 
 def test_slash_clear_starts_new_thread(tmp_path):
-    """/clear 는 새 스레드로 진입한다(claude code /clear): 화면·상태트리·세션 히스토리
+    """/clear 는 새 스레드로 진입한다(claude code /clear): 화면·세션 히스토리
     초기화 + 새 세션 id. 이전 세션은 저장되어 --resume 로 복구 가능."""
     from textual.containers import VerticalScroll
 
@@ -586,15 +569,14 @@ def test_slash_clear_starts_new_thread(tmp_path):
             assert await _wait(pilot, lambda: len(conv.children) == 0)
             assert app.runner.session.id != old_id               # 새 세션(스레드)
             assert app.runner.session.history == []              # 대화 맥락 초기화
-            assert len(app.query_one("#activity_tree").root.children) == 0   # 상태 트리도 비움
             assert Session.load(tmp_path, old_id).history         # 이전 세션은 저장됨(복구 가능)
 
     asyncio.run(go())
 
 
-# --- 우측 상태 트리: 계층 + 툴 롤업 + 예외 엄격화 (plan/TUI_UX_REDESIGN.md) ---
+# --- 활동바 툴 롤업 + 예외 엄격화 (우측 패널 폐지 → 활동바/footer/토스트) ---
 
-def test_status_tree_builds_with_tool_rollup(tmp_path):
+def test_activity_tool_rollup(tmp_path):
     async def fake(task, ws, approver, on_token, on_phase, **kw):
         on_phase("read")
         on_phase("edit")
@@ -609,17 +591,18 @@ def test_status_tree_builds_with_tool_rollup(tmp_path):
         async with app.run_test() as pilot:
             await _submit(pilot, "리팩토링")
             assert await _wait(pilot, _turn_done(app))
-            text = _tree_text(app)
-            assert "✓ 리팩토링" in text          # 턴 노드 완료 아이콘
-            assert "pass" in text                 # verdict 요약
-            assert "read_file×2" in text          # 완료 유사작업 frequency tally
-            assert "edit_file" in text
+            # 툴 호출이 활동바 롤업 tally 로 집계된다 (read_file×2, edit_file×1)
+            assert app._turn_tools["read_file"] == 2
+            assert app._turn_tools["edit_file"] == 1
+            assert "read_file×2" in app._rollup(app._turn_tools)   # frequency tally
+            footer = "\n".join(_static_text(w) for w in app.query(".turn-footer"))
+            assert "verdict: pass" in footer
 
     asyncio.run(go())
 
 
-def test_status_tree_empty_final_marks_failure_and_notifies(tmp_path):
-    # 예외 엄격화: 빈 응답(length_truncation) → 턴 노드 ✗ + 사유 + notify(error)
+def test_empty_final_marks_failure_and_notifies(tmp_path):
+    # 예외 엄격화: 빈 응답(length_truncation) → 턴 footer 에 사유 명시 + notify(error)
     async def fake(task, ws, approver, on_token, on_phase, **kw):
         on_phase("edit")
         return _result(final="", route="edit", empty_reason="length_truncation")
@@ -629,8 +612,8 @@ def test_status_tree_empty_final_marks_failure_and_notifies(tmp_path):
         async with app.run_test() as pilot:
             await _submit(pilot, "긴 작업")
             assert await _wait(pilot, _turn_done(app))
-            assert "✗ 긴 작업" in _tree_text(app)                  # 실패 아이콘
-            assert "length_truncation" in _tree_text(app)
+            footer = "\n".join(_static_text(w) for w in app.query(".turn-footer"))
+            assert "length_truncation" in footer                  # 사유 명시
             assert "length_truncation" in _notifs(app)            # 엄격 예외 알림
 
     asyncio.run(go())
@@ -649,3 +632,129 @@ def test_activity_on_resets_tool_rollup(tmp_path):
             assert app._turn_tools == Counter()                    # 롤업 초기화
             assert "read_file" not in _static_text(app.query_one("#activity"))  # 잔존 없음
     asyncio.run(go())
+
+
+# --- 하단 statusline + 테마 (toad 참조: 우측 패널 폐지 후 세션 정보/테마) ---
+
+def test_statusline_reflects_session_and_model(tmp_path):
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_token("답")
+        return _result("완료")
+
+    async def go():
+        session = Session(tmp_path)
+        app = KodaTui(Workspace(tmp_path), session, Memory(tmp_path), [], auto_yes=True,
+                      run_task_fn=fake, model_name="qwen-test")
+        async with app.run_test() as pilot:
+            line = _static_text(app.query_one("#statusline"))
+            assert session.id in line and "qwen-test" in line and "0턴" in line
+            assert "auto" in line                       # 승인 모드 뱃지
+            await _submit(pilot, "안녕")
+            assert await _wait(pilot, _turn_done(app))
+            assert "1턴" in _static_text(app.query_one("#statusline"))  # 턴 후 갱신
+    asyncio.run(go())
+
+
+def test_theme_command_switches_and_defaults_koda_dark(tmp_path):
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test() as pilot:
+            assert app.theme == "koda-dark"             # 기본 테마 = koda-dark
+            assert "koda-dark" in app.available_themes
+            await _submit(pilot, "/theme bogus-xyz")    # 알 수 없는 테마 → 경고, 미변경
+            await pilot.pause()
+            assert "알 수 없는 테마" in _notifs(app)
+            assert app.theme == "koda-dark"
+            await _submit(pilot, "/theme textual-dark") # 내장 테마로 전환
+            await pilot.pause()
+            assert app.theme == "textual-dark"
+    asyncio.run(go())
+
+
+# --- Phase 2: 툴 가시화 (제목 템플릿 · 콜백 핸들러 · ToolBlock 렌더) ---
+
+def test_tool_title_templates():
+    # 별도 LLM 호출 없이 도구+완성 args → 표시용 제목. 빈 args 는 도구 이름으로 폴백.
+    assert tool_title("workspace_run_command", {"argv": ["pytest", "-q"]}) == "$ pytest -q"
+    assert tool_title("workspace_read_file", {"path": "a.py"}) == "읽기 · a.py"
+    assert tool_title("workspace_list_files", {}) == "목록 · ."
+    assert tool_title("workspace_search_text", {"query": "foo"}) == "검색 · foo"
+    assert tool_title("workspace_edit_file", {"path": "b.py"}) == "수정 · b.py"
+    assert tool_title("explore", {}) == "탐색 위임"
+    assert tool_title("workspace_read_file", {}) == "파일 읽기"      # 빈 args 폴백
+    assert tool_title("some_mcp_tool", {}) == "some_mcp_tool"       # MCP/기타
+
+
+def test_tool_activity_handler_posts_messages():
+    # 콜백(langchain on_tool_*) → ToolStart/ToolEnd 메시지. run_id 로 매칭.
+    posted: list = []
+    h = ToolActivityHandler(posted.append)
+    h.on_tool_start({"name": "workspace_read_file"}, "a.py", run_id="r1", inputs={"path": "a.py"})
+    h.on_tool_end("파일 내용", run_id="r1")
+    assert isinstance(posted[0], ToolStart) and posted[0].run_id == "r1"
+    assert posted[0].title == "읽기 · a.py"
+    assert isinstance(posted[1], ToolEnd) and posted[1].run_id == "r1"
+    assert posted[1].output == "파일 내용" and posted[1].ok
+    h.on_tool_error(RuntimeError("boom"), run_id="r2")
+    assert posted[2].run_id == "r2" and not posted[2].ok and "boom" in posted[2].output
+
+
+def test_tool_handler_output_trimmed():
+    from koda.tui.tool_handler import _OUTPUT_LIMIT
+    posted: list = []
+    ToolActivityHandler(posted.append).on_tool_end("x" * (_OUTPUT_LIMIT + 500), run_id="r")
+    assert len(posted[0].output) <= _OUTPUT_LIMIT + 12
+    assert posted[0].output.endswith("생략)")
+
+
+def test_tui_tool_blocks_mount_and_finish(tmp_path):
+    # ToolStart → 대화에 ToolBlock(진행 중 ○) mount, ToolEnd → 같은 블록 finish(✓ + output).
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test() as pilot:
+            app.post_message(ToolStart("r1", "workspace_read_file", "읽기 · calc.py"))
+            assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
+            block = app.query_one(ToolBlock)
+            assert "읽기 · calc.py" in str(block.title) and "○" in str(block.title)
+            app.post_message(ToolEnd("r1", "파일 12줄", ok=True))
+            assert await _wait(pilot, lambda: "✓" in str(app.query_one(ToolBlock).title))
+            assert app._tool_blocks == {}                 # 매칭 후 dict 에서 pop
+    asyncio.run(go())
+
+
+def test_tool_end_unknown_run_id_ignored(tmp_path):
+    # 매칭되는 start 가 없는 ToolEnd 는 예외 없이 무시된다(.pop(id, None) 방어).
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test() as pilot:
+            app.post_message(ToolEnd("no-such-id", "출력", ok=True))
+            await pilot.pause()
+            assert not app.query(ToolBlock)               # 유령 블록·크래시 없음
+            assert not app._close_requested               # 앱 생존
+    asyncio.run(go())
+
+
+def test_orphan_tool_block_finished_on_turn_end(tmp_path):
+    # 턴이 툴 도중 죽어 ToolEnd 가 안 오면(_end_turn) 미완 블록을 '중단됨'으로 마감한다.
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test() as pilot:
+            app.post_message(ToolStart("r1", "workspace_run_command", "$ pytest"))
+            assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
+            assert "○" in str(app.query_one(ToolBlock).title)   # 진행 중
+            app._end_turn()                                     # 턴 종료 공통 경로
+            await pilot.pause()
+            block = app.query_one(ToolBlock)
+            assert "✗" in str(block.title) and "중단됨" in _static_text(block._body)
+            assert app._tool_blocks == {}
+    asyncio.run(go())
+
+
+def test_tool_output_secret_redaction():
+    # read_file 로 .env 를 열거나 셸 출력에 시크릿이 섞여도 값이 스크롤백에 평문으로 안 남는다.
+    posted: list = []
+    ToolActivityHandler(posted.append).on_tool_end(
+        "API_KEY=sk-secret123\nnormal line\nport = 8080", run_id="r")
+    out = posted[0].output
+    assert "sk-secret123" not in out and "[REDACTED]" in out
+    assert "normal line" in out and "8080" in out   # 일반 줄·비밀 아닌 값은 보존
