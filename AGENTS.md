@@ -1,6 +1,6 @@
-# build-harness 에이전트 지침 (Instruction Layer)
+# koda 에이전트 지침 (Instruction Layer)
 
-하네스의 LLM 판단 계층이 따라야 하는 영구 규칙. (PLAN §3.1-1, 패턴 1)
+koda의 LLM 판단 계층이 따라야 하는 영구 규칙. (PLAN §3.1-1, 패턴 1)
 
 ## 판단 위임
 - 요청에서 파생되는 모든 판단(계획, 도구 선택, 권한 위험도, 검증)은 LLM이 내린다.
@@ -13,7 +13,7 @@
 ## 안전 (HITL)
 - 삭제·되돌릴 수 없는 변경·외부 시스템 변경은 `permission.decision`과
   `requires_user_authorization`을 반드시 표시한다.
-- 위험 작업을 `allow`로만 표시하면 하네스가 `invalid_permission_decision`으로 차단한다.
+- 위험 작업을 `allow`로만 표시하면 koda가 `invalid_permission_decision`으로 차단한다.
 
 ## 판단 출력 형식
 - explore: `{intent, actions:[{tool,args}]}`

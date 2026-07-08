@@ -24,7 +24,15 @@ from ..mcp import load_mcp_tools
 from ..memory import Memory
 from ..session import Session
 from ..workspace import Workspace
-from .model import ApprovalRequest, PhaseEvent, SessionClosed, TokenChunk, TurnDone, TurnFailed
+from .model import (
+    ApprovalRequest,
+    CompactDone,
+    PhaseEvent,
+    SessionClosed,
+    TokenChunk,
+    TurnDone,
+    TurnFailed,
+)
 from .runner import APPROVAL_TIMEOUT_S, TuiTurnRunner
 from .widgets import ApprovalModal
 
@@ -42,8 +50,8 @@ _PHASE_TUI = {
 }
 
 
-class BuildHarnessTui(App):
-    TITLE = "build-harness"
+class KodaTui(App):
+    TITLE = "koda"
     # textual 8.2.8 결함 회피: 마크다운 표 렌더 직후 셀을 클릭하면 텍스트 선택 로직이
     # 고아 위젯(parent=None)을 hit-test 해 `container.region` AttributeError 로 앱 전체가
     # 죽는다(실사용 크래시). 선택 기능을 끄면 그 코드 경로 자체가 실행되지 않는다.
@@ -84,6 +92,16 @@ class BuildHarnessTui(App):
         self._think_tok = 0          # reasoning 진행 (think:N) — 토큰 도착 시 해제
         self._activity_label = ""    # 현재 단계 라벨
         self._activity_detail = ""   # 현재 실행 중인 도구명
+        # 슬래시 커맨드 레지스트리 — /help 목록·placeholder 의 단일 출처 (plan/TUI_SLASH_COMMANDS).
+        self._commands: dict[str, tuple[str, object]] = {
+            "/help": ("사용 가능한 명령 목록", self._cmd_help),
+            "/compact": ("대화 이력을 요약으로 압축", self._cmd_compact),
+            "/clear": ("대화 화면 비우기(이력은 보존)", self._cmd_clear),
+            "/memory": ("메모리 패널 보기", self._cmd_memory),
+            "/remember": ("메모리에 저장: /remember <내용>", self._cmd_remember),
+            "/exit": ("저장 후 종료", self._cmd_exit),
+            "/quit": ("저장 후 종료", self._cmd_exit),
+        }
 
     # --- 레이아웃 ---
 
@@ -101,7 +119,7 @@ class BuildHarnessTui(App):
                 with TabPane("세션", id="tab_session"):
                     yield Static(self._session_text(len(self.runner.session.turns)), id="session_panel", markup=False)
         yield Static("", id="activity", markup=False)
-        yield Input(placeholder="요청 입력…  (/remember <내용> /memory /exit · Ctrl+Q 종료)", id="prompt")
+        yield Input(placeholder="요청 입력…  (/help 로 명령 목록 · Ctrl+Q 종료)", id="prompt")
 
     def on_mount(self) -> None:
         self.query_one("#activity", Static).display = False
@@ -109,12 +127,12 @@ class BuildHarnessTui(App):
         self.query_one("#prompt", Input).focus()
 
     def _strip_text(self, status: str) -> str:
-        return f"build-harness · 세션 {self.runner.session.id} · {status}"
+        return f"koda · 세션 {self.runner.session.id} · {status}"
 
     def _session_text(self, turns: int) -> str:
         s = self.runner.session
         return (f"세션 id: {s.id}\n턴 수: {turns}\n히스토리 메시지: {len(s.history)}\n\n"
-                f"재개: build-harness tui --resume {s.id}")
+                f"재개: koda tui --resume {s.id}")
 
     def _theme_color(self, name: str) -> str:
         """테마 색상 hex 조회. 라이트/다크 자동 적응."""
@@ -184,20 +202,50 @@ class BuildHarnessTui(App):
         if not line or self._busy or self._close_requested:
             return
         event.input.clear()
-        if line in ("/exit", "/quit"):
-            self._begin_close()
-            return
-        if line.startswith("/remember"):
-            note = line[len("/remember"):].strip()
-            saved = self.runner.memory.remember(note)
-            self.query_one("#memory_panel", Static).update(self.runner.memory.read() or "(비어 있음)")
-            self._log("기억함." if saved else "이미 기억하고 있거나 내용이 비어 있음.", elapsed=False)
-            return
-        if line == "/memory":
-            self.query_one("#memory_panel", Static).update(self.runner.memory.read() or "(비어 있음)")
-            self.query_one(TabbedContent).active = "tab_memory"
+        if line.startswith("/"):          # 슬래시 커맨드 → 레지스트리 디스패치
+            name, _, arg = line.partition(" ")
+            entry = self._commands.get(name)
+            if entry is None:
+                self._log(f"알 수 없는 명령: {name} — /help 로 목록 확인", elapsed=False)
+            else:
+                await entry[1](arg.strip())
             return
         await self._start_turn(line)
+
+    # --- 슬래시 커맨드 핸들러 (레지스트리 self._commands 에서 디스패치) ---
+
+    async def _cmd_help(self, arg: str) -> None:
+        seen, lines = set(), ["사용 가능한 명령:"]
+        for name, (summary, fn) in self._commands.items():
+            if fn in seen:               # /exit·/quit 처럼 같은 핸들러는 한 번만
+                continue
+            seen.add(fn)
+            lines.append(f"  {name}  — {summary}")
+        self._log("\n".join(lines), elapsed=False)
+
+    async def _cmd_clear(self, arg: str) -> None:
+        await self.query_one("#conversation", VerticalScroll).remove_children()
+        self._log("대화 화면을 지웠습니다 (이력은 보존됨).", elapsed=False)
+
+    async def _cmd_memory(self, arg: str) -> None:
+        self.query_one("#memory_panel", Static).update(self.runner.memory.read() or "(비어 있음)")
+        self.query_one(TabbedContent).active = "tab_memory"
+
+    async def _cmd_remember(self, arg: str) -> None:
+        saved = self.runner.memory.remember(arg)
+        self.query_one("#memory_panel", Static).update(self.runner.memory.read() or "(비어 있음)")
+        self._log("기억함." if saved else "이미 기억하고 있거나 내용이 비어 있음.", elapsed=False)
+
+    async def _cmd_exit(self, arg: str) -> None:
+        self._begin_close()
+
+    async def _cmd_compact(self, arg: str) -> None:
+        # 압축은 LLM 요약 호출 → 턴과 동일하게 worker thread 로. busy 가드는 _on_submit 이 이미 함.
+        self._busy = True
+        self.query_one("#prompt", Input).disabled = True
+        self._set_status("압축 중")
+        self._activity_on("문맥 압축")
+        self.run_worker(self.runner.compact_now, thread=True, exclusive=True, group="turn")
 
     async def _start_turn(self, task: str) -> None:
         self._busy = True
@@ -331,6 +379,12 @@ class BuildHarnessTui(App):
         self._log(Text(f"✗ 턴 실패: {msg.error}", style=err_color))
         self._end_turn()
 
+    @on(CompactDone)
+    async def _on_compact_done(self, msg: CompactDone) -> None:
+        # /compact worker 완료 — busy 해제·입력 재활성(턴과 동일 경로) 후 결과 안내
+        self._end_turn()
+        self._log(msg.note, elapsed=False)
+
     @on(ApprovalRequest)
     def _on_approval(self, msg: ApprovalRequest) -> None:
         self._log(Text(f"⚠ 승인 대기 · {msg.tool.removeprefix('workspace_')}",
@@ -362,7 +416,7 @@ class BuildHarnessTui(App):
 
 
 def run_tui(args) -> int:
-    """`build-harness tui` 진입점. 세션/메모리/MCP 준비는 chat(_cmd_chat)과 동일 흐름."""
+    """`koda tui` 진입점. 세션/메모리/MCP 준비는 chat(_cmd_chat)과 동일 흐름."""
     ws = Workspace(args.workspace)
     memory = Memory(ws.root)
 
@@ -384,8 +438,8 @@ def run_tui(args) -> int:
         except Exception as e:
             _err(f"  · MCP 로드 실패({type(e).__name__}) — 로컬 도구만 사용")
 
-    app = BuildHarnessTui(ws, session, memory, mcp_tools, auto_yes=args.yes)
+    app = KodaTui(ws, session, memory, mcp_tools, auto_yes=args.yes)
     app.run()
     if session.history:
-        _err(f"세션 저장됨: {session.id}  (재개: build-harness tui --resume {session.id})")
+        _err(f"세션 저장됨: {session.id}  (재개: koda tui --resume {session.id})")
     return 0

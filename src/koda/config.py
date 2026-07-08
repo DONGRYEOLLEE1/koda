@@ -6,8 +6,29 @@
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _resolve_env_file(env_file: str | None = None) -> str | None:
+    """설정 파일 탐색: 명시값 > CWD/.env > ~/.config/koda/.env > None(환경변수).
+
+    "어떤 환경에서든 설치→koda 실행"을 위한 전역 설정 폴백 (plan/KODA_MIGRATION §4.2).
+    존재하는 파일만 반환 — 없으면 None 을 줘 pydantic 이 환경변수로 폴백(없으면 기존대로
+    ValidationError). CWD/.env 는 개발 시 기존 동작을 그대로 유지한다.
+    """
+    if env_file:
+        return env_file
+    cwd = Path(".env")
+    if cwd.is_file():
+        return str(cwd)
+    try:
+        glob = Path.home() / ".config" / "koda" / ".env"
+    except (RuntimeError, OSError):  # 홈 디렉토리 미정의 환경 → 환경변수 경로로
+        return None
+    return str(glob) if glob.is_file() else None
 
 
 class ModelSettings(BaseSettings):
@@ -32,6 +53,12 @@ class ModelSettings(BaseSettings):
     thinking_budget_reader: int = Field(default=1024, alias="THINKING_BUDGET_READER")
     thinking_budget_explore: int = Field(default=512, alias="THINKING_BUDGET_EXPLORE")
 
+    # 나가는 요청 프롬프트의 토큰 상한(HistoryTrimMiddleware 가 이 값으로 턴 누적을 결정론
+    # 절단해 컨텍스트 창 초과 400 을 막는다). char 기반 토큰 추정이 한/중/일·도구호출 혼합
+    # 콘텐츠에서 실제를 최대 ~1.9x 과소평가(실측)하므로, n_ctx=32768 의 약 절반으로 보수
+    # 설정해 그 오차를 흡수한다(실측: 이 값에서 최대 실요청 <32768 유지). 서버 창이 크면 상향.
+    context_budget_tokens: int = Field(default=16000, alias="CONTEXT_BUDGET_TOKENS")
+
     @field_validator("local_base_url", "openai_base_url")
     @classmethod
     def _must_be_http(cls, v: str) -> str:
@@ -48,9 +75,10 @@ class ModelSettings(BaseSettings):
 
 
 def load_model_settings(env_file: str | None = None) -> ModelSettings:
-    """CLI/런타임 진입점. env_file 을 주면 그 파일을, 아니면 기본 `.env` 를 읽는다."""
-    if env_file:
-        return ModelSettings(_env_file=env_file)  # type: ignore[call-arg]
+    """CLI/런타임 진입점. env_file 미지정 시 CWD/.env → ~/.config/koda/.env 순으로 찾는다."""
+    resolved = _resolve_env_file(env_file)
+    if resolved:
+        return ModelSettings(_env_file=resolved)  # type: ignore[call-arg]
     return ModelSettings()
 
 
@@ -71,6 +99,7 @@ class LangfuseSettings(BaseSettings):
 
 
 def load_langfuse_settings(env_file: str | None = None) -> LangfuseSettings:
-    if env_file:
-        return LangfuseSettings(_env_file=env_file)  # type: ignore[call-arg]
+    resolved = _resolve_env_file(env_file)
+    if resolved:
+        return LangfuseSettings(_env_file=resolved)  # type: ignore[call-arg]
     return LangfuseSettings()

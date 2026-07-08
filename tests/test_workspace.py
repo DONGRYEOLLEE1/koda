@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from build_harness.workspace import SandboxError
+from koda.workspace import SandboxError
 
 
 def test_resolve_inside_root_ok(make_workspace):

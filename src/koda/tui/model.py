@@ -61,3 +61,11 @@ class SessionClosed(Message):
         self.session_id = session_id
         self.saved = saved
         super().__init__()
+
+
+class CompactDone(Message):
+    """/compact 슬래시 커맨드 완료 — 압축 결과 안내."""
+
+    def __init__(self, note: str) -> None:
+        self.note = note
+        super().__init__()

@@ -1,9 +1,9 @@
 """vision 이미지 분석 도구의 결정론 검증."""
 from __future__ import annotations
 
-from build_harness.tools import vision
-from build_harness.tools.vision import make_vision_tools
-from build_harness.workspace import Workspace
+from koda.tools import vision
+from koda.tools.vision import make_vision_tools
+from koda.workspace import Workspace
 
 
 class _NoModel:

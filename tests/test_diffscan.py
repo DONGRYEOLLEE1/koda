@@ -1,8 +1,8 @@
 """핵심 모듈: diffscan (verify 증거 수집). 변경 검출·untracked 본문·제외 규칙·상한 절단."""
 from __future__ import annotations
 
-from build_harness import diffscan
-from build_harness.diffscan import diff_report, snapshot
+from koda import diffscan
+from koda.diffscan import diff_report, snapshot
 
 
 def test_added_modified_deleted_detected(tmp_path):
@@ -24,8 +24,8 @@ def test_added_modified_deleted_detected(tmp_path):
 
 
 def test_exclude_dirs_ignored(tmp_path):
-    (tmp_path / ".harness" / "artifacts").mkdir(parents=True)
-    (tmp_path / ".harness" / "artifacts" / "x.txt").write_text("a")
+    (tmp_path / ".koda" / "artifacts").mkdir(parents=True)
+    (tmp_path / ".koda" / "artifacts" / "x.txt").write_text("a")
     (tmp_path / ".git").mkdir()
     (tmp_path / ".git" / "HEAD").write_text("ref")
     assert snapshot(tmp_path) == {}

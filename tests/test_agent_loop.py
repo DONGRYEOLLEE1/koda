@@ -11,9 +11,9 @@ from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import PrivateAttr
 
-from build_harness.middleware import PermissionMiddleware
-from build_harness.tools import make_all_tools
-from build_harness.workspace import Workspace
+from koda.middleware import PermissionMiddleware
+from koda.tools import make_all_tools
+from koda.workspace import Workspace
 
 
 class ScriptedChatModel(BaseChatModel):

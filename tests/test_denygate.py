@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from build_harness.denygate import check_command
+from koda.denygate import check_command
 
 
 @pytest.mark.parametrize("cmd", [

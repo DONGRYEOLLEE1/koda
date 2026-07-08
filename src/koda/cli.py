@@ -13,6 +13,7 @@ import warnings
 warnings.filterwarnings("ignore", message="Pydantic serializer warnings")
 
 from .agents import compact_memory, extract_memories, run_task, summarize_history
+from .config import load_model_settings
 from .memory import Memory
 from .mcp import load_mcp_tools
 from .session import Session
@@ -27,7 +28,7 @@ _PHASE = {
 def _use_rich_renderer() -> bool:
     """Rich 마크다운 렌더링 사용 여부. stdout 이 TTY 일 때만 활성화한다.
     stdin 이 아니라 stdout.isatty() 로 판단 — 출력 대상의 능력을 보는 게 맞다
-    (`echo task | build-harness run` 은 stdin 이 파이프여도 stdout 은 TTY 일 수 있다)."""
+    (`echo task | koda run` 은 stdin 이 파이프여도 stdout 은 TTY 일 수 있다)."""
     return sys.stdout.isatty()
 
 
@@ -187,6 +188,8 @@ async def _run_with_heartbeat(coro, on_phase, interval: float = 30.0):
 
 
 def _cmd_run(args) -> int:
+    if (rc := _preflight_config()) is not None:
+        return rc
     ws = Workspace(args.workspace)
     approver = _auto_approver if args.yes else _interactive_approver
     mcps_dir = None if args.no_mcp else args.mcps_dir
@@ -219,6 +222,24 @@ def _err(msg: str) -> None:
     sys.stderr.flush()
 
 
+def _preflight_config() -> int | None:
+    """설정 누락 시 raw ValidationError 대신 친절 안내(설치 후 첫 실행 UX). 정상이면 None.
+
+    설정 탐색: CWD/.env → ~/.config/koda/.env → 환경변수 (config._resolve_env_file).
+    """
+    from pydantic import ValidationError
+    try:
+        load_model_settings()
+    except ValidationError:
+        _err("설정을 찾지 못했습니다. 전역 설정 파일을 만드세요:")
+        _err("  mkdir -p ~/.config/koda")
+        _err("  cp .env.example ~/.config/koda/.env   # 배포된 템플릿 복사 후 편집")
+        _err("  # 필수: PRIMARY, LOCAL_OPENAI_BASE_URL, LOCAL_MODEL_NAME, LOCAL_API_KEY 등")
+        _err("  # (또는 CWD 에 .env 를 두거나 환경변수로 지정)")
+        return 2
+    return None
+
+
 def _deny_approver(name, args) -> bool:
     """비대화형 입력에서 승인 질문은 불가 — stdin 을 읽으면 다음 작업 줄을 승인 답변으로
     삼켜버린다(파이프 오염). --yes 없인 안전하게 거부하고 이유를 알린다."""
@@ -228,6 +249,8 @@ def _deny_approver(name, args) -> bool:
 
 def _cmd_chat(args) -> int:
     """멀티턴 REPL. stdin 이 tty 가 아니면 줄 단위 배치 실행(파이프 검증 경로)."""
+    if (rc := _preflight_config()) is not None:
+        return rc
     ws = Workspace(args.workspace)
     if args.yes:
         approver = _auto_approver
@@ -328,7 +351,7 @@ def _cmd_chat(args) -> int:
                     memory.replace(compacted)
         except Exception as e:
             _err(f"  메모리 추출 생략({type(e).__name__})")
-        _err(f"세션 저장됨: {session.id}  (재개: build-harness chat --resume {session.id})")
+        _err(f"세션 저장됨: {session.id}  (재개: koda chat --resume {session.id})")
     return 0
 
 
@@ -339,14 +362,16 @@ def _cmd_tui(args) -> int:
         from .tui.app import run_tui
     except ModuleNotFoundError as e:
         if (e.name or "").split(".")[0] == "textual":
-            _err("textual 미설치 — TUI 는 extra 로 설치합니다: uv sync --extra tui")
+            _err('textual 미설치 — TUI extra 로 설치: uv tool install "koda[tui]"  (개발: uv sync --extra tui)')
             return 2
         raise
+    if (rc := _preflight_config()) is not None:
+        return rc
     return run_tui(args)
 
 
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(prog="build-harness", description="langchain 분기 멀티에이전트 하네스")
+    p = argparse.ArgumentParser(prog="koda", description="로컬 LLM 기반 coding-agent koda (분기 멀티에이전트)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pr = sub.add_parser("run", help="작업 실행 (답변 스트리밍, 단계 표시, langfuse 추적)")
@@ -365,7 +390,7 @@ def main(argv=None) -> int:
     pc.add_argument("--no-mcp", action="store_true")
     pc.set_defaults(func=_cmd_chat)
 
-    pt = sub.add_parser("tui", help="Textual TUI 조종석 (사람용 · extra 필요: uv sync --extra tui)")
+    pt = sub.add_parser("tui", help='Textual TUI 조종석 (사람용 · extra 필요: uv tool install "koda[tui]")')
     pt.add_argument("--workspace", default=".")
     pt.add_argument("--yes", action="store_true", help="위험 도구 자동 승인")
     pt.add_argument("--resume", metavar="SESSION_ID", help="저장된 세션 재개")

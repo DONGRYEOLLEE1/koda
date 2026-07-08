@@ -5,7 +5,7 @@ import difflib
 import hashlib
 from pathlib import Path
 
-EXCLUDE_DIRS = {".git", ".venv", ".harness", "node_modules", "__pycache__"}
+EXCLUDE_DIRS = {".git", ".venv", ".koda", "node_modules", "__pycache__"}
 KEEP_TEXT_BYTES = 256 * 1024  # 이하 텍스트 파일만 원문 보관 (diff 생성용)
 MAX_DIFF_LINES_PER_FILE = 200
 MAX_TOTAL_CHARS = 8000

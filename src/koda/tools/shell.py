@@ -57,7 +57,7 @@ def _bwrap_prefix(ws: Workspace) -> list[str]:
 def _workspace_env(ws: Workspace) -> dict:
     """워크스페이스에 자체 .venv 가 있으면 그 환경을 우선하는 env 를 만든다.
 
-    없으면 상속 env 그대로. 이게 없으면 `python` 이 하네스(부모) venv 로 해석되어, 워크스페이스 의존성과 무관한 환경에서 테스트가 돌아 **거짓 성공 증거**가 된다(실측: workspace 는 langchain 0.3.0 인데 부모 venv 1.x 로 import 테스트가 통과해 검증을 오염).
+    없으면 상속 env 그대로. 이게 없으면 `python` 이 koda(부모) venv 로 해석되어, 워크스페이스 의존성과 무관한 환경에서 테스트가 돌아 **거짓 성공 증거**가 된다(실측: workspace 는 langchain 0.3.0 인데 부모 venv 1.x 로 import 테스트가 통과해 검증을 오염).
     """
     env = os.environ.copy()
     venv_bin = ws.root / ".venv" / "bin"

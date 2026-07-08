@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from build_harness.config import ModelSettings
+from koda.config import ModelSettings
 
 _ENV_KEYS = [
     "PRIMARY", "LOCAL_API_KEY", "LOCAL_OPENAI_BASE_URL", "LOCAL_MODEL_NAME",
@@ -72,3 +72,23 @@ def test_invalid_base_url_rejected():
 def test_invalid_primary_rejected():
     with pytest.raises(ValidationError):
         ModelSettings(_env_file=None, **{**_FULL, "primary": "banana"})
+
+
+def test_resolve_env_file_priority(tmp_path, monkeypatch):
+    """설정 탐색 우선순위: 명시 인자 > CWD/.env > ~/.config/koda/.env > None (전역 폴백)."""
+    from koda.config import _resolve_env_file
+    monkeypatch.chdir(tmp_path)
+    fake_home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(fake_home))       # Path.home() 는 POSIX 에서 HOME 사용
+    # 1) 명시 인자 최우선
+    assert _resolve_env_file("/explicit.env") == "/explicit.env"
+    # 2) 아무것도 없으면 None → 환경변수 폴백 경로
+    assert _resolve_env_file() is None
+    # 3) 전역 설정만 있으면 전역 경로
+    koda_dir = fake_home / ".config" / "koda"
+    koda_dir.mkdir(parents=True)
+    (koda_dir / ".env").write_text("PRIMARY=local", encoding="utf-8")
+    assert _resolve_env_file() == str(koda_dir / ".env")
+    # 4) CWD/.env 가 전역보다 우선 (개발 시 기존 동작 유지)
+    (tmp_path / ".env").write_text("PRIMARY=local", encoding="utf-8")
+    assert _resolve_env_file() == ".env"

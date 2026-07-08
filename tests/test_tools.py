@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import pytest
 
-from build_harness.tools import DANGEROUS_TOOLS, make_all_tools, make_editor_tools
-from build_harness.tools.filesystem import make_filesystem_tools
-from build_harness.tools.shell import make_shell_tools
-from build_harness.workspace import SandboxError
+from koda.tools import DANGEROUS_TOOLS, make_all_tools, make_editor_tools
+from koda.tools.filesystem import make_filesystem_tools
+from koda.tools.shell import make_shell_tools
+from koda.workspace import SandboxError
 
 
 def test_tool_names_are_namespaced(make_workspace):
@@ -74,7 +74,7 @@ def test_run_command_missing_binary_returns_error(make_workspace):
 
 
 def test_run_command_prefers_workspace_venv(make_workspace):
-    # 워크스페이스에 자체 .venv 가 있으면 그 bin 이 PATH 최우선 — 부모(하네스) 환경에서
+    # 워크스페이스에 자체 .venv 가 있으면 그 bin 이 PATH 최우선 — 부모(koda) 환경에서
     # 테스트가 돌아 거짓 성공 증거를 만드는 것을 방지한다
     ws = make_workspace({})
     shim = ws.root / ".venv" / "bin" / "python"
@@ -121,8 +121,8 @@ def test_bwrap_prefix_disabled_paths(monkeypatch, tmp_path):
     # ROADMAP §3.4: 미설치/BH_SANDBOX=off 면 빈 접두 — 기존 실행 경로와 동일 (비활성 smoke)
     import shutil as _shutil
 
-    from build_harness.tools import shell
-    from build_harness.workspace import Workspace
+    from koda.tools import shell
+    from koda.workspace import Workspace
 
     ws = Workspace(tmp_path)
     monkeypatch.setattr(_shutil, "which", lambda name: None)
@@ -136,8 +136,8 @@ def test_bwrap_prefix_disabled_paths(monkeypatch, tmp_path):
 def test_bwrap_prefix_shape_when_available(monkeypatch, tmp_path):
     import shutil as _shutil
 
-    from build_harness.tools import shell
-    from build_harness.workspace import Workspace
+    from koda.tools import shell
+    from koda.workspace import Workspace
 
     ws = Workspace(tmp_path)
     monkeypatch.delenv("BH_SANDBOX", raising=False)

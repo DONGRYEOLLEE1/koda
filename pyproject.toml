@@ -1,7 +1,7 @@
 [project]
-name = "build-harness"
+name = "koda"
 version = "0.1.0"
-description = "로컬 LLM 기반 coding-agent 하네스"
+description = "로컬 LLM 기반 coding-agent koda"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -27,7 +27,7 @@ dev = [
 ]
 
 [project.scripts]
-build-harness = "build_harness.cli:main"
+koda = "koda.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -36,10 +36,15 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# 프롬프트(.md)는 런타임에 load_prompt 가 읽는 패키지 내부 데이터 — wheel 에 반드시 포함.
+# 없으면 설치 후 첫 load_prompt 호출이 FileNotFoundError 로 죽는다 (plan/KODA_MIGRATION §2.1).
+[tool.setuptools.package-data]
+"koda.prompts" = ["*.md"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
 
-# src-layout: 타입체커/IDE가 build_harness 를 해석하도록 경로 추가
+# src-layout: 타입체커/IDE가 koda 를 해석하도록 경로 추가
 [tool.pyright]
 extraPaths = ["src"]

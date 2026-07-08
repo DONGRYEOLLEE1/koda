@@ -5,7 +5,7 @@ import asyncio
 
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 
-from build_harness.agents.streaming import AgentResult, _empty_reason, _final_ai, astream_agent
+from koda.agents.streaming import AgentResult, _empty_reason, _final_ai, astream_agent
 
 
 def _state(*msgs):

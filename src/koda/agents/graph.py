@@ -52,7 +52,7 @@ class _Route(BaseModel):
 
     route: Literal["read", "edit"]
     # 복잡 편집(복수 파일·테스트 요구·광범위 변경) 여부 — plan 서브단계 가동 조건 (§3.3).
-    # 판단은 router LLM, 가동·개수 제한은 하네스.
+    # 판단은 router LLM, 가동·개수 제한은 koda.
     plan_needed: bool = False
 
 
@@ -79,11 +79,11 @@ _CHECK_ITEM = re.compile(r"^[ \t]*[-*][ \t]+\[[ \t]*\][ \t]+.+$", re.MULTILINE)
 def enforce_checklist(plan_text: str, max_items: int = 5) -> str:
     """`- [ ]` 항목을 결정론 파싱해 상한을 집행한다 (PLANNER_AGENT §3.6).
 
-    structured output 을 포기해도 "임계·게이트는 하네스 결정론 집행" 원칙은 유지한다 —
+    structured output 을 포기해도 "임계·게이트는 koda 결정론 집행" 원칙은 유지한다 —
     "5개 이내" 를 프롬프트 부탁으로 격하하지 않는다. (개수 판단은 planner.md 가 복잡도
     비례로 지시하고, 상한 초과만 여기서 절단한다)
     - 항목 0개(형식 이탈·산문만 출력) → 빈 문자열 = "계획 실패, 계획 없이 진행" 경로
-    - max_items 초과 → 앞에서부터 절단 (LLM 불복종을 하네스가 차단)
+    - max_items 초과 → 앞에서부터 절단 (LLM 불복종을 koda가 차단)
     - 항목 사이의 부연 텍스트는 버리고 체크리스트만 남긴다 (coder 지시 오염 방지)
     """
     # CRLF 정규화 — $ 는 \n 앞에만 매칭되므로 \r 이 항목 끝에 섞여 들어온다 (deepseek 리뷰 High)
@@ -91,14 +91,26 @@ def enforce_checklist(plan_text: str, max_items: int = 5) -> str:
     return "\n".join(items[:max_items])
 
 
+# planner 는 계획만 세운다. 벌크 웹검색/크롤 도구를 쥐면 계획 단계에서 과다 조사로 히스토리를
+# 폭증시켜 컨텍스트 창을 넘긴다. 조사는 reader/coder 로 미루고, planner MCP 툴셋에서 이 부류만 결정론적으로 뺀다.
+# context7(query-docs·resolve-library-id) 같은 압축 문서조회는 가벼워 그대로 남긴다.
+_PLANNER_TOOL_DENY = ("web_search", "crawl", "scrape", "deep_research")
+
+
+def _planner_tools(mcp_tools: list) -> list:
+    """planner 에 넘길 MCP 도구에서 벌크 웹검색/크롤 부류를 이름으로 제외한다."""
+    return [t for t in mcp_tools
+            if not any(k in (getattr(t, "name", "") or "").lower() for k in _PLANNER_TOOL_DENY)]
+
+
 def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase, mcp_tools,
-                 memory_text="", store=None, explore_model=None, skills=()):
+                 memory_text="", store=None, explore_model=None, skills=(), context_budget=16000):
     # explore 는 reader 와 다른 reasoning 예산을 쓸 수 있다 (미지정 시 reader 와 동일)
     explore_model = model if explore_model is None else explore_model
     # pre-edit 스냅샷 (§2.2): coder 최초 진입 시 1회 채운다. verify-fail 재시도에도 유지 —
     # diff 는 "턴 시작 대비" 누적이어야 재시도가 만든 변경까지 판정 증거에 잡힌다.
     pre_edit: dict = {}
-    # explore 위임 상한 (§3.1): 턴당 1회 — reader↔explore 무한 핑퐁을 하네스가 캡.
+    # explore 위임 상한 (§3.1): 턴당 1회 — reader↔explore 무한 핑퐁을 koda가 캡.
     explore_used = {"n": 0}
 
     @tool
@@ -113,7 +125,8 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
             return "오류: 탐색 상한 도달 — 지금까지 수집한 정보로 답하라."
         explore_used["n"] += 1
         on_phase("tool:explore(위임)")
-        sub = AGENTS["explore"].build(explore_model, ws, approver, extra_tools=mcp_tools, store=store)
+        sub = AGENTS["explore"].build(explore_model, ws, approver, extra_tools=mcp_tools, store=store,
+                                      context_budget=context_budget)
         # 요약만 main 히스토리로 — 탐색 과정(파일 덤프·검색 로그)은 서브에이전트 컨텍스트에 격리
         r = await astream_agent(sub, [{"role": "user", "content": question}], lambda t: None)
         return r.answer or "탐색 실패(빈 응답) — 직접 도구로 확인하라."
@@ -155,7 +168,7 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         # 외부 참조 MCP(문서·웹검색)는 워크스페이스를 변경하지 않으므로 reader 에도 준다.
         # (없으면 "최신 버전 기준 분석" 류 read 작업이 낡은 학습 지식으로 오답을 낸다 — 실측)
         agent = AGENTS["reader"].build(model, ws, approver, extra_tools=[*mcp_tools, explore],
-                                       memory_text=memory_text, store=store, skills=skills)
+                                       memory_text=memory_text, store=store, skills=skills, context_budget=context_budget)
         hist = list(state.get("history") or [])
         msgs = hist + [{"role": "user", "content": state["task"]}]
         res = await astream_agent(agent, msgs, on_token, config, on_event=on_phase)
@@ -166,7 +179,7 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
             on_phase(f"retry:{res.empty_reason}")
             empty_retries = 1
             retry_agent = AGENTS["reader"].build(fast_model, ws, approver, extra_tools=[*mcp_tools, explore],
-                                                 memory_text=memory_text, store=store, skills=skills)
+                                                 memory_text=memory_text, store=store, skills=skills, context_budget=context_budget)
             msgs = hist + [{"role": "user", "content": state["task"] + "\n\n" + load_prompt("empty_retry")}]
             res = await astream_agent(retry_agent, msgs, on_token, config, on_event=on_phase)
         return {"answer": res.answer, "empty_reason": res.empty_reason, "empty_retries": empty_retries}
@@ -185,10 +198,9 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
                 verify_detail=state.get("verify_detail") or "(없음)",
             )
         # 체크리스트 생성은 구조적 작업이라 깊은 추론이 불필요하다. thinking 모델은 폭주로
-        # 시간·토큰만 태우므로(실측 trace e32faab: plan #1 의 52s 가 4096 truncation) coder 와
-        # 동일하게 fast_model(no_think) 을 쓴다.
-        agent = AGENTS["planner"].build(fast_model, ws, approver, extra_tools=mcp_tools,
-                                        memory_text=memory_text, store=store, skills=skills)
+        # 시간·토큰만 태우므로(실측 trace e32faab: plan #1 의 52s 가 4096 truncation) coder와 동일하게 fast_model(no_think) 을 쓴다.
+        agent = AGENTS["planner"].build(fast_model, ws, approver, extra_tools=_planner_tools(mcp_tools),
+                                        memory_text=memory_text, store=store, skills=skills, context_budget=context_budget)
         hist = list(state.get("history") or [])
         res = await astream_agent(agent, hist + [{"role": "user", "content": task}],
                                   on_token, config, on_event=on_phase)
@@ -207,7 +219,7 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         if "snap" not in pre_edit:
             pre_edit["snap"] = snapshot(ws.root)
         agent = AGENTS["coder"].build(fast_model, ws, approver, extra_tools=[*mcp_tools, explore],
-                                      memory_text=memory_text, store=store, skills=skills)
+                                      memory_text=memory_text, store=store, skills=skills, context_budget=context_budget)
         task = state["task"]
         if state.get("plan_text"):  # plan 노드가 수립한 체크리스트 (§3.4). 수행 지시는 coder.md.
             task += "\n\n## 작업 계획\n" + state["plan_text"]
@@ -336,10 +348,11 @@ async def run_task(
     extra_tools = [*mcp_tools, *make_vision_tools(ws, fast_model, props_url)]
     tracer = get_tracer()
     graph = _build_graph(reader_model, fast_model, ws, approver, on_token, on_phase, extra_tools,
-                         memory_text, store=store, explore_model=explore_model, skills=skills)
+                         memory_text, store=store, explore_model=explore_model, skills=skills,
+                         context_budget=settings.context_budget_tokens)
     # CallbackHandler 가 이 graph 실행을 하나의 langfuse trace 로 자동 기록한다
     # (각 에이전트/툴/모델 호출 = 관측, 단계별 token 사용량 포함).
-    # artifact_ns 를 trace metadata 에 실어 langfuse ↔ .harness/artifacts 상호참조를 유지 (리뷰 Low)
+    # artifact_ns 를 trace metadata 에 실어 langfuse ↔ .koda/artifacts 상호참조를 유지 (리뷰 Low)
     config = {"callbacks": tracer.callbacks, "run_name": task[:60],
               "metadata": {"provider": provider, "artifact_ns": artifact_ns}}
     final = await graph.ainvoke({"task": task, "history": history or []}, config=config)

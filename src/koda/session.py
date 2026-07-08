@@ -3,7 +3,7 @@
 - history 에는 user 질문과 assistant **최종 답변 텍스트만** 저장한다(reasoning·도구 원본 제외
   — interleaved thinking 규칙: 턴 경계에서 reasoning 은 버린다. plan/MEMORY_MULTITURN.md §3).
 - 저장은 원자적(tmp → rename)이고 멱등: 같은 상태를 다시 저장해도 파일 내용이 같다.
-- 위치: <workspace>/.harness/sessions/<id>.json
+- 위치: <workspace>/.koda/sessions/<id>.json
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import json
 import uuid
 from pathlib import Path
 
-HARNESS_DIR = ".harness"
+KODA_DIR = ".koda"
 
 # 점진적 문맥 압축(패턴 5): 히스토리가 임계 초과 시 오래된 턴을 LLM 요약으로 치환.
 # 압축은 프롬프트 prefix 를 깨므로(캐시 미스 1회) 임계 도달 시에만 수행한다.
@@ -28,7 +28,7 @@ class Session:
 
     @property
     def path(self) -> Path:
-        return self.root / HARNESS_DIR / "sessions" / f"{self.id}.json"
+        return self.root / KODA_DIR / "sessions" / f"{self.id}.json"
 
     def add_turn(self, task: str, answer: str, route: str, verdict: str | None, summary: str = "") -> None:
         """턴 결과를 히스토리에 추가한다. 최종 답변 텍스트만 저장(reasoning/도구 원본 없음)."""
@@ -55,7 +55,7 @@ class Session:
         s.turns = data.get("turns", [])
         return s
 
-    # --- 점진적 문맥 압축 (요약 "생성"은 LLM 몫, 하네스는 분할·교체만) ---
+    # --- 점진적 문맥 압축 (요약 "생성"은 LLM 몫, koda는 분할·교체만) ---
 
     @property
     def needs_compaction(self) -> bool:
@@ -93,5 +93,5 @@ class Session:
 
     @classmethod
     def list_ids(cls, ws_root: str | Path) -> list[str]:
-        d = Path(ws_root).resolve() / HARNESS_DIR / "sessions"
+        d = Path(ws_root).resolve() / KODA_DIR / "sessions"
         return sorted(p.stem for p in d.glob("*.json")) if d.is_dir() else []

@@ -1,6 +1,6 @@
-# build-harness — Claude Code 작업 지침
+# koda — Claude Code 작업 지침
 
-이 저장소는 로컬 LLM 기반 coding-agent 하네스를 만든다. 전체 설계는 `plan/PLAN.md` 참조.
+이 저장소는 로컬 LLM 기반 coding-agent koda를 만든다. 전체 설계는 `plan/PLAN.md` 참조.
 
 ## 코드 스타일 (엄격)
 
@@ -23,13 +23,13 @@
 - 기능 구현 시 **기능당 codex 리뷰 1회**를 기본으로 한다.
 - codex 산출물은 Claude가 최종 검증한다(맹신 금지). codex quota 소진 시 일반 서브에이전트로 폴백.
 
-## 하네스: DeepSeek 위임
+## koda: DeepSeek 위임
 
 **목표:** codex와 같은 범주의 위임 작업(리팩토링·조사·코드리뷰 2차 의견·구현 검증·2차 진단)을 DeepSeek API로도 보낼 수 있게 한다.
 
 **트리거:** 위 작업 중 DeepSeek로 위임/보완하고 싶을 때 `deepseek-delegate` 서브에이전트를 Agent 툴로 호출하라(model: sonnet). 이 에이전트는 항상 `.claude/skills/deepseek-delegate`의 `scripts/delegate.sh`를 통해서만 위임한다 (모델 고정: `deepseek-v4-pro[1m]`, 권한: yolo/`--dangerously-skip-permissions`, 예산 캡 없음). 산출물은 codex와 동일하게 2차 의견으로 취급하고 Claude가 검토한다. 단순 질문은 직접 응답 가능.
 
-## 하네스: Antigravity(agy) 리뷰/검증 위임
+## koda: Antigravity(agy) 리뷰/검증 위임
 
 **목표:** codex·deepseek와 같은 범주의 위임 작업 중 **엄격한 리뷰/검증**(코드 리뷰 2차 의견·계획문서 검증·구현 검증·2차 진단)을 Antigravity CLI(`agy`)로도 보낼 수 있게 한다. Claude와 다른 모델 계열(Gemini)의 독립적 2차 의견을 얻는 창구다.
 
@@ -47,7 +47,24 @@
 
 **폴백 (사용량 제한 대응, codex와 동일한 패턴):** agy 사용량 제한(quota/rate limit)에 도달해 위임이 실패하면 **일반 서브에이전트로 폴백**해 동일한 리뷰/검증 작업을 계속 진행한다. antigravity-review는 실패 원인이 사용량 제한으로 보이면 그 사실을 보고에 명시해, 호출자가 폴백 여부를 바로 판단할 수 있게 한다. CLI 미설치·타임아웃 등 사용량 제한이 아닌 실패는 기존대로 실패를 그대로 보고한다 — 설정 문제를 폴백으로 가리지 않는다.
 
+## Git 워크플로우 (기능별 브랜치 → PR)
+
+- **기능 단위로 브랜치를 판다.** 각 기능/목적별로 `main` 에서 브랜치를 만들고
+  (`feat/…`·`refactor/…`·`fix/…`), 그 브랜치에서만 작업한다. 서로 다른 기능을 한 브랜치에 섞지 않는다.
+- **구현·검증(테스트 통과)이 끝나면 PR 을 연다.** commit → push → `gh pr create`.
+- **PR 이 병합되면 브랜치를 삭제한다.** 로컬 `git branch -d`, 원격 `git push origin --delete <branch>`.
+- **PR 본문은 간결하게, bullet point 로.** 무엇을·왜만 적는다. 제목은 한 줄 요약.
+  ```
+  ## 변경
+  - <핵심 변경>
+  ## 검증
+  - <테스트/실행 결과 한 줄>
+  ```
+- **커밋·PR 메시지에 내부 작업 과정을 노출하지 않는다.** 서브에이전트(codex/deepseek/agy)
+  호출·2차 의견·리뷰 경위 등은 절대 쓰지 않는다. 결과물의 목적·동작만 기술한다.
+  (금지 예: "deepseek 리뷰 반영", "agy 가 찾은 버그 수정" → 허용: "히스토리 트림 경계 조건 수정")
+
 ## 일반
 
 - 불확실하면 코드를 늘리기 전에 먼저 묻는다.
-- 새 의존성 추가·큰 리팩터링은 사전에 합의한다. (Python 3.14, 의존성 최소 원칙)
+- 새 의존성 추가·큰 리팩터링은 사전에 합의한다. (Python 3.13+, 의존성 최소 원칙)

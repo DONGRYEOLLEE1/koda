@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from build_harness.mcp import load_mcp_configs
+from koda.mcp import load_mcp_configs
 
 
 def _write(d, name, obj):

@@ -1,6 +1,6 @@
-name: build-harness-langfuse
+name: koda-langfuse
 
-# build-harness 전용 langfuse 스택. 프로젝트명으로 컨테이너/볼륨/네트워크가 격리되어
+# koda 전용 langfuse 스택. 프로젝트명으로 컨테이너/볼륨/네트워크가 격리되어
 # 다른 langfuse 인스턴스와 충돌하지 않는다. web UI 는 http://localhost:3002.
 # API 키는 LANGFUSE_INIT_* 로 부트스트랩되어 아래 값이 그대로 .env 에 쓰인다.
 
@@ -123,15 +123,15 @@ services:
       <<: *lf_env
       NEXTAUTH_URL: http://localhost:3002
       NEXTAUTH_SECRET: "bh-nextauth-d0a50595f57d119c34924f313d1949d475cacee40ce4bc21"
-      LANGFUSE_INIT_ORG_ID: org-build-harness
-      LANGFUSE_INIT_ORG_NAME: build-harness
-      LANGFUSE_INIT_PROJECT_ID: proj-build-harness
-      LANGFUSE_INIT_PROJECT_NAME: build-harness
+      LANGFUSE_INIT_ORG_ID: org-koda
+      LANGFUSE_INIT_ORG_NAME: koda
+      LANGFUSE_INIT_PROJECT_ID: proj-koda
+      LANGFUSE_INIT_PROJECT_NAME: koda
       LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-a1b2c3d4-0000-4000-8000-000000000001
       LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-a1b2c3d4-0000-4000-8000-000000000002
-      LANGFUSE_INIT_USER_EMAIL: admin@build-harness.local
+      LANGFUSE_INIT_USER_EMAIL: admin@koda.local
       LANGFUSE_INIT_USER_NAME: BH Admin
-      LANGFUSE_INIT_USER_PASSWORD: buildharness1234
+      LANGFUSE_INIT_USER_PASSWORD: koda1234
 
 volumes:
   langfuse_postgres_data:

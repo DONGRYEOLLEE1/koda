@@ -9,7 +9,7 @@ wheels/
 # Virtual environments
 .venv
 
-# harness 실행 로그
+# koda 실행 로그
 runs/
 
 # 로컬 환경설정(비밀)
@@ -23,6 +23,7 @@ plan
 .ruff_cache
 mcps/*.json
 benchmarks
+.koda
 .harness
 scenario
 scripts

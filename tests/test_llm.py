@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from langchain.chat_models import init_chat_model
 
-from build_harness.config import ModelSettings
-from build_harness.llm import _no_think, _thinking, select_provider
+from koda.config import ModelSettings
+from koda.llm import _no_think, _thinking, select_provider
 
 _BASE = {
     "primary": "local", "local_api_key": "nothing",

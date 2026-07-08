@@ -1,7 +1,7 @@
 """artifact 재조회 도구 (읽기 전용). 절단된 도구 출력의 원문을 범위 지정으로 다시 본다.
 
-trim 미들웨어가 저장한 `.harness/artifacts/` 원문에 대한 유일한 접근 경로다 —
-`.harness/` 는 일반 파일 도구·스냅샷에서 제외되므로(ROADMAP §2.3) 이 도구로만 조회한다.
+trim 미들웨어가 저장한 `.koda/artifacts/` 원문에 대한 유일한 접근 경로다 —
+`.koda/` 는 일반 파일 도구·스냅샷에서 제외되므로(ROADMAP §2.3) 이 도구로만 조회한다.
 """
 from __future__ import annotations
 

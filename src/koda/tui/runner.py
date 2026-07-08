@@ -14,7 +14,15 @@ import threading
 
 from ..agents import compact_memory, extract_memories, run_task, summarize_history
 from ..cli import _auto_approver, _run_with_heartbeat
-from .model import ApprovalRequest, PhaseEvent, SessionClosed, TokenChunk, TurnDone, TurnFailed
+from .model import (
+    ApprovalRequest,
+    CompactDone,
+    PhaseEvent,
+    SessionClosed,
+    TokenChunk,
+    TurnDone,
+    TurnFailed,
+)
 
 APPROVAL_TIMEOUT_S = 600.0  # modal 무응답은 deny — 위험 도구가 무기한 대기하지 않는다
 
@@ -88,6 +96,28 @@ class TuiTurnRunner:
             post(TurnFailed(f"세션 반영 실패 {type(e).__name__}: {e}"))
             return
         post(TurnDone(result, turns=len(self.session.turns)))
+
+    def compact_now(self) -> None:
+        """/compact: 현재 세션 이력을 요약 압축한다(최근 턴 유지). worker thread 진입점.
+
+        run_turn 의 턴-간 자동 압축(§80-84)과 동일 로직을 사용자가 수동 트리거하는 것.
+        임계값과 무관하게 old_messages()(최근 턴 제외분)를 요약으로 치환한다.
+        """
+        post = self._app.post_message
+        old = self.session.old_messages()
+        if not old:
+            post(CompactDone("압축할 오래된 이력이 없습니다 (최근 대화만 있음)."))
+            return
+        try:
+            before = len(self.session.history)
+            summary = asyncio.run(summarize_history(old))
+            self.session.apply_compaction(summary)
+            self.session.save()
+            after = len(self.session.history)
+            post(CompactDone(f"문맥 압축 완료 — 이전 메시지 {len(old)}개를 요약으로 치환 "
+                             f"(히스토리 {before}→{after})."))
+        except Exception as e:
+            post(CompactDone(f"압축 실패({type(e).__name__}): {e}"))
 
     def close_session(self) -> None:
         """/exit·Ctrl+Q: 세션 저장 + 영구 메모리 추출 — chat 종료 흐름과 동등."""

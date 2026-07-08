@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from build_harness.agents import _parse_verdict_text
+from koda.agents import _parse_verdict_text
 
 
 def test_parse_verdict_text_pass_only_when_exact():
@@ -23,7 +23,7 @@ def test_judge_falls_back_to_text_when_schema_unsupported():
 
     from langchain_core.messages import AIMessage
 
-    from build_harness.agents.verify import _judge
+    from koda.agents.verify import _judge
 
     class FakeStructured:
         async def ainvoke(self, msgs, config=None):
@@ -44,7 +44,7 @@ def test_judge_double_failure_is_safe_fail():
     # 구조화·폴백 모두 실패 → 안전하게 fail (false-PASS 금지 불변식)
     import asyncio
 
-    from build_harness.agents.verify import _judge
+    from koda.agents.verify import _judge
 
     class Broken:
         def with_structured_output(self, *a, **k):

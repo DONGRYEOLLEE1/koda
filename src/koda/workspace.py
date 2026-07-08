@@ -5,10 +5,10 @@ import os
 from pathlib import Path
 
 # 순회에서 제외할 무거운/무관한 디렉토리 (컨텍스트 폭증 방지).
-# .harness 는 하네스 산출물(세션·메모리·artifact) — 에이전트 파일 도구로 노출하지 않는다(§2.3).
+# .koda 는 koda 산출물(세션·메모리·artifact) — 에이전트 파일 도구로 노출하지 않는다(§2.3).
 _IGNORE_DIRS = {
     ".git", ".venv", "venv", "__pycache__", "node_modules", ".mypy_cache",
-    ".pytest_cache", ".ruff_cache", ".idea", ".vscode", ".tox", "dist", "build", ".harness",
+    ".pytest_cache", ".ruff_cache", ".idea", ".vscode", ".tox", "dist", "build", ".koda",
 }
 
 
@@ -29,8 +29,8 @@ class Workspace:
         if p != self.root and self.root not in p.parents:
             raise SandboxError(f"경로가 워크스페이스 밖입니다: {rel}")
         parts = p.relative_to(self.root).parts if p != self.root else ()
-        if parts and parts[0] == ".harness":  # 하네스 내부 저장소(세션·메모리·artifact) 비노출
-            raise SandboxError("'.harness' 는 하네스 내부 저장소다 — artifact 는 read_artifact 로 조회하라")
+        if parts and parts[0] == ".koda":  # koda 내부 저장소(세션·메모리·artifact) 비노출
+            raise SandboxError("'.koda' 는 koda 내부 저장소다 — artifact 는 read_artifact 로 조회하라")
         return p
 
     def read_file(self, rel: str) -> str:

@@ -1,6 +1,6 @@
-# build-harness
+# koda
 
-**langchain 1.x 기반 분기 멀티에이전트 coding-agent 하네스.** **router** 가 요청을 분류해 읽기는
+**langchain 1.x 기반 분기 멀티에이전트 coding-agent koda.** **router** 가 요청을 분류해 읽기는
 **reader**, 파일 변경은 **coder** 로 라우팅하고, **verifier 는 부수효과가 있는 edit 경로에만** 건다
 (부수효과 없는 분석의 산문 품질 평가는 비용 대비 신뢰할 수 없어 생략). 각 에이전트는 도구를
 **자율 호출**하며, **외부 MCP 도구**(문서 조회·웹검색)와 워크스페이스 **스킬**을 스스로 판단해 쓴다.
@@ -10,7 +10,7 @@
 
 **멀티턴 대화(`chat`)와 계층형 메모리**: 세션이 히스토리를 유지·영속해(`--resume` 재개) "방금 만든
 파일에 …" 같은 지시어를 해소하고, `/remember` + 세션 종료 시 LLM 이 저장하는 **영구 메모리**
-(`.harness/memory.md`)가 새 세션에도 주입된다. 히스토리가 길어지면 **점진적 문맥 압축**(오래된 턴을
+(`.koda/memory.md`)가 새 세션에도 주입된다. 히스토리가 길어지면 **점진적 문맥 압축**(오래된 턴을
 LLM 요약으로 치환)이 걸리고, 안정 prefix + append-only 구조로 llama.cpp **프롬프트 캐시**를 극대화한다
 (실측: 2턴째 입력 84~87% 히트).
 
@@ -21,37 +21,51 @@ LLM 요약으로 치환)이 걸리고, 안정 prefix + append-only 구조로 lla
 
 ## 빠른 시작
 
+**설치 (어디서든 `koda` 실행)**
+
+```bash
+uv tool install .                          # 격리 설치 → koda 명령이 PATH 에
+uv tool install "koda[tui]"                #   TUI 포함 (textual)
+mkdir -p ~/.config/koda && cp .env.example ~/.config/koda/.env   # 전역 설정(한 번)
+#   설정 탐색: CWD/.env → ~/.config/koda/.env → 환경변수
+```
+
+**개발 (레포에서)**
+
 ```bash
 uv sync                                    # 환경 구성 (editable + dev)
 cp .env.example .env                       # 로컬 LLM / langfuse 설정
 docker compose up -d                       # langfuse 스택 기동 → http://localhost:3002
-
-# 테스트 (핵심 모듈 단위 + 결정론적 e2e; 라이브는 엔드포인트 있을 때만)
 uv run pytest --ignore=tests/test_live_llm.py   # 유닛만 빠르게
+```
 
+**실행** (설치본은 `koda`, 레포에서는 `uv run koda`)
+
+```bash
 # 단발 실행 — 답변 스트리밍(TTY: 마크다운 렌더링) + 단계 표시, 추적은 langfuse 로
-uv run build-harness run "calc.py에 두 수를 빼는 sub 함수를 추가해줘" --workspace . --yes
-uv run build-harness run "이 프로젝트 구조를 설명해줘" --workspace .
+koda run "calc.py에 두 수를 빼는 sub 함수를 추가해줘" --workspace . --yes
+koda run "이 프로젝트 구조를 설명해줘" --workspace .
 
 # 멀티턴 대화 (세션 저장/재개, 영구 메모리)
-uv run build-harness chat --workspace . --yes
+koda chat --workspace . --yes
 #   » calc.py 만들어 add 함수 작성해줘
 #   » 방금 만든 파일에 mul 함수도 추가해줘      ← 히스토리로 지시어 해소
 #   » /remember 함수 이름은 snake_case 로     ← 영구 메모리 (새 세션에도 적용)
 #   » /exit                                  ← 종료 시 LLM 이 기억할 사실 자동 추출
-uv run build-harness chat --workspace . --resume <session-id>   # 세션 재개
+koda chat --workspace . --resume <session-id>   # 세션 재개
 
 # TUI
-uv run build-harness tui --workspace . --no-mcp
+koda tui --workspace . --no-mcp
 #   한 화면: 대화 스트림 + 상태/검증/메모리/세션 패널 + 위험 도구 승인 modal
-#   /remember·/memory·/exit 동일 지원, --resume 로 chat 세션도 이어받는다
+#   슬래시 커맨드: /help · /compact(문맥 압축) · /clear · /remember · /memory · /exit
+#   --resume 로 chat 세션도 이어받는다
 
 # 외부 MCP 없이 로컬만(빠름)
-uv run build-harness run "..." --workspace . --no-mcp
+koda run "..." --workspace . --no-mcp
 ```
 
 `chat` 은 stdin 이 tty 가 아니면 줄 단위 배치로 실행돼 파이프 기반 검증이 가능하다
-(`printf '턴1\n턴2\n/exit\n' | build-harness chat ...`). 비대화형에서 `--yes` 가 없으면
+(`printf '턴1\n턴2\n/exit\n' | koda chat ...`). 비대화형에서 `--yes` 가 없으면
 위험 도구는 안전하게 거부된다(승인 질문이 파이프 입력을 삼키지 않도록).
 
 `--yes` 를 빼면 위험 도구(파일 쓰기·삭제·명령 실행·**외부 MCP 호출**) 실행 전에 승인을 물어본다.
@@ -76,10 +90,10 @@ textual 미설치 시 `tui` 명령이 설치 안내만 출력하며 다른 경�
 | **MCP**            | **`mcps/*.json` 폴더 일괄 로드** → 외부 MCP 도구를 **reader·coder·planner**(+explore 위임)에 주입 — `mcp.py` (아래 [MCP 확장](#mcp-확장))                                                                                                                                                                                                                                                                                                                                                                   |
 | **스킬**           | **`<workspace>/skills/*/SKILL.md` 발견**(frontmatter name+description + 본문) → 이름+설명을 reader·coder·planner 프롬프트에 주입, 에이전트가 관련성을 **스스로 판단**해 `skill(name)`(읽기 전용)으로 전체 지침 로드(progressive disclosure). Claude Code Agent Skills 모델 — `skills.py`, `plan/SKILLS.md`                                                                                                                                                                                             |
 | **프롬프트**       | 외부 파일`prompts/*.md` (system + `verifier_task`·`coder_retry` 템플릿) — 코드 인라인 금지                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| **안전**           | ①**정적 deny gate**(`denygate.py`) — `sudo`·`curl\|sh`·대량 삭제 등은 `--yes` 로도 우회 불가, secret 접근은 대화형 승인 필수 → ② `PermissionMiddleware` — 읽기 외 모든 도구 HITL 게이트(default-deny) → ③ **bubblewrap**(설치 시) — 셸 명령을 루트 read-only OS 격리로 실행. + workspace 샌드박스(`.harness` 비노출)                                                                                                                                                                          |
-| **견고성**         | `ToolOutputTrimMiddleware` — 절단 시 **원문을 `.harness/artifacts/` 에 보존**(secret redaction)하고 에이전트가 `read_artifact` 로 범위 재조회 · 빈 응답은 **no_think 강등 재시도** · reader/explore 는 **에이전트별 reasoning 예산**(`thinking_budget_tokens` 요청 파라미터, 기본 reader=1024·explore=512, `.env` 의 `THINKING_BUDGET_READER/EXPLORE` 로 재정의 — llama-server 는 `--reasoning-budget` 플래그 없이 기동해야 적용) · 파일명 오질의 시 유사 후보 반환 · CLI 하트비트(30s) |
-| **멀티턴**         | `Session`(`.harness/sessions/<id>.json`, 원자적 저장·`--resume`) — 히스토리에 user/assistant **최종 답변만**(reasoning 미저장 = interleaved thinking 규칙) — `session.py`                                                                                                                                                                                                                                                                                                                                     |
-| **메모리**         | `Memory`(`.harness/memory.md`) — `/remember` + 세션 종료 시 **LLM 이 기억 가치 판단·추출**(패턴 4). system prompt 뒤 고정 위치 주입(캐시 친화). 항목 단위 중복 방지(멱등), 상한 초과 시 LLM 통합 압축 — `memory.py`                                                                                                                                                                                                                                                                                           |
+| **안전**           | ①**정적 deny gate**(`denygate.py`) — `sudo`·`curl\|sh`·대량 삭제 등은 `--yes` 로도 우회 불가, secret 접근은 대화형 승인 필수 → ② `PermissionMiddleware` — 읽기 외 모든 도구 HITL 게이트(default-deny) → ③ **bubblewrap**(설치 시) — 셸 명령을 루트 read-only OS 격리로 실행. + workspace 샌드박스(`.koda` 비노출)                                                                                                                                                                          |
+| **견고성**         | `ToolOutputTrimMiddleware` — 절단 시 **원문을 `.koda/artifacts/` 에 보존**(secret redaction)하고 에이전트가 `read_artifact` 로 범위 재조회 · 빈 응답은 **no_think 강등 재시도** · reader/explore 는 **에이전트별 reasoning 예산**(`thinking_budget_tokens` 요청 파라미터, 기본 reader=1024·explore=512, `.env` 의 `THINKING_BUDGET_READER/EXPLORE` 로 재정의 — llama-server 는 `--reasoning-budget` 플래그 없이 기동해야 적용) · 파일명 오질의 시 유사 후보 반환 · CLI 하트비트(30s) |
+| **멀티턴**         | `Session`(`.koda/sessions/<id>.json`, 원자적 저장·`--resume`) — 히스토리에 user/assistant **최종 답변만**(reasoning 미저장 = interleaved thinking 규칙) — `session.py`                                                                                                                                                                                                                                                                                                                                     |
+| **메모리**         | `Memory`(`.koda/memory.md`) — `/remember` + 세션 종료 시 **LLM 이 기억 가치 판단·추출**(패턴 4). system prompt 뒤 고정 위치 주입(캐시 친화). 항목 단위 중복 방지(멱등), 상한 초과 시 LLM 통합 압축 — `memory.py`                                                                                                                                                                                                                                                                                           |
 | **문맥 압축**      | 히스토리 임계(≈12k tok) 초과 시 오래된 턴을**LLM 요약으로 치환**, 최근 4턴 원본 유지(패턴 5). user/assistant 쌍 경계 보존                                                                                                                                                                                                                                                                                                                                                                                               |
 | **캐싱**           | llama.cpp 프롬프트 캐시 활용: 안정 prefix(system+memory+도구 고정) + append-only 히스토리 +**세션당 MCP 1회 로드**. 실측 멀티턴 캐시 히트 84~87%                                                                                                                                                                                                                                                                                                                                                                         |
 | **스트리밍/진행**  | `stream_mode=["messages","values"]` — 토큰 표시는 청크, 답변 정본은 최종 state. **TTY 는 Rich Live 마크다운 실시간 렌더링**(transient 중간 프레임 + finalize 렌더링본 1회 = 본문 단일 출력 불변식), non-TTY 는 기존 plain 스트리밍. 단계 전환(route/plan/read/edit/verify/review)·하트비트 진행 표시, thinking 모델의 **reasoning 무출력 구간은 "🤔 생각 중… (~N tok)" status** 로 가시화(TTY 전용) — `plan/MARKDOWN_STREAMING.md`                                                                         |
@@ -100,7 +114,7 @@ flowchart TD
     RT -- "edit" --> SN["pre-edit 해시 스냅샷 (결정론)"]
     PL --> SN
     SN --> CD["coder 에이전트<br/>파일 생성·수정·삭제 + 테스트 실행"]
-    MEM["영구 메모리<br/>.harness/memory.md"] -. "system prompt 뒤 고정 주입" .-> RD
+    MEM["영구 메모리<br/>.koda/memory.md"] -. "system prompt 뒤 고정 주입" .-> RD
     MEM -. "주입" .-> CD
     MCP["외부 MCP + vision 도구<br/>mcps/*.json (세션당 1회 로드)"] -. "주입" .-> RD
     MCP -. "주입" .-> CD
@@ -141,13 +155,13 @@ flowchart TD
 | `workspace_run_command`                             | coder                  | **필요** + deny gate | 명령 실행.**정적 deny gate 선행**: `sudo`·`curl\|sh`·대량 삭제 등은 `--yes` 로도 차단, secret 접근(`.ssh`/`.env` 등)은 대화형 승인 필수. bubblewrap 설치 시 OS 격리 실행. **워크스페이스 `.venv` 우선**(거짓 성공 증거 방지) |
 | `explore`                                           | reader·coder          | 불필요 (SAFE)              | **탐색 전용 서브에이전트에 위임**(턴당 1회) — 넓은 탐색을 격리된 컨텍스트에서 수행하고 요약만 반환                                                                                                                                             |
 | `analyze_image`                                     | reader·coder·planner | 불필요 (SAFE)              | 이미지 구조화 분석(§3.2). llama.cpp mmproj 미탑재면 복구 가능한 안내 반환                                                                                                                                                                            |
-| `read_artifact`                                     | reader·coder·planner | 불필요 (SAFE)              | 절단된 도구 출력의 원문(`.harness/artifacts/`)을 줄 범위로 재조회                                                                                                                                                                                   |
+| `read_artifact`                                     | reader·coder·planner | 불필요 (SAFE)              | 절단된 도구 출력의 원문(`.koda/artifacts/`)을 줄 범위로 재조회                                                                                                                                                                                   |
 | `skill`                                             | reader·coder·planner | 불필요 (SAFE)              | 관련 스킬의`SKILL.md` 본문을 읽기 전용으로 로드 (`<workspace>/skills/` 에 스킬이 있을 때만 노출)                                                                                                                                                  |
 | MCP 도구 전부 (`query-docs`, `web_search_exa` 등) | reader·coder·planner | **필요**             | 외부 네트워크 호출.`mcps/*.json` 에서 로드되며, SAFE 목록 밖이므로 이름과 무관하게 자동 게이트                                                                                                                                                      |
 
 - 모든 도구 경로는 `workspace.resolve()` 로 워크스페이스 루트에 **샌드박스**된다(루트 밖 접근 차단).
-  `.harness/`(세션·메모리·artifact)는 파일 도구 목록·검색·diff 에 노출되지 않는다.
-- 도구 출력은 8,000자에서 절단하되 **원문을 `.harness/artifacts/` 에 보존**(secret redaction + 크기 상한)하고,
+  `.koda/`(세션·메모리·artifact)는 파일 도구 목록·검색·diff 에 노출되지 않는다.
+- 도구 출력은 8,000자에서 절단하되 **원문을 `.koda/artifacts/` 에 보존**(secret redaction + 크기 상한)하고,
   에이전트가 필요 판단 시 `read_artifact` 로 범위 재조회한다 — 증거는 잃지 않고 컨텍스트만 아낀다.
 - 게이트는 sync·async(`wrap_tool_call`/`awrap_tool_call`) 양쪽 훅에 걸려 MCP(async) 경로에서도 우회되지 않는다.
 - verifier 는 도구 없이 diff 기반 단일 판정이므로 HITL 이 걸리지 않고, router 는 도구를 호출하지 않는다.
@@ -160,7 +174,7 @@ reader·coder 에게 `explore(question)` 은 도구 하나로 보이지만, 호�
 메인 히스토리를 오염·비대화시키지 않는다 (Claude Code 의 Agent 툴과 같은 패턴).
 
 - 그래프 노드가 아니라 **도구 레벨** — route 가 관여하지 않고, 호출한 에이전트에게 동기적으로 요약이 돌아온다
-- **턴당 1회 캡** (하네스 결정론) — reader↔explore 무한 핑퐁 방지. 초과 시 "지금까지 수집한 정보로 답하라" 오류 반환
+- **턴당 1회 캡** (koda 결정론) — reader↔explore 무한 핑퐁 방지. 초과 시 "지금까지 수집한 정보로 답하라" 오류 반환
 - explore 자신에게는 explore 도구를 주지 않는다 — **재귀 위임 불가**
 - 단일 파일 확인은 위임하지 않고 직접 `workspace_read_file` 을 쓰도록 도구 설명이 유도한다 — 발동 조건은 "여러 파일을 훑어야 하는 넓은 탐색"
 
@@ -213,7 +227,7 @@ FAIL 은 diff·실행 결과로 입증 가능한 결함에만 내린다(낡은 �
 계획·조사 문서: `plan/MEMORY_MULTITURN.md`, `plan/research/memory-multiturn-caching.md`.
 
 ```
-<workspace>/.harness/
+<workspace>/.koda/
   ├─ memory.md            # 영구 메모리 — /remember + 세션 종료 시 LLM 자동 추출. 새 세션에 항상 주입
   └─ sessions/<id>.json   # 세션(히스토리+턴 기록) — chat --resume <id> 로 재개
 ```

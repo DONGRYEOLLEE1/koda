@@ -5,12 +5,12 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-import build_harness.agents.graph as G
-from build_harness.agents.graph import _build_graph, enforce_checklist
-from build_harness.agents.specs import AGENTS
-from build_harness.agents.streaming import AgentResult
-from build_harness.prompts import load_prompt
-from build_harness.workspace import Workspace
+import koda.agents.graph as G
+from koda.agents.graph import _build_graph, _planner_tools, enforce_checklist
+from koda.agents.specs import AGENTS
+from koda.agents.streaming import AgentResult
+from koda.prompts import load_prompt
+from koda.workspace import Workspace
 
 
 # --- enforce_checklist: LLM 없는 결정론 게이트 ---
@@ -54,6 +54,21 @@ def test_checklist_crlf_normalized():
     assert "\r" not in out
 
 
+# --- _planner_tools: planner 는 벌크 웹검색을 못 받는다 (컨텍스트 폭증 방지) ---
+
+class _FakeTool:
+    def __init__(self, name):
+        self.name = name
+
+
+def test_planner_tools_drops_web_search_keeps_docs():
+    # 실측: exa web_search_exa 14회 누적이 32768 초과의 원인. context7 압축 조회는 유지.
+    tools = [_FakeTool("web_search_exa"), _FakeTool("query-docs"),
+             _FakeTool("resolve-library-id"), _FakeTool("firecrawl_scrape")]
+    kept = [t.name for t in _planner_tools(tools)]
+    assert kept == ["query-docs", "resolve-library-id"]  # 벌크 검색/크롤만 제외
+
+
 def test_checklist_common_variants_recognized():
     # 인식은 관대하게 — 변형 하나로 계획 전체가 무효화되지 않는다 (deepseek·폴백 리뷰 수렴)
     text = "* [ ] 별표 불릿\n-  [ ] 대시 뒤 공백 2개\n-\t[ ] 탭 구분\n- [  ] 박스 안 공백 2개"
@@ -91,7 +106,8 @@ class _SpySpec:
     def __init__(self):
         self.models = []
 
-    def build(self, model, ws, approver, extra_tools=(), memory_text="", store=None, skills=()):
+    def build(self, model, ws, approver, extra_tools=(), memory_text="", store=None, skills=(),
+              context_budget=28000):
         self.models.append(model)
         return object()
 
@@ -129,7 +145,8 @@ class _CaptureSpec(_SpySpec):
         super().__init__()
         self.extra_tools = []
 
-    def build(self, model, ws, approver, extra_tools=(), memory_text="", store=None, skills=()):
+    def build(self, model, ws, approver, extra_tools=(), memory_text="", store=None, skills=(),
+              context_budget=28000):
         self.extra_tools = list(extra_tools)
         return super().build(model, ws, approver)
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from build_harness.workspace import Workspace
+from koda.workspace import Workspace
 
 
 @pytest.fixture

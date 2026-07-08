@@ -5,7 +5,7 @@ from typing import Callable
 
 from langchain.agents import create_agent
 
-from ..middleware import PermissionMiddleware, ToolOutputTrimMiddleware
+from ..middleware import HistoryTrimMiddleware, PermissionMiddleware, ToolOutputTrimMiddleware
 from ..prompts import load_prompt
 from ..tools import make_all_tools, make_readonly_tools
 from ..tools.artifact import make_artifact_tools
@@ -22,7 +22,7 @@ class AgentSpec:
     response_format: type | None = None
 
     def build(self, model, ws, approver, extra_tools=(), memory_text: str = "", store=None,
-              skills=()):
+              skills=(), context_budget: int = 16000):
         system = load_prompt(self.name)
         # 캐시 prefix 순서 (agy 리뷰): 정적일수록 앞으로. 스킬 파일은 거의 불변이라 memory 앞에
         # 둬서, 세션 누적으로 성장하는 memory 가 바뀌어도 스킬 구간 캐시가 보존되게 한다.
@@ -42,7 +42,12 @@ class AgentSpec:
             tools,
             system_prompt=system,
             response_format=self.response_format,
-            middleware=[PermissionMiddleware(approver, self.name), ToolOutputTrimMiddleware(store=store)],
+            # 순서: 권한 게이트 → 도구출력 1건 상한 → 턴 누적 프롬프트 상한(모델 호출 직전).
+            middleware=[
+                PermissionMiddleware(approver, self.name),
+                ToolOutputTrimMiddleware(store=store),
+                HistoryTrimMiddleware(max_prompt_tokens=context_budget),
+            ],
         )
 
 

@@ -1,7 +1,7 @@
 """MarkdownStreamRenderer — 본문 단일 출력 불변식 + 재시도 버퍼 리셋 (plan/MARKDOWN_STREAMING.md §6.4, §7)."""
 from __future__ import annotations
 
-from build_harness.cli import MarkdownStreamRenderer, _format_phase
+from koda.cli import MarkdownStreamRenderer, _format_phase
 
 
 class _FakeLive:

@@ -1,14 +1,14 @@
 """핵심 모듈: skills (워크스페이스 스킬 발견·주입·조회 도구). plan/SKILLS.md §6.
 
-판단은 LLM 이 하므로(스킬 발동 여부) 여기선 하네스 몫만 검증한다:
+판단은 LLM 이 하므로(스킬 발동 여부) 여기선 koda 몫만 검증한다:
 발견(frontmatter 파싱)·빈 폴더·본문 조회·SAFE 게이트·프롬프트 주입 순서.
 """
 from __future__ import annotations
 
-from build_harness.agents.specs import AGENTS
-from build_harness.skills import Skill, load_skills, skill_body
-from build_harness.tools import SAFE_TOOLS
-from build_harness.tools.skill import make_skill_tools
+from koda.agents.specs import AGENTS
+from koda.skills import Skill, load_skills, skill_body
+from koda.tools import SAFE_TOOLS
+from koda.tools.skill import make_skill_tools
 
 
 def _write_skill(root, name, frontmatter, body="본문 지침."):
@@ -88,7 +88,7 @@ def test_skill_is_safe_tool():
 # --- 프롬프트 주입: build 가 create_agent 에 넘기는 실제 system 을 가로채 검증 ---
 
 def test_build_injects_skill_list_and_orders_before_memory(monkeypatch):
-    import build_harness.agents.specs as S
+    import koda.agents.specs as S
     captured = {}
 
     def fake_create_agent(model, tools, system_prompt, **kw):
@@ -111,7 +111,7 @@ def test_build_injects_skill_list_and_orders_before_memory(monkeypatch):
 
 def test_build_without_skills_is_unchanged(monkeypatch):
     # skills=() 면 스킬 섹션·도구가 전혀 없다 (무회귀 — 수용기준 §7-3)
-    import build_harness.agents.specs as S
+    import koda.agents.specs as S
     captured = {}
     monkeypatch.setattr(S, "create_agent",
                         lambda model, tools, system_prompt, **kw: captured.update(

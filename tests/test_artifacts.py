@@ -1,15 +1,15 @@
 """핵심 모듈: artifacts (증거 보존). 저장·redaction·범위 재조회·상한."""
 from __future__ import annotations
 
-from build_harness import artifacts
-from build_harness.artifacts import ArtifactStore, excerpt, redact
+from koda import artifacts
+from koda.artifacts import ArtifactStore, excerpt, redact
 
 
 def test_save_and_read_range(tmp_path):
     store = ArtifactStore(tmp_path, "run1")
     content = "\n".join(f"line{i}" for i in range(1, 51))
     ref = store.save("run_command", content)
-    assert ref["lines"] == 50 and (tmp_path / ".harness" / "artifacts" / "run1").is_dir()
+    assert ref["lines"] == 50 and (tmp_path / ".koda" / "artifacts" / "run1").is_dir()
 
     out = store.read_range(ref["id"], 10, 12)
     assert "10: line10" in out and "12: line12" in out and "13:" not in out
@@ -54,26 +54,26 @@ def test_seq_continues_across_store_instances(tmp_path):
     assert "turn1" in s2.read_range("001-run_command", 1, 1)
 
 
-def test_workspace_listing_hides_harness_dir(tmp_path):
-    # 안전 불변식: .harness(세션·메모리·artifact)는 에이전트 파일 도구에 노출되지 않는다
-    from build_harness.workspace import Workspace
+def test_workspace_listing_hides_koda_dir(tmp_path):
+    # 안전 불변식: .koda(세션·메모리·artifact)는 에이전트 파일 도구에 노출되지 않는다
+    from koda.workspace import Workspace
 
-    (tmp_path / ".harness" / "artifacts").mkdir(parents=True)
-    (tmp_path / ".harness" / "artifacts" / "x.txt").write_text("secretish")
+    (tmp_path / ".koda" / "artifacts").mkdir(parents=True)
+    (tmp_path / ".koda" / "artifacts" / "x.txt").write_text("secretish")
     (tmp_path / "code.py").write_text("x=1")
     assert Workspace(tmp_path).list_files(".") == ["code.py"]
 
 
-def test_workspace_resolve_blocks_harness_dir(tmp_path):
-    # 리뷰 Low: read_file 등 resolve 경유 도구로도 .harness 원문에 접근 불가
+def test_workspace_resolve_blocks_koda_dir(tmp_path):
+    # 리뷰 Low: read_file 등 resolve 경유 도구로도 .koda 원문에 접근 불가
     import pytest
 
-    from build_harness.workspace import SandboxError, Workspace
+    from koda.workspace import SandboxError, Workspace
 
-    (tmp_path / ".harness").mkdir()
-    (tmp_path / ".harness" / "memory.md").write_text("- rule")
+    (tmp_path / ".koda").mkdir()
+    (tmp_path / ".koda" / "memory.md").write_text("- rule")
     with pytest.raises(SandboxError):
-        Workspace(tmp_path).resolve(".harness/memory.md")
+        Workspace(tmp_path).resolve(".koda/memory.md")
 
 
 def test_excerpt_short_passthrough_and_long_ref():

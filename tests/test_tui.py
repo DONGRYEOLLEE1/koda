@@ -13,13 +13,13 @@ import pytest
 
 pytest.importorskip("textual")
 
-import build_harness.tui.runner as runner_mod
-from build_harness.cli import main
-from build_harness.memory import Memory
-from build_harness.session import Session
-from build_harness.tui.app import BuildHarnessTui
-from build_harness.tui.widgets import ApprovalModal, _args_preview
-from build_harness.workspace import Workspace
+import koda.tui.runner as runner_mod
+from koda.cli import main
+from koda.memory import Memory
+from koda.session import Session
+from koda.tui.app import KodaTui
+from koda.tui.widgets import ApprovalModal, _args_preview
+from koda.workspace import Workspace
 
 
 def _result(final="완료", **kw):
@@ -33,7 +33,7 @@ def _result(final="완료", **kw):
 def _make_app(tmp_path, run_task_fn, auto_yes=False, approval_timeout=600.0,
               session=None, mcp_tools=None):
     session = session or Session(tmp_path)
-    return BuildHarnessTui(Workspace(tmp_path), session, Memory(tmp_path),
+    return KodaTui(Workspace(tmp_path), session, Memory(tmp_path),
                            mcp_tools if mcp_tools is not None else [], auto_yes=auto_yes,
                            run_task_fn=run_task_fn, approval_timeout=approval_timeout)
 
@@ -358,7 +358,7 @@ def test_close_session_extracts_memory(tmp_path, monkeypatch):
 # --- cli 배선: tui 서브커맨드 → lazy import 된 run_tui 로 args 전달 ---
 
 def test_cli_tui_wiring(tmp_path, monkeypatch):
-    import build_harness.tui.app as app_mod
+    import koda.tui.app as app_mod
     seen = {}
 
     def fake_run_tui(args):
@@ -388,9 +388,9 @@ def test_args_preview():
 def test_run_tui_entry_paths(tmp_path, monkeypatch):
     import argparse
 
-    import build_harness.tui.app as app_mod
+    import koda.tui.app as app_mod
 
-    monkeypatch.setattr(app_mod.BuildHarnessTui, "run", lambda self: None)
+    monkeypatch.setattr(app_mod.KodaTui, "run", lambda self: None)
 
     def ns(**kw):
         base = {"workspace": str(tmp_path), "yes": False, "resume": None,
@@ -485,7 +485,7 @@ def test_allow_select_disabled_and_table_click_safe(tmp_path):
     """textual 8.2.8 은 마크다운 표 재렌더 직후 셀 클릭 시 텍스트 선택 로직이 고아 위젯을
     hit-test 해 앱 전체가 죽는다. ALLOW_SELECT=False 로 그 경로를 차단한다 — 이 플래그가
     되살아나면 실사용 크래시가 재발하므로 불변식으로 고정한다."""
-    assert BuildHarnessTui.ALLOW_SELECT is False
+    assert KodaTui.ALLOW_SELECT is False
 
     # 뷰포트(100x40) 안에 표 전체가 보이는 크기 — 스크롤 밖 셀은 pilot.click 이 OutOfBounds
     table_md = "| 항목 | 값 |\n| --- | --- |\n" + "\n".join(f"| r{i} | {i} |" for i in range(4))
@@ -520,4 +520,52 @@ def test_activity_timer_stopped_on_unmount(tmp_path):
             f"on_unmount 시 _activity_timer.stop() 이 정확히 1회 호출되어야 함 "
             f"(실제: {len(stop_calls)}회)"
         )
+    asyncio.run(go())
+
+
+# --- 슬래시 커맨드 디스패치 (plan/TUI_SLASH_COMMANDS.md) ---
+
+def test_slash_commands_do_not_trigger_turn(tmp_path):
+    """/help·알 수 없는 명령은 run_task(턴)를 실행하지 않고, 일반 텍스트만 턴을 돈다."""
+    calls = {"n": 0}
+
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        calls["n"] += 1
+        on_token("답")
+        return _result("완료")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "/help")
+            await pilot.pause()
+            await _submit(pilot, "/nope")          # 알 수 없는 명령
+            await pilot.pause()
+            assert calls["n"] == 0                  # 슬래시 커맨드는 턴을 실행하지 않는다
+            await _submit(pilot, "안녕")             # 일반 텍스트 → 턴
+            assert await _wait(pilot, _turn_done(app))
+            assert calls["n"] == 1
+
+    asyncio.run(go())
+
+
+def test_slash_clear_empties_conversation(tmp_path):
+    """/clear 는 대화 화면(#conversation)을 비운다(이력 보존, 턴 실행 없이)."""
+    from textual.containers import VerticalScroll
+
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_token("답변")
+        return _result("완료")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "안녕")
+            assert await _wait(pilot, _turn_done(app))
+            conv = app.query_one("#conversation", VerticalScroll)
+            assert len(conv.children) > 0           # 턴 후 위젯 존재
+            await _submit(pilot, "/clear")
+            assert await _wait(pilot, lambda: len(conv.children) == 0)
+            assert app.runner.session.history        # 이력은 보존됨
+
     asyncio.run(go())

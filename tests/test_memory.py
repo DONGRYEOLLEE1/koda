@@ -1,7 +1,7 @@
 """핵심 모듈: memory (영구 메모리). 멱등성·상한 신호·주입 형식 검증."""
 from __future__ import annotations
 
-from build_harness.memory import MAX_CHARS, Memory
+from koda.memory import MAX_CHARS, Memory
 
 
 def test_read_empty_when_missing(tmp_path):

@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import pytest
 
-from build_harness.config import load_model_settings
-from build_harness.llm import _health, build_model
+from koda.config import load_model_settings
+from koda.llm import _health, build_model
 
 
 def _live_or_skip():
@@ -31,8 +31,8 @@ def test_live_branching_run_streams(tmp_path):
 
     import asyncio
 
-    from build_harness.agents import run_task
-    from build_harness.workspace import Workspace
+    from koda.agents import run_task
+    from koda.workspace import Workspace
 
     tokens: list[str] = []
     result = asyncio.run(run_task(

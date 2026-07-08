@@ -1,7 +1,7 @@
 """핵심 모듈: session (멀티턴 히스토리 영속). 저장/로드 멱등성과 히스토리 규칙 검증."""
 from __future__ import annotations
 
-from build_harness.session import Session
+from koda.session import Session
 
 
 def test_add_turn_stores_final_answer_only(tmp_path):
@@ -18,7 +18,7 @@ def test_save_load_roundtrip(tmp_path):
     s = Session(tmp_path, session_id="abc123")
     s.add_turn("q1", "a1", route="read", verdict=None)
     p = s.save()
-    assert p.name == "abc123.json" and ".harness/sessions" in str(p)
+    assert p.name == "abc123.json" and ".koda/sessions" in str(p)
 
     loaded = Session.load(tmp_path, "abc123")
     assert loaded.history == s.history and loaded.turns == s.turns
