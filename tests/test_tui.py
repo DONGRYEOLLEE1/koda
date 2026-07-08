@@ -63,9 +63,21 @@ def _static_text(widget) -> str:
     return getattr(r, "plain", None) or str(r)
 
 
-def _log_text(app) -> str:
-    log = app.query_one("#event_log")
-    return "\n".join(strip.text for strip in getattr(log, "lines", []))
+def _tree_text(app) -> str:
+    tree = app.query_one("#activity_tree")
+    parts = []
+
+    def walk(node):
+        parts.append(str(node.label))
+        for c in node.children:
+            walk(c)
+
+    walk(tree.root)
+    return "\n".join(parts)
+
+
+def _notifs(app) -> str:
+    return "\n".join(n.message for n in app._notifications)
 
 
 def _turn_done(app):
@@ -80,7 +92,7 @@ def test_boot_widgets_exist(tmp_path):
         async with app.run_test():
             assert app.query_one("#prompt") is not None
             assert app.query_one("#conversation") is not None
-            assert app.query_one("#event_log") is not None
+            assert app.query_one("#activity_tree") is not None
             assert "세션" in _static_text(app.query_one("#status_strip"))
     asyncio.run(go())
 
@@ -128,11 +140,11 @@ def test_events_routed(tmp_path):
         async with app.run_test() as pilot:
             await _submit(pilot, "수정해줘")
             assert await _wait(pilot, _turn_done(app))
-            log = _log_text(app)
-            assert "코드 작성" in log                      # phase → 타임라인 (TUI 전용 라벨)
-            assert "⚙ write_file" in log                  # tool:* → workspace_ 접두 제거 행
-            assert "변형 재시도 (length_truncation)" in log  # retry 배지
-            assert "생각 중" not in log                    # think:* 는 활동바 전용
+            log = _tree_text(app)
+            assert "코드 작성" in log                # phase → 트리 단계 노드 (TUI 전용 라벨)
+            assert "write_file" in log              # tool:* → 단계 노드 롤업 (workspace_ 접두 제거)
+            assert "length_truncation" in log       # retry → 재시도 단계 노드
+            assert "생각 중" not in log              # think:* 는 활동바 전용
             assert "진행 중…" not in log                   # heartbeat 는 활동바 경과초가 대체
             assert app._draft == "다시 쓴 본문"             # retry 가 1차 부분 스트림 폐기
             verify = _static_text(app.query_one("#verify_panel"))
@@ -197,6 +209,8 @@ def test_approval_approve(tmp_path):
             assert await _wait(pilot, lambda: isinstance(app.screen, ApprovalModal))
             assert "workspace_run_command" in _static_text(app.screen.query_one("#approval_title"))
             assert "$ pytest -q" in _static_text(app.screen.query_one("#approval_args"))
+            # 승인 대기는 활동바 라벨로 노출된다(롤업에 가려지지 않게 — agy 리뷰 중대)
+            assert await _wait(pilot, lambda: "승인 대기" in _static_text(app.query_one("#activity")))
             await pilot.click("#approve")
             assert await _wait(pilot, _turn_done(app))
             assert record == [True]
@@ -305,7 +319,7 @@ def test_remember_and_memory_commands(tmp_path):
             await pilot.pause()
             assert "파이썬 3.14 를 쓴다" in Memory(tmp_path).read()
             assert "파이썬 3.14" in _static_text(app.query_one("#memory_panel"))
-            assert "기억함." in _log_text(app)
+            assert "기억함." in _notifs(app)
             await _submit(pilot, "/memory")
             await pilot.pause()
             from textual.widgets import TabbedContent
@@ -568,4 +582,63 @@ def test_slash_clear_empties_conversation(tmp_path):
             assert await _wait(pilot, lambda: len(conv.children) == 0)
             assert app.runner.session.history        # 이력은 보존됨
 
+    asyncio.run(go())
+
+
+# --- 우측 상태 트리: 계층 + 툴 롤업 + 예외 엄격화 (plan/TUI_UX_REDESIGN.md) ---
+
+def test_status_tree_builds_with_tool_rollup(tmp_path):
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_phase("read")
+        on_phase("edit")
+        on_phase("tool:workspace_read_file")
+        on_phase("tool:workspace_read_file")
+        on_phase("tool:workspace_edit_file")
+        on_token("완료")
+        return _result(final="완료", route="edit", verdict="pass")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "리팩토링")
+            assert await _wait(pilot, _turn_done(app))
+            text = _tree_text(app)
+            assert "✓ 리팩토링" in text          # 턴 노드 완료 아이콘
+            assert "pass" in text                 # verdict 요약
+            assert "read_file×2" in text          # 완료 유사작업 frequency tally
+            assert "edit_file" in text
+
+    asyncio.run(go())
+
+
+def test_status_tree_empty_final_marks_failure_and_notifies(tmp_path):
+    # 예외 엄격화: 빈 응답(length_truncation) → 턴 노드 ✗ + 사유 + notify(error)
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_phase("edit")
+        return _result(final="", route="edit", empty_reason="length_truncation")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "긴 작업")
+            assert await _wait(pilot, _turn_done(app))
+            assert "✗ 긴 작업" in _tree_text(app)                  # 실패 아이콘
+            assert "length_truncation" in _tree_text(app)
+            assert "length_truncation" in _notifs(app)            # 엄격 예외 알림
+
+    asyncio.run(go())
+
+
+def test_activity_on_resets_tool_rollup(tmp_path):
+    # agy 리뷰(중대): _activity_on 이 _turn_tools 를 리셋 안 하면 새 턴 시작·/compact 에
+    # 이전 턴 툴 롤업이 활동바에 잔존한다. _activity_on 이 롤업을 초기화해야 한다.
+    from collections import Counter
+
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test():
+            app._turn_tools = Counter({"read_file": 3})
+            app._activity_on("문맥 압축")
+            assert app._turn_tools == Counter()                    # 롤업 초기화
+            assert "read_file" not in _static_text(app.query_one("#activity"))  # 잔존 없음
     asyncio.run(go())

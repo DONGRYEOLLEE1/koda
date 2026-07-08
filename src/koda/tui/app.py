@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import Counter
 from functools import partial
 
 from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, VerticalScroll
-from textual.widgets import Input, Markdown, RichLog, Static, TabbedContent, TabPane
+from textual.widgets import Input, Markdown, Static, TabbedContent, TabPane, Tree
 
 from ..cli import _err
 from ..mcp import load_mcp_tools
@@ -62,7 +63,8 @@ class KodaTui(App):
     #status_strip { height: 1; background: $panel; color: $text-muted; padding: 0 1; }
     #main { height: 1fr; }
     #conversation { width: 2fr; padding: 0 1; }
-    #side { width: 1fr; min-width: 28; }
+    #side { width: 1fr; min-width: 30; }
+    #activity_tree { height: 1fr; padding: 0 1; background: transparent; }
     #activity { height: 1; padding: 0 1; }
     .user-turn { color: $accent; text-style: bold; margin: 1 0 0 0; }
     .turn-footer { color: $text-muted; margin: 0 0 1 0; }
@@ -91,7 +93,15 @@ class KodaTui(App):
         self._spin_i = 0
         self._think_tok = 0          # reasoning 진행 (think:N) — 토큰 도착 시 해제
         self._activity_label = ""    # 현재 단계 라벨
-        self._activity_detail = ""   # 현재 실행 중인 도구명
+        self._activity_detail = ""   # 현재 실행 중인 도구명 (툴 롤업)
+        # 우측 상태 트리(turn → phase) 상태 (모두 UI thread 전용)
+        self._turn_node = None       # 현재 턴 루트 노드
+        self._turn_task = ""         # 현재 턴 작업 텍스트(라벨 재구성용)
+        self._phase_node = None      # 현재 단계 노드
+        self._phase_label = ""       # 현재 단계 라벨(스피너 갱신용)
+        self._phase_t0 = 0.0         # 현재 단계 시작 시각
+        self._phase_tools: Counter = Counter()  # 현재 단계 툴 호출 tally(롤업)
+        self._turn_tools: Counter = Counter()    # 턴 전체 툴 tally(활동바 롤업)
         # 슬래시 커맨드 레지스트리 — /help 목록·placeholder 의 단일 출처 (plan/TUI_SLASH_COMMANDS).
         self._commands: dict[str, tuple[str, object]] = {
             "/help": ("사용 가능한 명령 목록", self._cmd_help),
@@ -111,7 +121,10 @@ class KodaTui(App):
             yield VerticalScroll(id="conversation")
             with TabbedContent(initial="tab_status", id="side"):
                 with TabPane("상태", id="tab_status"):
-                    yield RichLog(id="event_log", wrap=False, markup=False)
+                    tree: Tree = Tree("작업", id="activity_tree")
+                    tree.show_root = False
+                    tree.guide_depth = 3
+                    yield tree
                 with TabPane("검증", id="tab_verify"):
                     yield Static("(검증 결과 없음)", id="verify_panel", markup=False)
                 with TabPane("메모리", id="tab_memory"):
@@ -149,6 +162,7 @@ class KodaTui(App):
         self._think_tok = 0
         self._activity_label = label
         self._activity_detail = ""
+        self._turn_tools = Counter()   # 롤업 초기화 — 새 턴 시작 깜빡임·/compact 잔존 방지
         self.query_one("#activity", Static).display = True
         self._tick_activity()
         self._activity_timer.resume()
@@ -156,6 +170,15 @@ class KodaTui(App):
     def _activity_off(self) -> None:
         self._activity_timer.pause()
         self.query_one("#activity", Static).display = False
+
+    @staticmethod
+    def _fmt_elapsed(secs: int) -> str:
+        """Codex CLI 스타일 경과시간: 47s / 4m 07s / 1h 02m 09s."""
+        if secs < 60:
+            return f"{secs}s"
+        if secs < 3600:
+            return f"{secs // 60}m {secs % 60:02d}s"
+        return f"{secs // 3600}h {secs % 3600 // 60:02d}m {secs % 60:02d}s"
 
     def _tick_activity(self) -> None:
         self._spin_i = (self._spin_i + 1) % len(_SPINNER)
@@ -170,29 +193,95 @@ class KodaTui(App):
             time_color = self._theme_color("error")
         t = Text()
         accent = self._theme_color("accent")
-        t.append(_SPINNER[self._spin_i] + " ", style=f"bold {accent}")
+        t.append(self._spin() + " ", style=f"bold {accent}")
         t.append(self._activity_label or "작업 중", style="bold")
-        if self._activity_detail:
+        rollup = self._rollup(self._turn_tools).lstrip(" ·").strip()
+        if rollup:                                   # 턴 툴 롤업 우선 (read×3 edit×2)
+            t.append(f" · {rollup}", style="dim")
+        elif self._activity_detail:
             t.append(f" · {self._activity_detail}", style="dim")
-        t.append(f" · {elapsed}s", style=f"bold {time_color}")
+        t.append(f" · {self._fmt_elapsed(elapsed)}", style=f"bold {time_color}")
         if self._think_tok:
             t.append(f" · 생각 중 ~{self._think_tok} tok", style="dim italic")
         self.query_one("#activity", Static).update(t)
+        # 트리의 현재 턴/단계 노드 스피너도 동기 갱신
+        if self._turn_node is not None:
+            self._turn_node.set_label(
+                Text.assemble((f"{self._spin()} ", "bold"), (self._turn_task, "bold")))
+        if self._phase_node is not None:
+            self._phase_node.set_label(self._phase_line())
 
     def on_unmount(self) -> None:
         self._activity_timer.stop()
 
-    # --- 이벤트 로그 (우측 '상태' 패널) ---
+    # --- 우측 상태 트리 (turn → phase 계층 + 툴 롤업) ---
 
-    def _log(self, content: Text | str, elapsed: bool = True) -> None:
-        line = Text()
-        if elapsed and (self._busy or self._close_requested):
-            line.append(f"{int(time.monotonic() - self._turn_t0):>3}s ", style="dim")
-        if isinstance(content, str):
-            line.append(content)
-        else:
-            line.append_text(content)
-        self.query_one("#event_log", RichLog).write(line)
+    def _rollup(self, tools: Counter) -> str:
+        """툴 호출 tally 를 'read×3 edit×2' 로 압축 (claude-statusbar frequency tally)."""
+        if not tools:
+            return ""
+        return " · " + " ".join(f"{n}×{c}" if c > 1 else n for n, c in tools.items())
+
+    def _tree(self) -> Tree:
+        return self.query_one("#activity_tree", Tree)
+
+    def _spin(self) -> str:
+        return _SPINNER[self._spin_i]
+
+    def _phase_line(self, spinner: bool = True) -> Text:
+        head = f"{self._spin()} " if spinner else ""
+        return Text.assemble((head, "bold"), (self._phase_label, ""),
+                             (self._rollup(self._phase_tools), "dim"))
+
+    def _tree_new_turn(self, task: str) -> None:
+        tree = self._tree()
+        for child in list(tree.root.children):   # 이전 턴은 접는다(노트북식 탐색)
+            child.collapse()
+        self._turn_task = task if len(task) <= 34 else task[:33] + "…"
+        self._turn_node = tree.root.add(
+            Text.assemble((f"{self._spin()} ", "bold"), (self._turn_task, "bold")), expand=True)
+        self._phase_node = None
+        self._phase_label = ""
+        self._phase_tools = Counter()
+        self._turn_tools = Counter()
+
+    def _finalize_phase(self, icon: str = "✓") -> None:
+        if self._phase_node is None:
+            return
+        elapsed = int(time.monotonic() - self._phase_t0)
+        color = self._theme_color("success") if icon == "✓" else self._theme_color("error")
+        self._phase_node.set_label(Text.assemble(
+            (f"{icon} ", f"bold {color}"), (self._phase_label, ""),
+            (f" · {elapsed}s", "dim"), (self._rollup(self._phase_tools), "dim")))
+        self._phase_node = None
+
+    def _tree_phase(self, label: str) -> None:
+        if self._turn_node is None:
+            return
+        self._finalize_phase()          # 직전 단계 확정(✓ · 소요)
+        self._phase_label = label
+        self._phase_t0 = time.monotonic()
+        self._phase_tools = Counter()
+        self._phase_node = self._turn_node.add_leaf(self._phase_line())
+
+    def _tree_tool(self, name: str) -> None:
+        self._phase_tools[name] += 1
+        self._turn_tools[name] += 1
+        if self._phase_node is not None:
+            self._phase_node.set_label(self._phase_line())
+
+    def _tree_finish_turn(self, ok: bool, summary: Text) -> None:
+        self._finalize_phase("✓" if ok else "✗")
+        if self._turn_node is None:
+            return
+        icon = "✓" if ok else "✗"
+        color = self._theme_color("success") if ok else self._theme_color("error")
+        head = Text.assemble((f"{icon} ", f"bold {color}"), (self._turn_task, "bold"))
+        head.append_text(summary)
+        self._turn_node.set_label(head)
+        self._turn_node.collapse()
+        self._turn_node = None
+        self._phase_label = ""
 
     # --- 입력/명령 ---
 
@@ -206,7 +295,7 @@ class KodaTui(App):
             name, _, arg = line.partition(" ")
             entry = self._commands.get(name)
             if entry is None:
-                self._log(f"알 수 없는 명령: {name} — /help 로 목록 확인", elapsed=False)
+                self.notify(f"알 수 없는 명령: {name} — /help 로 목록 확인", severity="warning", timeout=4)
             else:
                 await entry[1](arg.strip())
             return
@@ -215,17 +304,17 @@ class KodaTui(App):
     # --- 슬래시 커맨드 핸들러 (레지스트리 self._commands 에서 디스패치) ---
 
     async def _cmd_help(self, arg: str) -> None:
-        seen, lines = set(), ["사용 가능한 명령:"]
+        seen, lines = set(), []
         for name, (summary, fn) in self._commands.items():
             if fn in seen:               # /exit·/quit 처럼 같은 핸들러는 한 번만
                 continue
             seen.add(fn)
-            lines.append(f"  {name}  — {summary}")
-        self._log("\n".join(lines), elapsed=False)
+            lines.append(f"{name} — {summary}")
+        self.notify("\n".join(lines), title="사용 가능한 명령", timeout=12)
 
     async def _cmd_clear(self, arg: str) -> None:
         await self.query_one("#conversation", VerticalScroll).remove_children()
-        self._log("대화 화면을 지웠습니다 (이력은 보존됨).", elapsed=False)
+        self.notify("대화 화면을 지웠습니다 (이력은 보존됨).", timeout=3)
 
     async def _cmd_memory(self, arg: str) -> None:
         self.query_one("#memory_panel", Static).update(self.runner.memory.read() or "(비어 있음)")
@@ -234,7 +323,7 @@ class KodaTui(App):
     async def _cmd_remember(self, arg: str) -> None:
         saved = self.runner.memory.remember(arg)
         self.query_one("#memory_panel", Static).update(self.runner.memory.read() or "(비어 있음)")
-        self._log("기억함." if saved else "이미 기억하고 있거나 내용이 비어 있음.", elapsed=False)
+        self.notify("기억함." if saved else "이미 기억하고 있거나 내용이 비어 있음.", timeout=3)
 
     async def _cmd_exit(self, arg: str) -> None:
         self._begin_close()
@@ -258,8 +347,7 @@ class KodaTui(App):
         self._stream = Markdown.get_stream(self._answer_md)
         self._set_status("작업 중")
         self._activity_on("시작")
-        log = self.query_one("#event_log", RichLog)
-        log.write(Text(f"── {task[:32]}{'…' if len(task) > 32 else ''} ", style="dim"))
+        self._tree_new_turn(task)
         self.run_worker(partial(self.runner.run_turn, task), thread=True,
                         exclusive=True, group="turn")
 
@@ -305,27 +393,29 @@ class KodaTui(App):
             return  # 활동바 경과 초가 대체 — 로그·표시 불필요
         if phase.startswith("retry:"):
             await self._reset_draft()  # 1차 시도 부분 스트림 폐기 (renderer 회귀 불변식과 동일)
-            self._log(Text(f"↻ 빈 응답 — 변형 재시도 ({phase[6:]})", style=self._theme_color("warning")))
+            reason = phase[6:]
+            self._finalize_phase("✗")           # 직전 단계는 실패로 확정
             self._activity_label = "재시도"
+            self._tree_phase(f"재시도 · {reason}")
+            self.notify(f"빈 응답 — 변형 재시도 ({reason})", severity="warning", timeout=4)
             return
         if phase in _PHASE_TUI:
-            label, theme_key = _PHASE_TUI[phase]
-            color = self._theme_color(theme_key)
+            label, _theme = _PHASE_TUI[phase]
             self._activity_label = label
             self._activity_detail = ""
-            self._log(Text.assemble(("▸ ", color), (label, f"bold {color}")))
+            self._tree_phase(label)
             return
         if phase.startswith("tool:"):
             name = phase[5:].removeprefix("workspace_")
             self._activity_detail = name
-            self._log(Text(f"  ⚙ {name}", style="dim"))
+            self._tree_tool(name)
             return
         if phase.startswith("mcp:"):
-            self._log(Text(f"· {phase[4:]}", style="dim"), elapsed=False)
+            self.notify(phase[4:], timeout=3)
             return
         # 자유 형식 (문맥 압축 중…, 메모리 갱신 중… 등)
         self._activity_label = phase
-        self._log(Text(f"· {phase}", style="dim"))
+        self._tree_phase(phase)
 
     async def _reset_draft(self) -> None:
         self._draft = ""
@@ -367,6 +457,21 @@ class KodaTui(App):
         vtext.append(result.get("verify_detail") or "(판정 근거 없음)")
         self.query_one("#verify_panel", Static).update(vtext)
         self.query_one("#session_panel", Static).update(self._session_text(msg.turns))
+
+        # 상태 트리 턴 마감 + 예외(빈 응답) 엄격 처리
+        empty = bool(result.get("empty_final"))
+        ok = not empty and verdict in (None, "", "pass")
+        tsummary = Text()
+        tsummary.append(f" · {self._fmt_elapsed(elapsed)}", style="dim")
+        if verdict:
+            tsummary.append(f" · {verdict}", style="dim")
+        if empty:
+            reason = result.get("empty_reason") or "unknown"
+            tsummary.append(f" · 빈 응답({reason})", style="dim")
+            hint = "출력 예산 소진(재시도 권장)" if reason == "length_truncation" else "재시도 권장"
+            self.notify(f"빈 응답: {reason} · {hint} · 히스토리 미저장",
+                        severity="error", timeout=6)
+        self._tree_finish_turn(ok, tsummary)
         self._end_turn()
 
     @on(TurnFailed)
@@ -376,22 +481,29 @@ class KodaTui(App):
         err_color = f"bold {self._theme_color('error')}"
         await conv.mount(Static(Text(f"턴 실패: {msg.error}", style=err_color), classes="turn-footer"))
         conv.anchor()
-        self._log(Text(f"✗ 턴 실패: {msg.error}", style=err_color))
+        self._tree_finish_turn(False, Text(f" · 실패: {msg.error[:60]}", style="dim"))
+        self.notify(f"턴 실패: {msg.error}", severity="error", timeout=8)
         self._end_turn()
 
     @on(CompactDone)
     async def _on_compact_done(self, msg: CompactDone) -> None:
         # /compact worker 완료 — busy 해제·입력 재활성(턴과 동일 경로) 후 결과 안내
         self._end_turn()
-        self._log(msg.note, elapsed=False)
+        self.notify(msg.note, title="문맥 압축", timeout=5)
 
     @on(ApprovalRequest)
     def _on_approval(self, msg: ApprovalRequest) -> None:
-        self._log(Text(f"⚠ 승인 대기 · {msg.tool.removeprefix('workspace_')}",
-                        style=f"bold {self._theme_color('error')}"))
-        self._activity_detail = "승인 대기"
+        # 라벨은 툴 롤업과 무관하게 항상 노출되므로 승인 대기를 라벨로 띄운다(활동바 detail 은
+        # 롤업에 가려 안 보임). 모달 종료 시 직전 단계 라벨로 복원한다.
+        prev_label = self._activity_label
+        self._activity_label = "승인 대기"
+
+        def resolve(ok) -> None:
+            self._activity_label = prev_label
+            msg.resolve(bool(ok))
+
         # modal 닫힘(ESC)·거부·승인 결과가 resolve 로 worker 의 threading.Event 를 깨운다
-        self.push_screen(ApprovalModal(msg.tool, msg.args), lambda ok: msg.resolve(bool(ok)))
+        self.push_screen(ApprovalModal(msg.tool, msg.args), resolve)
 
     # --- 종료 ---
 
