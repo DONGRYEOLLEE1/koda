@@ -14,6 +14,7 @@ import threading
 
 from ..agents import compact_memory, extract_memories, run_task, summarize_history
 from ..cli import _auto_approver, _run_with_heartbeat
+from ..session import Session
 from .model import (
     ApprovalRequest,
     CompactDone,
@@ -96,6 +97,23 @@ class TuiTurnRunner:
             post(TurnFailed(f"세션 반영 실패 {type(e).__name__}: {e}"))
             return
         post(TurnDone(result, turns=len(self.session.turns)))
+
+    def new_thread(self) -> str:
+        """/clear: 현재 세션을 저장하고 새 세션으로 컨텍스트를 초기화한다(claude code /clear).
+
+        이전 대화 맥락(히스토리)을 잊고 새 스레드로 진입한다. 이전 세션은 저장되어
+        `--resume` 로 복구 가능하고, 영구 메모리(Memory)는 스레드와 무관하게 유지된다.
+        LLM 호출이 없어 즉시 수행(worker thread 불필요).
+        """
+        if self.session.history:
+            try:
+                self.session.save()
+            except Exception as e:
+                # 저장 실패해도 새 스레드 진입은 막지 않되, 조용히 삼키지 않고 알린다
+                # (close_session 이 저장 실패를 알리는 것과 일관). new_thread 는 UI 스레드에서만 호출.
+                self._app.notify(f"이전 세션 저장 실패({type(e).__name__})", severity="warning", timeout=5)
+        self.session = Session(self._ws.root)
+        return self.session.id
 
     def compact_now(self) -> None:
         """/compact: 현재 세션 이력을 요약 압축한다(최근 턴 유지). worker thread 진입점.

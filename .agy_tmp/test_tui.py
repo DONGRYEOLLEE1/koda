@@ -1,0 +1,627 @@
+"""TUI 어댑터 결정론 검증 (plan/TEXTUAL_TUI_PLAN.md §6 Phase 5, §7 AC 4~10).
+
+- textual 미설치 환경(기본 sync)에서는 전체 스킵 — 기본 스위트는 TUI extra 없이 통과 (AC 1~3 보호).
+- LLM 없이 fake run_task 로 스트림·이벤트 매핑·승인 브리지·세션 parity 를 검증한다.
+- pytest-asyncio 없이 asyncio.run 으로 감싼다 (의존성 최소).
+"""
+from __future__ import annotations
+
+import asyncio
+import time
+
+import pytest
+
+pytest.importorskip("textual")
+
+import koda.tui.runner as runner_mod
+from koda.cli import main
+from koda.memory import Memory
+from koda.session import Session
+from koda.tui.app import KodaTui
+from koda.tui.widgets import ApprovalModal, _args_preview
+from koda.workspace import Workspace
+
+
+def _result(final="완료", **kw):
+    base = {"final": final, "route": "read", "verdict": None, "verify_detail": "",
+            "empty_final": not final.strip(), "empty_reason": "", "empty_retries": 0,
+            "retries": 0, "trace_url": ""}
+    base.update(kw)
+    return base
+
+
+def _make_app(tmp_path, run_task_fn, auto_yes=False, approval_timeout=600.0,
+              session=None, mcp_tools=None):
+    session = session or Session(tmp_path)
+    return KodaTui(Workspace(tmp_path), session, Memory(tmp_path),
+                           mcp_tools if mcp_tools is not None else [], auto_yes=auto_yes,
+                           run_task_fn=run_task_fn, approval_timeout=approval_timeout)
+
+
+async def _wait(pilot, cond, timeout=10.0):
+    """조건 폴링. pilot.pause 대신 asyncio.sleep 사용 — app.exit() 이후에도 pause 가
+    멈춘 메시지 펌프를 기다리며 영구 블록하지 않도록 (앱 태스크는 같은 루프에서 돈다)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if cond():
+            return True
+        await asyncio.sleep(0.05)
+    return cond()
+
+
+async def _submit(pilot, text):
+    inp = pilot.app.query_one("#prompt")
+    await _wait(pilot, lambda: not inp.disabled)
+    inp.focus()
+    await pilot.pause()
+    inp.value = text
+    await pilot.press("enter")
+
+
+def _static_text(widget) -> str:
+    r = widget.render()
+    return getattr(r, "plain", None) or str(r)
+
+
+def _tree_text(app) -> str:
+    tree = app.query_one("#activity_tree")
+    parts = []
+
+    def walk(node):
+        parts.append(str(node.label))
+        for c in node.children:
+            walk(c)
+
+    walk(tree.root)
+    return "\n".join(parts)
+
+
+def _notifs(app) -> str:
+    return "\n".join(n.message for n in app._notifications)
+
+
+def _turn_done(app):
+    return lambda: not app._busy and bool(app.query(".turn-footer"))
+
+
+# --- AC 4: 앱이 뜨고 입력을 받을 수 있다 (headless) ---
+
+def test_boot_widgets_exist(tmp_path):
+    async def go():
+        app = _make_app(tmp_path, run_task_fn=None)
+        async with app.run_test():
+            assert app.query_one("#prompt") is not None
+            assert app.query_one("#conversation") is not None
+            assert app.query_one("#activity_tree") is not None
+            assert "세션" in _static_text(app.query_one("#status_strip"))
+    asyncio.run(go())
+
+
+# --- AC 5: token stream 이 conversation 영역에 누적된다 ---
+
+def test_token_stream_accumulates(tmp_path):
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_phase("read")
+        on_token("# 제목\n\n")
+        on_token("본문 문단")
+        return _result(final="# 제목\n\n본문 문단")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "설명해줘")
+            assert await _wait(pilot, _turn_done(app))
+            assert app._draft == "# 제목\n\n본문 문단"
+            # 대화 영역에 user 턴 + Markdown 위젯 + footer 가 순서대로 쌓인다
+            conv = app.query_one("#conversation")
+            texts = [_static_text(w) for w in conv.query(".user-turn")]
+            assert any("설명해줘" in t for t in texts)
+            footers = [_static_text(w) for w in conv.query(".turn-footer")]
+            assert any("route: read" in t for t in footers)
+    asyncio.run(go())
+
+
+# --- AC 6: 이벤트가 올바른 영역에 표시된다 (+ retry 리셋, think/heartbeat 는 status 전용) ---
+
+def test_events_routed(tmp_path):
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_phase("edit")
+        on_token("버릴 부분")                     # retry 전 부분 스트림 → 폐기 대상
+        on_phase("think:5")
+        on_phase("heartbeat:30s")
+        on_phase("tool:workspace_write_file")
+        on_phase("retry:length_truncation")
+        on_token("다시 쓴 본문")
+        return _result(final="다시 쓴 본문", route="edit", verdict="pass",
+                       verify_detail="테스트 근거", trace_url="http://lf/t/1")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "수정해줘")
+            assert await _wait(pilot, _turn_done(app))
+            log = _tree_text(app)
+            assert "코드 작성" in log                # phase → 트리 단계 노드 (TUI 전용 라벨)
+            assert "write_file" in log              # tool:* → 단계 노드 롤업 (workspace_ 접두 제거)
+            assert "length_truncation" in log       # retry → 재시도 단계 노드
+            assert "생각 중" not in log              # think:* 는 활동바 전용
+            assert "진행 중…" not in log                   # heartbeat 는 활동바 경과초가 대체
+            assert app._draft == "다시 쓴 본문"             # retry 가 1차 부분 스트림 폐기
+            verify = _static_text(app.query_one("#verify_panel"))
+            assert "pass" in verify and "테스트 근거" in verify
+            footer = "\n".join(_static_text(w) for w in app.query(".turn-footer"))
+            assert "trace: http://lf/t/1" in footer
+    asyncio.run(go())
+
+
+# --- 활동바: 턴 중 스피너·단계 라벨·경과초·생각 토큰 표시, 종료 시 숨김 ---
+
+def test_activity_indicator_during_turn(tmp_path):
+    import threading
+    release = threading.Event()
+
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_phase("read")
+        on_phase("think:42")
+        while not release.is_set():
+            await asyncio.sleep(0.01)
+        on_token("답")
+        return _result(final="답")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            act = app.query_one("#activity")
+
+            def act_text():
+                r = act.render()
+                return getattr(r, "plain", None) or str(r)
+
+            assert act.display is False                    # 대기 중엔 숨김
+            await _submit(pilot, "질문")
+            assert await _wait(pilot, lambda: act.display)
+            assert await _wait(pilot, lambda: "코드 읽는 중" in act_text())   # 단계 라벨
+            assert await _wait(pilot, lambda: "~42 tok" in act_text())      # reasoning 카운트
+            assert "s" in act_text()                       # 경과 초
+            release.set()
+            assert await _wait(pilot, _turn_done(app))
+            assert act.display is False                    # 종료 후 숨김
+    asyncio.run(go())
+
+
+# --- AC 7: approval modal — approve=True / deny·close=False / timeout=False ---
+
+def _approval_fake(record):
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        ok = approver("workspace_run_command", {"argv": ["pytest", "-q"]})
+        record.append(ok)
+        return _result(final=f"approved={ok}")
+    return fake
+
+
+def test_approval_approve(tmp_path):
+    record = []
+
+    async def go():
+        app = _make_app(tmp_path, _approval_fake(record))
+        async with app.run_test() as pilot:
+            await _submit(pilot, "테스트 실행해줘")
+            assert await _wait(pilot, lambda: isinstance(app.screen, ApprovalModal))
+            assert "workspace_run_command" in _static_text(app.screen.query_one("#approval_title"))
+            assert "$ pytest -q" in _static_text(app.screen.query_one("#approval_args"))
+            await pilot.click("#approve")
+            assert await _wait(pilot, _turn_done(app))
+            assert record == [True]
+    asyncio.run(go())
+
+
+def test_approval_deny_by_escape(tmp_path):
+    record = []
+
+    async def go():
+        app = _make_app(tmp_path, _approval_fake(record))
+        async with app.run_test() as pilot:
+            await _submit(pilot, "테스트 실행해줘")
+            assert await _wait(pilot, lambda: isinstance(app.screen, ApprovalModal))
+            await pilot.press("escape")   # modal 닫기 = deny
+            assert await _wait(pilot, _turn_done(app))
+            assert record == [False]
+    asyncio.run(go())
+
+
+def test_approval_timeout_denies(tmp_path):
+    record = []
+
+    async def go():
+        app = _make_app(tmp_path, _approval_fake(record), approval_timeout=0.2)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "테스트 실행해줘")
+            assert await _wait(pilot, _turn_done(app))   # 무응답 → deny 로 턴이 끝난다
+            assert record == [False]
+            # 고아 modal 이 남지 않는다 — _end_turn 이 정리 (리뷰 Medium)
+            assert await _wait(pilot, lambda: not isinstance(app.screen, ApprovalModal))
+            assert not app.query_one("#prompt").disabled
+    asyncio.run(go())
+
+
+# --- AC 8: --yes 는 auto 승인(.auto=True) — confirm 등급 차단은 middleware 계약이 담당 ---
+
+def test_auto_yes_flag(tmp_path):
+    app = _make_app(tmp_path, None, auto_yes=True)
+    assert getattr(app.runner.approver, "auto", False) is True
+    app2 = _make_app(tmp_path, None, auto_yes=False)
+    assert getattr(app2.runner.approver, "auto", False) is False  # 대화형 승인으로 취급
+
+
+# --- AC 9: empty final 은 세션 히스토리에 저장하지 않는다 ---
+
+def test_empty_final_not_saved(tmp_path):
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_token("부분만 나오고")
+        return _result(final="", empty_final=True, empty_reason="length_truncation")
+
+    async def go():
+        session = Session(tmp_path)
+        app = _make_app(tmp_path, fake, session=session)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "질문")
+            assert await _wait(pilot, _turn_done(app))
+            assert session.history == []
+            assert not session.path.exists()
+            footer = "\n".join(_static_text(w) for w in app.query(".turn-footer"))
+            assert "빈 응답" in footer and "length_truncation" in footer
+    asyncio.run(go())
+
+
+# --- AC 10 + Phase 3 parity: MCP 세션당 1회 · run_id=session.id · 히스토리 누적 · 저장 ---
+
+def test_turn_parity_and_session_save(tmp_path):
+    calls = []
+
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        calls.append({"task": task, "history": list(kw["history"]),
+                      "mcp_tools": kw["mcp_tools"], "mcps_dir": kw["mcps_dir"],
+                      "run_id": kw["run_id"]})
+        on_token(f"답변 {len(calls)}")
+        return _result(final=f"답변 {len(calls)}", route="read")
+
+    async def go():
+        session = Session(tmp_path)
+        mcp_tools = [object()]  # 사전 로드된 도구 목록 (정체성 비교용)
+        app = _make_app(tmp_path, fake, session=session, mcp_tools=mcp_tools)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "첫 질문")
+            assert await _wait(pilot, _turn_done(app))
+            await _submit(pilot, "둘째 질문")
+            assert await _wait(pilot, lambda: not app._busy and len(app.query(".turn-footer")) == 2)
+
+        assert [c["task"] for c in calls] == ["첫 질문", "둘째 질문"]
+        assert calls[0]["mcp_tools"] is mcp_tools and calls[1]["mcp_tools"] is mcp_tools
+        assert calls[0]["mcps_dir"] is None and calls[1]["mcps_dir"] is None  # 재로드 금지
+        assert calls[0]["run_id"] == session.id == calls[1]["run_id"]
+        assert calls[0]["history"] == []
+        assert [m["content"] for m in calls[1]["history"]] == ["첫 질문", "답변 1"]
+        assert session.path.exists() and len(session.turns) == 2
+        loaded = Session.load(tmp_path, session.id)
+        assert [m["content"] for m in loaded.history[-2:]] == ["둘째 질문", "답변 2"]
+    asyncio.run(go())
+
+
+# --- Phase 3: /remember·/memory 명령 ---
+
+def test_remember_and_memory_commands(tmp_path):
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "/remember 파이썬 3.14 를 쓴다")
+            await pilot.pause()
+            assert "파이썬 3.14 를 쓴다" in Memory(tmp_path).read()
+            assert "파이썬 3.14" in _static_text(app.query_one("#memory_panel"))
+            assert "기억함." in _notifs(app)
+            await _submit(pilot, "/memory")
+            await pilot.pause()
+            from textual.widgets import TabbedContent
+            assert app.query_one(TabbedContent).active == "tab_memory"
+    asyncio.run(go())
+
+
+# --- 턴 실패: 예외 → 안내 후 입력 재활성화 (chat '턴 실패' 동등) ---
+
+def test_turn_failed_recovers(tmp_path):
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        raise RuntimeError("boom")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "질문")
+            assert await _wait(pilot, _turn_done(app))
+            footer = "\n".join(_static_text(w) for w in app.query(".turn-footer"))
+            assert "턴 실패: RuntimeError: boom" in footer
+            assert not app.query_one("#prompt").disabled
+    asyncio.run(go())
+
+
+# --- Phase 3: /exit → 세션 저장 + 메모리 추출 (chat 종료 흐름 동등) ---
+
+def test_close_session_extracts_memory(tmp_path, monkeypatch):
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        return _result(final="답변")
+
+    async def fake_extract(history):
+        return ["- 로컬 모델은 Qwen 이다"]
+
+    monkeypatch.setattr(runner_mod, "extract_memories", fake_extract)
+
+    async def go():
+        session = Session(tmp_path)
+        app = _make_app(tmp_path, fake, session=session)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "질문")
+            assert await _wait(pilot, _turn_done(app))
+            await _submit(pilot, "/exit")
+            assert await _wait(pilot, lambda: app.return_value is not None)
+        assert app.return_value is True  # saved
+        assert "로컬 모델은 Qwen 이다" in Memory(tmp_path).read()
+        assert session.path.exists()
+    asyncio.run(go())
+
+
+# --- cli 배선: tui 서브커맨드 → lazy import 된 run_tui 로 args 전달 ---
+
+def test_cli_tui_wiring(tmp_path, monkeypatch):
+    import koda.tui.app as app_mod
+    seen = {}
+
+    def fake_run_tui(args):
+        seen.update(vars(args))
+        return 7
+
+    monkeypatch.setattr(app_mod, "run_tui", fake_run_tui)
+    rc = main(["tui", "--workspace", str(tmp_path), "--no-mcp", "--yes"])
+    assert rc == 7
+    assert seen["workspace"] == str(tmp_path) and seen["no_mcp"] and seen["yes"]
+    assert seen["mcps_dir"] == "mcps" and seen["resume"] is None
+
+
+# --- §9: 승인 args 미리보기 — 길이 제한 + run_command 명령 표시 + secret redaction ---
+
+def test_args_preview():
+    assert _args_preview("workspace_run_command", {"argv": ["rm", "-rf", "x"]}) == "$ rm -rf x"
+    long = _args_preview("workspace_write_file", {"content": "x" * 2000})
+    assert len(long) <= 500 + len(" …(생략)") and long.endswith(" …(생략)")
+    # secret 성 키는 값이 노출되지 않는다 (§9 redaction)
+    masked = _args_preview("some_mcp_tool", {"api_key": "sk-live-123", "path": "a.py"})
+    assert "sk-live-123" not in masked and "[REDACTED]" in masked and "a.py" in masked
+
+
+# --- run_tui 진입점: resume 실패 rc=2, 정상 경로 rc=0 (App.run 은 스텁) ---
+
+def test_run_tui_entry_paths(tmp_path, monkeypatch):
+    import argparse
+
+    import koda.tui.app as app_mod
+
+    monkeypatch.setattr(app_mod.KodaTui, "run", lambda self: None)
+
+    def ns(**kw):
+        base = {"workspace": str(tmp_path), "yes": False, "resume": None,
+                "mcps_dir": "mcps", "no_mcp": True}
+        base.update(kw)
+        return argparse.Namespace(**base)
+
+    assert app_mod.run_tui(ns(resume="없는세션")) == 2   # 세션 없음 → chat 과 동일 rc
+    assert app_mod.run_tui(ns()) == 0                    # 새 세션 정상 경로
+
+    s = Session(tmp_path)
+    s.add_turn("질문", "답", "read", None)
+    s.save()
+    assert app_mod.run_tui(ns(resume=s.id)) == 0         # 재개 경로
+
+
+# --- 활동바 경과시간 3단계 색상 전환 ---
+
+def _hex_to_rgb_str(hex_color: str) -> str:
+    """ '#4EBF71' → 'rgb(78,191,113)' — Textual Static.render() 의 Text.spans
+    style 문자열은 rgb(...) 형식을 쓰므로 hex 값을 변환해 비교한다."""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgb({r},{g},{b})"
+
+
+def test_activity_elapsed_time_colors(tmp_path):
+    """_tick_activity() 가 경과시간에 따라 활동바 스타일을 3단계로 전환한다:
+    <10s → success, 10~30s → warning, >30s → error."""
+    async def go():
+        app = _make_app(tmp_path, run_task_fn=None)
+        async with app.run_test() as pilot:
+            app._activity_on("테스트")
+            await pilot.pause()
+
+            success_rgb = _hex_to_rgb_str(app.theme_variables["success"])
+            warning_rgb = _hex_to_rgb_str(app.theme_variables["warning"])
+            error_rgb = _hex_to_rgb_str(app.theme_variables["error"])
+
+            # 1단계: 10초 미만 → success
+            app._turn_t0 = time.monotonic() - 5
+            app._tick_activity()
+            r = app.query_one("#activity").render()
+            spans = getattr(r, "spans", [])
+            assert any(success_rgb in str(s.style) for s in spans), (
+                f"5초 경과 시 success({success_rgb}) 색상 span 이 있어야 함"
+            )
+
+            # 2단계: 10~30초 → warning
+            app._turn_t0 = time.monotonic() - 15
+            app._tick_activity()
+            r = app.query_one("#activity").render()
+            spans = getattr(r, "spans", [])
+            assert any(warning_rgb in str(s.style) for s in spans), (
+                f"15초 경과 시 warning({warning_rgb}) 색상 span 이 있어야 함"
+            )
+
+            # 3단계: 30초 초과 → error
+            app._turn_t0 = time.monotonic() - 35
+            app._tick_activity()
+            r = app.query_one("#activity").render()
+            spans = getattr(r, "spans", [])
+            assert any(error_rgb in str(s.style) for s in spans), (
+                f"35초 경과 시 error({error_rgb}) 색상 span 이 있어야 함"
+            )
+    asyncio.run(go())
+
+
+# --- 완료 footer 문구: '✓ 완료 · ' 마운트 확인 ---
+
+def test_completion_footer_text(tmp_path):
+    """턴이 정상 완료되면 대화 영역에 '✓ 완료 · ' 로 시작하는 footer 가 마운트된다."""
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_token("답변")
+        return _result(final="답변", route="read")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "질문")
+            assert await _wait(pilot, _turn_done(app))
+            footers = [_static_text(w) for w in app.query(".turn-footer")]
+            assert any(t.startswith("✓ 완료 · ") for t in footers), (
+                f"완료 footer 가 '✓ 완료 · ' 로 시작해야 함: {footers}"
+            )
+    asyncio.run(go())
+
+
+# --- 마크다운 표 클릭 크래시 회피 (textual 8.2.8 결함) ---
+
+def test_allow_select_disabled_and_table_click_safe(tmp_path):
+    """textual 8.2.8 은 마크다운 표 재렌더 직후 셀 클릭 시 텍스트 선택 로직이 고아 위젯을
+    hit-test 해 앱 전체가 죽는다. ALLOW_SELECT=False 로 그 경로를 차단한다 — 이 플래그가
+    되살아나면 실사용 크래시가 재발하므로 불변식으로 고정한다."""
+    assert KodaTui.ALLOW_SELECT is False
+
+    # 뷰포트(100x40) 안에 표 전체가 보이는 크기 — 스크롤 밖 셀은 pilot.click 이 OutOfBounds
+    table_md = "| 항목 | 값 |\n| --- | --- |\n" + "\n".join(f"| r{i} | {i} |" for i in range(4))
+
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_token(table_md)
+        return _result(final=table_md)
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test(size=(100, 40)) as pilot:
+            await _submit(pilot, "표로 정리해줘")
+            assert await _wait(pilot, _turn_done(app))
+            cells = app.query(".cell")
+            assert cells, "마크다운 표 셀이 렌더링되어야 한다"
+            await pilot.click(".cell")   # 선택 비활성 상태에서 표 클릭이 안전해야 한다
+            await pilot.pause()
+            assert not app.query_one("#prompt").disabled  # 앱 생존 확인
+    asyncio.run(go())
+
+
+# --- 타이머 정리: unmount 시 _activity_timer.stop() 호출 ---
+
+def test_activity_timer_stopped_on_unmount(tmp_path):
+    """앱이 unmount 될 때 _activity_timer.stop() 이 호출된다."""
+    async def go():
+        app = _make_app(tmp_path, run_task_fn=None)
+        stop_calls = []
+        async with app.run_test():
+            app._activity_timer.stop = lambda: stop_calls.append(True)
+        assert len(stop_calls) == 1, (
+            f"on_unmount 시 _activity_timer.stop() 이 정확히 1회 호출되어야 함 "
+            f"(실제: {len(stop_calls)}회)"
+        )
+    asyncio.run(go())
+
+
+# --- 슬래시 커맨드 디스패치 (plan/TUI_SLASH_COMMANDS.md) ---
+
+def test_slash_commands_do_not_trigger_turn(tmp_path):
+    """/help·알 수 없는 명령은 run_task(턴)를 실행하지 않고, 일반 텍스트만 턴을 돈다."""
+    calls = {"n": 0}
+
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        calls["n"] += 1
+        on_token("답")
+        return _result("완료")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "/help")
+            await pilot.pause()
+            await _submit(pilot, "/nope")          # 알 수 없는 명령
+            await pilot.pause()
+            assert calls["n"] == 0                  # 슬래시 커맨드는 턴을 실행하지 않는다
+            await _submit(pilot, "안녕")             # 일반 텍스트 → 턴
+            assert await _wait(pilot, _turn_done(app))
+            assert calls["n"] == 1
+
+    asyncio.run(go())
+
+
+def test_slash_clear_empties_conversation(tmp_path):
+    """/clear 는 대화 화면(#conversation)을 비운다(이력 보존, 턴 실행 없이)."""
+    from textual.containers import VerticalScroll
+
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_token("답변")
+        return _result("완료")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "안녕")
+            assert await _wait(pilot, _turn_done(app))
+            conv = app.query_one("#conversation", VerticalScroll)
+            assert len(conv.children) > 0           # 턴 후 위젯 존재
+            await _submit(pilot, "/clear")
+            assert await _wait(pilot, lambda: len(conv.children) == 0)
+            assert app.runner.session.history        # 이력은 보존됨
+
+    asyncio.run(go())
+
+
+# --- 우측 상태 트리: 계층 + 툴 롤업 + 예외 엄격화 (plan/TUI_UX_REDESIGN.md) ---
+
+def test_status_tree_builds_with_tool_rollup(tmp_path):
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_phase("read")
+        on_phase("edit")
+        on_phase("tool:workspace_read_file")
+        on_phase("tool:workspace_read_file")
+        on_phase("tool:workspace_edit_file")
+        on_token("완료")
+        return _result(final="완료", route="edit", verdict="pass")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "리팩토링")
+            assert await _wait(pilot, _turn_done(app))
+            text = _tree_text(app)
+            assert "✓ 리팩토링" in text          # 턴 노드 완료 아이콘
+            assert "pass" in text                 # verdict 요약
+            assert "read_file×2" in text          # 완료 유사작업 frequency tally
+            assert "edit_file" in text
+
+    asyncio.run(go())
+
+
+def test_status_tree_empty_final_marks_failure_and_notifies(tmp_path):
+    # 예외 엄격화: 빈 응답(length_truncation) → 턴 노드 ✗ + 사유 + notify(error)
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_phase("edit")
+        return _result(final="", route="edit", empty_reason="length_truncation")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "긴 작업")
+            assert await _wait(pilot, _turn_done(app))
+            assert "✗ 긴 작업" in _tree_text(app)                  # 실패 아이콘
+            assert "length_truncation" in _tree_text(app)
+            assert "length_truncation" in _notifs(app)            # 엄격 예외 알림
+
+    asyncio.run(go())

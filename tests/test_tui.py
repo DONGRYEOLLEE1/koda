@@ -563,11 +563,13 @@ def test_slash_commands_do_not_trigger_turn(tmp_path):
     asyncio.run(go())
 
 
-def test_slash_clear_empties_conversation(tmp_path):
-    """/clear 는 대화 화면(#conversation)을 비운다(이력 보존, 턴 실행 없이)."""
+def test_slash_clear_starts_new_thread(tmp_path):
+    """/clear 는 새 스레드로 진입한다(claude code /clear): 화면·상태트리·세션 히스토리
+    초기화 + 새 세션 id. 이전 세션은 저장되어 --resume 로 복구 가능."""
     from textual.containers import VerticalScroll
 
     async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_phase("read")
         on_token("답변")
         return _result("완료")
 
@@ -576,11 +578,16 @@ def test_slash_clear_empties_conversation(tmp_path):
         async with app.run_test() as pilot:
             await _submit(pilot, "안녕")
             assert await _wait(pilot, _turn_done(app))
+            old_id = app.runner.session.id
+            assert app.runner.session.history                    # 턴 후 히스토리 존재
             conv = app.query_one("#conversation", VerticalScroll)
-            assert len(conv.children) > 0           # 턴 후 위젯 존재
+            assert len(conv.children) > 0
             await _submit(pilot, "/clear")
             assert await _wait(pilot, lambda: len(conv.children) == 0)
-            assert app.runner.session.history        # 이력은 보존됨
+            assert app.runner.session.id != old_id               # 새 세션(스레드)
+            assert app.runner.session.history == []              # 대화 맥락 초기화
+            assert len(app.query_one("#activity_tree").root.children) == 0   # 상태 트리도 비움
+            assert Session.load(tmp_path, old_id).history         # 이전 세션은 저장됨(복구 가능)
 
     asyncio.run(go())
 

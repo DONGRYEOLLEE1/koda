@@ -106,7 +106,7 @@ class KodaTui(App):
         self._commands: dict[str, tuple[str, object]] = {
             "/help": ("사용 가능한 명령 목록", self._cmd_help),
             "/compact": ("대화 이력을 요약으로 압축", self._cmd_compact),
-            "/clear": ("대화 화면 비우기(이력은 보존)", self._cmd_clear),
+            "/clear": ("새 스레드 시작(대화 맥락 초기화)", self._cmd_clear),
             "/memory": ("메모리 패널 보기", self._cmd_memory),
             "/remember": ("메모리에 저장: /remember <내용>", self._cmd_remember),
             "/exit": ("저장 후 종료", self._cmd_exit),
@@ -313,8 +313,22 @@ class KodaTui(App):
         self.notify("\n".join(lines), title="사용 가능한 명령", timeout=12)
 
     async def _cmd_clear(self, arg: str) -> None:
-        await self.query_one("#conversation", VerticalScroll).remove_children()
-        self.notify("대화 화면을 지웠습니다 (이력은 보존됨).", timeout=3)
+        # claude code /clear: 화면 + 대화 맥락(세션 히스토리)을 비우고 새 스레드로 진입.
+        # 이전 세션은 저장되어 --resume 로 복구 가능, 영구 메모리는 유지된다.
+        # 세션 교체 사이에 큐잉된 Enter 로 새 턴이 끼어들지 않도록 _busy 로 재진입을 막는다.
+        self._busy = True
+        try:
+            new_id = self.runner.new_thread()
+            await self.query_one("#conversation", VerticalScroll).remove_children()
+            self._tree().root.remove_children()      # 상태 트리도 초기화
+            self._turn_node = None
+            self._phase_node = None
+            self._activity_off()
+            self.query_one("#session_panel", Static).update(self._session_text(0))
+            self._set_status("대기 중")
+            self.notify(f"새 스레드 시작 · 세션 {new_id}", timeout=4)
+        finally:
+            self._busy = False
 
     async def _cmd_memory(self, arg: str) -> None:
         self.query_one("#memory_panel", Static).update(self.runner.memory.read() or "(비어 있음)")
@@ -552,6 +566,7 @@ def run_tui(args) -> int:
 
     app = KodaTui(ws, session, memory, mcp_tools, auto_yes=args.yes)
     app.run()
-    if session.history:
-        _err(f"세션 저장됨: {session.id}  (재개: koda tui --resume {session.id})")
+    final = app.runner.session   # /clear 로 세션이 교체됐을 수 있으므로 최종 세션 기준
+    if final.history:
+        _err(f"세션 저장됨: {final.id}  (재개: koda tui --resume {final.id})")
     return 0

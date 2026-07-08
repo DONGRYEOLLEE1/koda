@@ -21,7 +21,7 @@
 
 - 다음 작업은 **codex 서브에이전트에 적극 위임**한다: 리팩토링, 광범위한 웹검색·조사, 코드리뷰, 구현 검증, 막혔을 때의 2차 진단.
 - 기능 구현 시 **기능당 codex 리뷰 1회**를 기본으로 한다.
-- codex 산출물은 Claude가 최종 검증한다(맹신 금지). codex quota 소진 시 일반 서브에이전트로 폴백.
+- codex 산출물은 Claude가 최종 검증한다(맹신 금지). codex quota 소진 시 DeepSeek 서브에이전트로 fall-back.
 
 ## koda: DeepSeek 위임
 
