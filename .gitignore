@@ -30,3 +30,6 @@ scripts
 tmp.benchmarks
 # antigravity(agy) 리뷰 스크래치
 .agy_tmp
+
+# 리뷰 서브에이전트가 리포 루트에 남긴 diff 덤프
+diff.txt
