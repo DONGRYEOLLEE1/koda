@@ -50,7 +50,8 @@ from .verify import _judge
 class _Route(BaseModel):
     """라우팅 판정 — json_schema 로 문법 강제 (ROADMAP §2.1). enum 밖 토큰은 생성 불가."""
 
-    route: Literal["read", "edit"]
+    # read=파일 도구만, inspect=read-only 셸 조사(investigator), edit=파일 변경 (AGENT_ROSTER §4)
+    route: Literal["read", "inspect", "edit"]
     # 복잡 편집(복수 파일·테스트 요구·광범위 변경) 여부 — plan 서브단계 가동 조건 (§3.3).
     # 판단은 router LLM, 가동·개수 제한은 koda.
     plan_needed: bool = False
@@ -154,12 +155,14 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         first = text.split()[0] if text.split() else ""
         if first.startswith("edit"):
             route_val = "edit"
+        elif first.startswith("inspect"):
+            route_val = "inspect"
         elif first.startswith("read"):
             route_val = "read"
-        elif "edit" in text and "read" not in text:
+        elif "edit" in text and "read" not in text and "inspect" not in text:
             route_val = "edit"
-        else:  # 애매하거나 malformed → 안전하게 read(읽기 전용)
-            route_val = "read"
+        else:  # 애매/malformed → 안전하게 inspect (reader 상위집합·read-only, §4.1)
+            route_val = "inspect"
         # 폴백에선 복잡도 판단 불가 → 보수적으로 plan 미가동 (리뷰 Low — 의도 명시)
         return {"route": route_val, "plan_needed": False, "retries": 0}
 
@@ -184,12 +187,32 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
             res = await astream_agent(retry_agent, msgs, on_token, config, on_event=on_phase)
         return {"answer": res.answer, "empty_reason": res.empty_reason, "empty_retries": empty_retries}
 
+    async def investigator(state: _State, config):
+        on_phase("inspect")
+        # read-only 셸 조사 에이전트: 파일 도구 + allowlist read-only 명령(ls/find/grep 등).
+        # reader 와 동일 배선(+mcp, +explore) — 분기는 도구 권한 차이지 지식 접근 차이가 아니다.
+        agent = AGENTS["investigator"].build(model, ws, approver, extra_tools=[*mcp_tools, explore],
+                                             memory_text=memory_text, store=store, skills=skills, context_budget=context_budget)
+        hist = list(state.get("history") or [])
+        msgs = hist + [{"role": "user", "content": state["task"]}]
+        res = await astream_agent(agent, msgs, on_token, config, on_event=on_phase)
+        empty_retries = 0
+        if res.empty:
+            on_phase(f"retry:{res.empty_reason}")
+            empty_retries = 1
+            retry_agent = AGENTS["investigator"].build(fast_model, ws, approver, extra_tools=[*mcp_tools, explore],
+                                                       memory_text=memory_text, store=store, skills=skills, context_budget=context_budget)
+            msgs = hist + [{"role": "user", "content": state["task"] + "\n\n" + load_prompt("empty_retry")}]
+            res = await astream_agent(retry_agent, msgs, on_token, config, on_event=on_phase)
+        return {"answer": res.answer, "empty_reason": res.empty_reason, "empty_retries": empty_retries}
+
     async def plan(state: _State, config):
         # 독립 plan 노드 (PLANNER_AGENT §3.3): 읽기 전용 도구로 탐색하며 마크다운 체크리스트를
         # on_token 으로 실시간 스트리밍한다. 개수·형식은 enforce_checklist 가 결정론 집행.
         on_phase("plan")
-        ws_files = "\n".join(ws.list_files(".")[:100])
-        task = load_prompt("planner_task").format(ws_files=ws_files, task=state["task"])
+        # 워크스페이스 구조 파악은 planner 가 read-only 셸(ls/tree/find)로 필요할 때 직접 한다.
+        # (하드코딩 list_files(".")[:100] 주입 제거 — 정렬상 앞부분이 .omc 등 내부 파일이라 오도)
+        task = load_prompt("planner_task").format(task=state["task"])
         # verify-fail 재수립에는 실패 컨텍스트를 반드시 주입한다 — 없으면 같은 입력으로
         # 동일 계획을 재생산해 재시도 예산만 소진한다 (§3.3 교차검증 ①).
         if state.get("verdict") == "fail":
@@ -278,7 +301,9 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         return "coder"      # 단순 편집 → coder 직행
 
     def route_edge(state: _State):
-        return "reader" if state["route"] != "edit" else plan_edge(state)
+        if state["route"] == "edit":
+            return plan_edge(state)
+        return "investigator" if state["route"] == "inspect" else "reader"
 
     def verify_edge(state: _State):
         # fail 재시도는 coder 재실행이 아니라 plan 재수립부터 (§3.5). retries 증가는 coder 가
@@ -290,15 +315,18 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
     g = StateGraph(_State)
     g.add_node("route", route)
     g.add_node("reader", reader)
+    g.add_node("investigator", investigator)
     g.add_node("plan", plan)
     g.add_node("coder", coder)
     g.add_node("verify", verify)
     g.add_edge(START, "route")
-    g.add_conditional_edges("route", route_edge, {"reader": "reader", "plan": "plan", "coder": "coder"})
+    g.add_conditional_edges("route", route_edge,
+                            {"reader": "reader", "investigator": "investigator", "plan": "plan", "coder": "coder"})
     # read 경로는 verify 를 거치지 않는다: 검증은 "워크스페이스 부수효과"에 대한 게이트이고,
     # 부수효과 없는 분석·답변의 산문 품질 평가는 비용(수십 초)만 들고 신뢰할 수 없다 — 실측상
     # 낡은 학습 지식으로 잘못된 분석을 pass 시키는 고무도장에 불과했다.
     g.add_edge("reader", END)
+    g.add_edge("investigator", END)
     g.add_edge("plan", "coder")
     g.add_edge("coder", "verify")
     g.add_conditional_edges("verify", verify_edge, {"plan": "plan", END: END})

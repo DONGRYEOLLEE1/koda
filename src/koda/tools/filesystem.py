@@ -31,7 +31,7 @@ def not_found_help(ws: Workspace, path: str) -> str:
     hint = f" 이름이 비슷한 파일: {', '.join(similar)}." if similar else ""
     return (
         f"오류: 파일이 없음: {path}.{hint} "
-        "workspace_list_files 또는 workspace_search_text 로 실제 경로를 확인한 뒤 다시 시도하라."
+        "workspace_search_text 로 실제 경로를 확인한 뒤 다시 시도하라."
     )
 
 
@@ -49,13 +49,8 @@ def make_filesystem_tools(ws: Workspace) -> list:
             return f"오류: {e}"
 
     @tool
-    def workspace_list_files(path: str = ".") -> list[str]:
-        """워크스페이스(또는 하위 경로)의 파일 목록. .venv/.git/__pycache__ 등은 제외된다."""
-        return ws.list_files(path)
-
-    @tool
     def workspace_search_text(query: str, path: str = ".") -> list[str]:
         """워크스페이스에서 텍스트를 검색해 'file:line:내용' 목록을 반환한다."""
         return ws.search_text(query, path)
 
-    return [workspace_read_file, workspace_list_files, workspace_search_text]
+    return [workspace_read_file, workspace_search_text]

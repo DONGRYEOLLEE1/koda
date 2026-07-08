@@ -7,7 +7,7 @@ from langchain.agents import create_agent
 
 from ..middleware import HistoryTrimMiddleware, PermissionMiddleware, ToolOutputTrimMiddleware
 from ..prompts import load_prompt
-from ..tools import make_all_tools, make_readonly_tools
+from ..tools import make_all_tools, make_inspect_tools, make_readonly_tools
 from ..tools.artifact import make_artifact_tools
 from ..tools.skill import make_skill_tools
 from ..workspace import Workspace
@@ -53,7 +53,8 @@ class AgentSpec:
 
 AGENTS = {
     "reader": AgentSpec("reader", make_readonly_tools),
+    "investigator": AgentSpec("investigator", make_inspect_tools),
     "coder": AgentSpec("coder", make_all_tools),
     "explore": AgentSpec("explore", make_readonly_tools),
-    "planner": AgentSpec("planner", make_readonly_tools),
+    "planner": AgentSpec("planner", make_inspect_tools),
 }

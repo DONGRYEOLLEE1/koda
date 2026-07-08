@@ -40,15 +40,13 @@ def tool_title(name: str, args: dict) -> str:
     """
     args = args if isinstance(args, dict) else {}
     short = name.removeprefix("workspace_")
-    if name == "workspace_run_command":
+    if name in ("workspace_run_command", "workspace_run_readonly_command"):
         argv = args.get("argv")
-        cmd = " ".join(map(str, argv)) if isinstance(argv, list) else str(argv or "")
+        cmd = args.get("command") or (" ".join(map(str, argv)) if isinstance(argv, list) else "")
         return f"$ {cmd}".strip() if cmd else "$ (명령)"
     path = args.get("path")
     if name == "workspace_read_file":
         return f"읽기 · {path}" if path else "파일 읽기"
-    if name == "workspace_list_files":
-        return f"목록 · {path or '.'}"
     if name == "workspace_search_text":
         q = args.get("query")
         return f"검색 · {q}" if q else "텍스트 검색"

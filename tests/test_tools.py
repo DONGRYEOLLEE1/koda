@@ -12,7 +12,7 @@ from koda.workspace import SandboxError
 def test_tool_names_are_namespaced(make_workspace):
     names = {t.name for t in make_all_tools(make_workspace({"a.txt": "x"}))}
     assert names == {
-        "workspace_read_file", "workspace_list_files", "workspace_search_text",
+        "workspace_read_file", "workspace_search_text",
         "workspace_run_command",
         "workspace_write_file", "workspace_edit_file",
         "workspace_create_dir", "workspace_delete_path",
@@ -24,10 +24,11 @@ def test_tool_names_are_namespaced(make_workspace):
     }
 
 
-def test_read_and_list_tools(make_workspace):
+def test_read_and_search_tools(make_workspace):
     tools = {t.name: t for t in make_filesystem_tools(make_workspace({"x.txt": "hello\n"}))}
     assert tools["workspace_read_file"].invoke({"path": "x.txt"}) == "hello\n"
-    assert "x.txt" in tools["workspace_list_files"].invoke({"path": "."})
+    hits = tools["workspace_search_text"].invoke({"query": "hello", "path": "."})
+    assert any("x.txt" in h for h in hits)
 
 
 def test_read_tool_sandbox_escape_blocked(make_workspace):
@@ -50,7 +51,7 @@ def test_read_missing_file_multi_candidates_lists_them(make_workspace):
     tools = {t.name: t for t in make_filesystem_tools(
         make_workspace({"agents.py": "a", "agentz.py": "b"}))}
     out = tools["workspace_read_file"].invoke({"path": "agent.py"})
-    assert "파일이 없음" in out and "agents.py" in out and "workspace_list_files" in out
+    assert "파일이 없음" in out and "agents.py" in out and "workspace_search_text" in out
 
 
 def test_edit_missing_file_suggests_similar(make_workspace):
@@ -62,15 +63,15 @@ def test_edit_missing_file_suggests_similar(make_workspace):
 
 def test_run_command_tool_executes(make_workspace):
     tools = {t.name: t for t in make_shell_tools(make_workspace())}
-    out = tools["workspace_run_command"].invoke({"argv": ["echo", "hi"]})
+    out = tools["workspace_run_command"].invoke({"command": "echo hi"})
     assert "exit_code=0" in out and "hi" in out
 
 
 def test_run_command_missing_binary_returns_error(make_workspace):
-    # 없는 명령(pip 등)이 예외로 전파돼 실행 전체를 죽이면 안 된다 — 복구 가능한 오류 문자열로
+    # 없는 명령은 bash 가 exit 127 로 처리 — 예외로 실행 전체를 죽이지 않고 결과 문자열로 돌아온다
     tools = {t.name: t for t in make_shell_tools(make_workspace())}
-    out = tools["workspace_run_command"].invoke({"argv": ["definitely-not-a-command-xyz"]})
-    assert "오류" in out and "찾을 수 없음" in out
+    out = tools["workspace_run_command"].invoke({"command": "definitely-not-a-command-xyz"})
+    assert "exit_code=127" in out or "not found" in out
 
 
 def test_run_command_prefers_workspace_venv(make_workspace):
@@ -82,7 +83,7 @@ def test_run_command_prefers_workspace_venv(make_workspace):
     shim.write_text("#!/bin/sh\necho FROM_WORKSPACE_VENV\n", encoding="utf-8")
     shim.chmod(0o755)
     tools = {t.name: t for t in make_shell_tools(ws)}
-    out = tools["workspace_run_command"].invoke({"argv": ["python", "--version"]})
+    out = tools["workspace_run_command"].invoke({"command": "python --version"})
     assert "FROM_WORKSPACE_VENV" in out
 
 

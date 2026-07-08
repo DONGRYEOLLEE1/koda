@@ -8,7 +8,6 @@
 
 탐색 도구:
 
-- `workspace_list_files(path='.')`
 - `workspace_search_text(query, path='.')`
 - `workspace_read_file(path)`
 - `explore(question)`: 여러 파일을 훑어야 하는 **넓은 탐색을 서브에이전트에 위임**하고 요약만 받는다(턴당 1회). 단일 파일 확인은 위임하지 말고 직접 읽는다.
@@ -24,7 +23,7 @@
 
 셸 도구:
 
-- `workspace_run_command(argv: list[str])`: 테스트, 린트, 타입체크, 빌드, 진단 명령 실행.
+- `workspace_run_command(command: str)`: 셸 명령 실행 — 테스트·린트·타입체크·빌드·진단, 그리고 파일 구조 파악(`ls`·`find`·`tree -L 2`). 파이프·리다이렉트로 **질의에 맞춘 최소 출력**을 짜라(예: `pytest -q 2>&1 | tail -40`, `grep -rn X src | head -50`, `ls -al | head`).
 
 변경 도구와 셸 도구는 위험 작업이며 실행 전 승인 게이트가 걸릴 수 있다. 승인이 거부되면 우회하거나 강행하지 말고, 가능한 대안과 남은 작업을 최종 응답에 설명한다.
 
@@ -36,9 +35,9 @@
 
 ## 작업 순서
 
-1. 먼저 `workspace_list_files`, `workspace_search_text`, `workspace_read_file`로 관련 위치와 기존 구현을 파악한다.
+1. 먼저 `workspace_search_text`·`workspace_read_file`(및 필요시 `workspace_run_command` 의 `ls`/`find`)로 관련 위치와 기존 구현을 파악한다.
 2. 파일 구조, 함수명, 설정 위치, 테스트 위치를 추측하지 않는다.
-3. 도구가 "파일이 없음" 등의 오류를 반환하면 중단하거나 추측으로 진행하지 않는다. 사용자가 파일명을 잘못 알고 있을 수 있으니, 오류 메시지의 후보 파일과 `workspace_list_files`/`workspace_search_text` 결과로 실제 경로를 확인한 뒤 그 파일로 다시 시도한다.
+3. 도구가 "파일이 없음" 등의 오류를 반환하면 중단하거나 추측으로 진행하지 않는다. 사용자가 파일명을 잘못 알고 있을 수 있으니, 오류 메시지의 후보 파일과 `workspace_search_text` 결과로 실제 경로를 확인한 뒤 그 파일로 다시 시도한다.
 4. 변경 범위를 최소화하여 계획한다.
 5. 필요한 파일만 변경한다.
 6. 가능하면 `workspace_run_command`로 변경된 동작을 검증한다.

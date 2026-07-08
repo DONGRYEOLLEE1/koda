@@ -675,9 +675,9 @@ def test_theme_command_switches_and_defaults_koda_dark(tmp_path):
 
 def test_tool_title_templates():
     # 별도 LLM 호출 없이 도구+완성 args → 표시용 제목. 빈 args 는 도구 이름으로 폴백.
-    assert tool_title("workspace_run_command", {"argv": ["pytest", "-q"]}) == "$ pytest -q"
+    assert tool_title("workspace_run_command", {"command": "pytest -q"}) == "$ pytest -q"
+    assert tool_title("workspace_run_readonly_command", {"argv": ["ls", "-al"]}) == "$ ls -al"
     assert tool_title("workspace_read_file", {"path": "a.py"}) == "읽기 · a.py"
-    assert tool_title("workspace_list_files", {}) == "목록 · ."
     assert tool_title("workspace_search_text", {"query": "foo"}) == "검색 · foo"
     assert tool_title("workspace_edit_file", {"path": "b.py"}) == "수정 · b.py"
     assert tool_title("explore", {}) == "탐색 위임"

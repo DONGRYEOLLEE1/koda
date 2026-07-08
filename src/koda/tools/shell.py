@@ -71,23 +71,28 @@ def make_shell_tools(ws: Workspace) -> list:
     """워크스페이스에 바인딩된 셸 도구 목록 (위험)."""
 
     @tool
-    def workspace_run_command(argv: list[str], timeout: int = 60) -> str:
-        """워크스페이스에서 명령을 실행한다(argv: 인자 리스트, 예: ["pytest","-q"]).
+    def workspace_run_command(command: str, timeout: int = 60) -> str:
+        """워크스페이스에서 셸 명령을 실행한다(`bash -c`, 파이프·리다이렉트 사용 가능).
 
-        위험 작업이므로 실행 전 사용자 승인이 필요하다.
+        테스트·린트·타입체크·빌드·진단 실행과 파일 구조 파악(`ls`·`find`·`tree -L 2`)에 쓴다.
+        **질의에 맞춘 최소 출력** 명령을 짜라 — 큰 덤프 대신 파이프·플래그로 좁혀라(예:
+        `pytest -q 2>&1 | tail -40`, `grep -rn X src | head -50`, `ls -al | head`,
+        `find . -maxdepth 2 -name '*.py'`). 위험 작업이므로 실행 전 사용자 승인이 필요하다.
         """
         try:
             proc = subprocess.run(
-                _bwrap_prefix(ws) + argv, cwd=str(ws.root), capture_output=True, text=True,
-                timeout=timeout, env=_workspace_env(ws),
+                _bwrap_prefix(ws) + ["bash", "-c", command], cwd=str(ws.root),
+                capture_output=True, text=True, timeout=timeout, env=_workspace_env(ws),
             )
-        except FileNotFoundError:  # 없는 명령이 실행 전체를 죽이지 않게 — 에이전트가 대안을 시도하도록
+        except FileNotFoundError:  # bash/bwrap 자체 부재 — 실행 전체를 죽이지 않게 오류 문자열로
             return (
-                f"오류: 명령을 찾을 수 없음: {argv[0]!r}. 이 환경에 설치되어 있지 않다. "
-                "다른 방법을 시도하라 (예: pip 대신 ['python','-m','pip',...], 또는 해당 단계 생략 후 보고)."
+                "오류: 셸(bash)을 실행할 수 없다. 환경 구성 문제일 수 있으니 다른 방법을 "
+                "시도하거나 해당 단계를 생략하고 보고하라."
             )
         except subprocess.TimeoutExpired:
-            return f"오류: 시간 초과({timeout}s): {' '.join(argv)}. 더 작은 범위의 명령으로 다시 시도하라."
+            return f"오류: 시간 초과({timeout}s): {command}. 더 작은 범위의 명령으로 다시 시도하라."
+        except Exception as e:  # 예외를 그래프로 흘리지 않는다 — ToolNode re-raise 크래시 방지
+            return f"오류: 명령 실행 실패({type(e).__name__})."
         return (
             f"exit_code={proc.returncode}\n"
             f"stdout:\n{proc.stdout[-4000:]}\n"
