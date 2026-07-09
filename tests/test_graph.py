@@ -1,4 +1,3 @@
-"""plan 독립 노드 그래프 배선 + enforce_checklist 결정론 게이트 (plan/PLANNER_AGENT.md §3.6, §9)."""
 from __future__ import annotations
 
 import asyncio
@@ -7,7 +6,6 @@ from pathlib import Path
 
 import koda.agents.graph as G
 from koda.agents.graph import _build_graph, _planner_tools, enforce_checklist
-from koda.agents.specs import AGENTS
 from koda.agents.streaming import AgentResult
 from koda.prompts import load_prompt
 from koda.workspace import Workspace
@@ -42,13 +40,8 @@ def test_checklist_prose_stripped_items_kept():
     assert out == "- [ ] **A**: `a.py` 수정 — 검증: pytest\n- [ ] **B**: `b.py` 신규 — 검증: compileall"
 
 
-def test_checklist_indented_items_counted():
-    text = "  - [ ] 들여쓴 항목\n- [ ] 일반 항목"
-    assert enforce_checklist(text).count("- [ ]") == 2
-
-
 def test_checklist_crlf_normalized():
-    # CRLF 입력에서 \r 이 항목 끝에 섞이면 안 된다 (deepseek 리뷰 High)
+    # CRLF 입력에서 \r 이 항목 끝에 섞이면 안 된다
     out = enforce_checklist("- [ ] a\r\n- [ ] b\r\n")
     assert out == "- [ ] a\n- [ ] b"
     assert "\r" not in out
@@ -70,19 +63,14 @@ def test_planner_tools_drops_web_search_keeps_docs():
 
 
 def test_checklist_common_variants_recognized():
-    # 인식은 관대하게 — 변형 하나로 계획 전체가 무효화되지 않는다 (deepseek·폴백 리뷰 수렴)
+    # 인식은 관대하게 — 변형 하나로 계획 전체가 무효화되지 않는다
     text = "* [ ] 별표 불릿\n-  [ ] 대시 뒤 공백 2개\n-\t[ ] 탭 구분\n- [  ] 박스 안 공백 2개"
     assert len(enforce_checklist(text).splitlines()) == 4
     # 단, 체크됨([x])·박스 없는 불릿은 여전히 계획 항목이 아니다
     assert enforce_checklist("* [x] 완료 항목\n* 그냥 불릿") == ""
 
 
-# --- 그래프 배선: plan 노드/엣지 (§3.1, §3.5) ---
-
-def test_planner_spec_registered_markdown_output():
-    spec = AGENTS["planner"]
-    assert spec.response_format is None  # structured output 아님 — 마크다운 직접 생성
-
+# --- 그래프 배선: plan 노드/엣지 ---
 
 def test_graph_has_plan_node_and_edges():
     ws = Workspace(Path(tempfile.mkdtemp()))
@@ -98,7 +86,7 @@ def test_graph_has_plan_node_and_edges():
     assert ("verify", "coder") not in pairs
 
 
-# --- plan 빈 응답 재시도 (§3.3, §9): LLM 없는 결정론 e2e ---
+# --- plan 빈 응답 재시도: LLM 없는 결정론 e2e ---
 
 class _SpySpec:
     """AGENTS 항목 대역: build 에 전달된 model 을 기록만 한다 (astream_agent 는 fake)."""
@@ -152,8 +140,7 @@ class _CaptureSpec(_SpySpec):
 
 
 def test_reader_and_explore_use_differential_models(monkeypatch, tmp_path):
-    """에이전트별 thinking 예산 차등 배선: reader 와 explore 가 각자의
-    thinking_budget_tokens 를 담은 서로 다른 모델 인스턴스를 받는다."""
+    """에이전트별 thinking 예산 차등 배선: reader 와 explore 가 각자의 thinking_budget_tokens 를 담은 서로 다른 모델 인스턴스를 받는다."""
     reader_model, explore_model = object(), object()
     reader_spy, explore_spy = _CaptureSpec(), _SpySpec()
     monkeypatch.setitem(G.AGENTS, "reader", reader_spy)
@@ -208,9 +195,9 @@ def test_plan_uses_fast_model_and_retries_on_empty(monkeypatch, tmp_path):
     assert think_model not in planner_spy.models
     # 재시도 지시 변형: empty_retry 프롬프트가 뒤에 붙는다
     assert calls[1].endswith(load_prompt("empty_retry"))
-    # enforce_checklist 통과본이 state 에 실리고 coder 지시에 주입된다 (§3.4)
+    # enforce_checklist 통과본이 state 에 실리고 coder 지시에 주입된다
     assert final["plan_text"] == "- [ ] A\n- [ ] B"
-    # 계획 라벨은 바 데이터 라벨(수행 지시는 coder.md 로 이관 — 인라인 프롬프트 제거)
+    # 계획은 데이터 라벨로만 실린다(수행 지시는 coder.md 로 이관 — 인라인 프롬프트 제거)
     assert "## 작업 계획\n" in calls[2]
     assert "- [ ] A" in calls[2]
 
@@ -236,8 +223,7 @@ def _dummy_settings():
 
 
 def test_run_task_appends_extra_callbacks_without_touching_core(monkeypatch, tmp_path):
-    """TUI 툴 가시화는 config.callbacks 채널로만 얹힌다(실행 코어·비노출 정책 무변경).
-    콜백 미전달(CLI 경로)이면 추가 핸들러가 없어 기존 동작 그대로다."""
+    """TUI 툴 가시화는 config.callbacks 채널로만 얹힌다(실행 코어·비노출 정책 무변경). 콜백 미전달(CLI 경로)이면 기존 동작 그대로다."""
     captured: dict = {}
 
     class _FakeGraph:

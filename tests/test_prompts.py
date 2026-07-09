@@ -1,8 +1,3 @@
-"""프롬프트 회귀: 구식 도구 계약이 다시 새지 않게 잠근다 (§Phase A).
-
-- argv 리스트 계약은 read-only 셸이 `bash -c` 조합으로 바뀌며 폐기됐다.
-- 도구 이름의 `workspace_` 접두사는 제거됐다.
-"""
 from __future__ import annotations
 
 from pathlib import Path

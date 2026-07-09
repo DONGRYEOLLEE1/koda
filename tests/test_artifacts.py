@@ -1,4 +1,3 @@
-"""핵심 모듈: artifacts (증거 보존). 저장·redaction·범위 재조회·상한."""
 from __future__ import annotations
 
 from koda import artifacts
@@ -65,7 +64,7 @@ def test_workspace_listing_hides_koda_dir(tmp_path):
 
 
 def test_workspace_resolve_blocks_koda_dir(tmp_path):
-    # 리뷰 Low: read_file 등 resolve 경유 도구로도 .koda 원문에 접근 불가
+    # read_file 등 resolve 경유 도구로도 .koda 원문에 접근 불가
     import pytest
 
     from koda.workspace import SandboxError, Workspace

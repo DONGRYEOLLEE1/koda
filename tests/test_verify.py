@@ -1,7 +1,3 @@
-"""핵심 모듈: verify 판정 경로 (폴백 텍스트 파싱 + 판정 폴백 경계). 모델 없이 결정론적 검증.
-
-(구 _workspace_snapshot 은 §2.2 에서 diffscan 기반 증거로 교체 — 스냅샷 테스트는 test_diffscan 으로 이동)
-"""
 from __future__ import annotations
 
 from koda.agents import _parse_verdict_text
@@ -11,14 +7,14 @@ def test_parse_verdict_text_pass_only_when_exact():
     assert _parse_verdict_text("PASS\n근거...") == "pass"
     assert _parse_verdict_text("PASS.") == "pass"
     assert _parse_verdict_text("FAIL\n누락됨") == "fail"
-    # M1: 'PASS 기준 미달…' 이 pass 로 뒤집히면 안 된다 (false-PASS 방지 → 안전하게 fail)
+    # 'PASS 기준 미달…' 이 pass 로 뒤집히면 안 된다(false-PASS 방지 → 안전하게 fail)
     assert _parse_verdict_text("PASS 기준 미달: return 누락") == "fail"
     assert _parse_verdict_text("") == "fail"
     assert _parse_verdict_text("<think>reasoning</think>") == "fail"
 
 
 def test_judge_falls_back_to_text_when_schema_unsupported():
-    # ROADMAP §2.1 폴백 경계: json_schema 미지원 endpoint → 텍스트 첫 줄 파싱으로 판정
+    # 폴백 경계: json_schema 미지원 endpoint → 텍스트 첫 줄 파싱으로 판정
     import asyncio
 
     from langchain_core.messages import AIMessage

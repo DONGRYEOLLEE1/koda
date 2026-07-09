@@ -1,4 +1,3 @@
-"""이미지 분석 도구. 워크스페이스 내 이미지 파일을 구조화 JSON 으로 요약한다."""
 from __future__ import annotations
 
 import base64
@@ -106,8 +105,7 @@ def make_vision_tools(ws: Workspace, model, props_url: str) -> list:
             structured = model.with_structured_output(VisionAnalysis, method="json_schema")
             result = structured.invoke([HumanMessage(content=content)])
             raw = result.model_dump_json(indent=None)
-            # 서버 측 오류(네트워크·미디어 업로드 실패)가 LLM 출력에 섞여 들어간 경우
-            # 손상된 결과를 그대로 반환하지 않고 복구 가능한 오류로 처리한다.
+            # 서버 측 오류가 LLM 출력에 섞이면 손상된 결과 대신 복구 가능한 오류로 처리한다.
             if _has_server_error(raw):
                 return "오류: 이미지 분석 중 서버 오류가 발생했다. 텍스트 정보로만 진행하라."
             return raw

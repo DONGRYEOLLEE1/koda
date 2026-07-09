@@ -1,24 +1,16 @@
-"""도구 출력 길이 상한 middleware.
-
-초대형 도구 결과(MCP 문서 조회 등 수천~수만 자)가 대화 컨텍스트를 폭증시키면 이후 모든 모델
-호출의 prefill 이 커지고, 추론 모델(Qwen)의 사고가 길어져 수 분짜리 무출력 생성이 발생한다
-(실측: 재시도 라운드에서 단일 생성 160s). 도구 결과를 상한에서 절단해 이를 구조적으로 막는다.
-"""
 from __future__ import annotations
 
 from langchain.agents.middleware import AgentMiddleware
 
 from ..artifacts import redact
 
-# 오픈웹 벌크 검색/크롤류는 한 번에 수천~수만 자를 뱉어 턴 누적의 주범이다(실측: web_search
-# 결과가 스텝당 ~2074토큰씩 쌓여 32k 창 초과). 이 부류만 더 낮은 상한을 적용한다(§5.C).
+# 오픈웹 벌크 검색/크롤류는 한 번에 수천~수만 자를 뱉어 턴 누적의 주범이라 더 낮은 상한을 적용한다.
 _SEARCH_TOOLS = ("web_search", "crawl", "scrape", "deep_research")
 
 
 class ToolOutputTrimMiddleware(AgentMiddleware):
     def __init__(self, max_chars: int = 8000, store=None, search_max_chars: int = 3000):
-        """store(ArtifactStore)가 있으면 절단 전에 원문을 저장하고 재조회 안내를 붙인다.
-        search_max_chars: 벌크 웹검색/크롤류에 적용하는 더 낮은 상한(§5.C)."""
+        """store 가 있으면 절단 전 원문을 저장하고 재조회 안내를 붙인다. search_max_chars 는 벌크 검색/크롤류 전용 상한."""
         super().__init__()
         self._max = max_chars
         self._search_max = search_max_chars
@@ -29,7 +21,7 @@ class ToolOutputTrimMiddleware(AgentMiddleware):
         return self._search_max if any(k in name for k in _SEARCH_TOOLS) else self._max
 
     def _cut_note(self, tool_name: str, content: str, cap: int) -> str:
-        """절단 안내 문구. artifact 저장이 가능하면 원문 참조를 포함한다 (ROADMAP §2.3)."""
+        """절단 안내 문구. artifact 저장이 가능하면 원문 참조를 포함한다."""
         if self._store is not None:
             ref = self._store.save(tool_name or "tool", content)
             return (
@@ -43,7 +35,7 @@ class ToolOutputTrimMiddleware(AgentMiddleware):
         tool_name = getattr(result, "name", "") or ""
         cap = self._cap_for(tool_name)
         if isinstance(content, str):
-            content, _ = redact(content)  # P9: secret 마스킹 — 접근 경로(cat/find/read)와 무관
+            content, _ = redact(content)  # secret 마스킹 — 접근 경로(cat/find/read)와 무관하게 적용
             if len(content) > cap:
                 content = content[:cap] + self._cut_note(tool_name, content, cap)
             result.content = content
@@ -56,7 +48,7 @@ class ToolOutputTrimMiddleware(AgentMiddleware):
                 if text is None:
                     out.append(block)
                     continue
-                text = redact(text)[0]  # P9: 블록별 secret 마스킹
+                text = redact(text)[0]  # 블록별 secret 마스킹
                 if used >= cap:
                     truncated = True
                     break  # 이후 텍스트 블록은 안내 블록으로 대체

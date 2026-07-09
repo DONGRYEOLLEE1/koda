@@ -17,10 +17,7 @@ class Verdict(BaseModel):
 
 
 def _parse_verdict_text(text: str) -> str:
-    """폴백 텍스트 판정. 첫 비어있지 않은 줄이 정확히 PASS 일 때만 pass, 그 외엔 안전하게 fail.
-
-    (부분 매칭 'PASS 기준 미달…' 같은 문장이 pass 로 뒤집히는 것을 막는다 — false-PASS 방지.)
-    """
+    """폴백 텍스트 판정. 첫 비어있지 않은 줄이 정확히 PASS 일 때만 pass, 그 외 안전하게 fail(부분 매칭 오탐 방지)."""
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     first = lines[0].upper().rstrip(".!:") if lines else ""
     return "pass" if first == "PASS" else "fail"
@@ -30,8 +27,7 @@ async def _judge(model, vtask: str, config=None):
     """단일 구조화 판정 (tool-loop 없음 → 빠르고 안정적). 실패 시 텍스트 파싱 폴백."""
     msgs = [SystemMessage(load_prompt("verifier")), HumanMessage(vtask)]
     try:
-        # json_schema: llama.cpp 가 스키마를 GBNF 문법으로 변환해 샘플링 단계에서 강제한다
-        # (형식 밖 토큰 생성 불가 — ROADMAP §2.1). 미지원 endpoint 는 예외 → 아래 폴백.
+        # json_schema: 스키마를 문법으로 강제해 형식 밖 토큰 생성이 불가하다. 미지원 endpoint 는 예외 → 폴백.
         v = await model.with_structured_output(Verdict, method="json_schema").ainvoke(msgs, config=config)
         return v.verdict, v.reasoning
     except Exception:

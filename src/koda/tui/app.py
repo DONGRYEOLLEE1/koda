@@ -1,13 +1,3 @@
-"""Textual TUI 앱: 대화 스트림(전체폭) + 하단 activity·statusline·Footer + 위험 도구 승인 modal.
-
-실행 코어(run_task·PermissionMiddleware·Session·Memory)는 계약 그대로 재사용한다 (§10).
-worker → UI 는 post_message(thread-safe) 메시지만, UI → worker 는 ApprovalRequest.resolve
-(threading.Event) 하나뿐이다 (§5.2 콜백 스레드 안전성).
-
-진행 표시(활동바)는 toad/Claude Code 관례를 따른다: 입력창 바로 위에 스피너 + 현재 단계 +
-경과 초 + (reasoning 중) 토큰 카운트. 그 아래 statusline(세션·모델·턴·모드) + Footer(키 힌트).
-상태 라벨은 TUI 전용 — CLI 의 _format_phase 는 불변.
-"""
 from __future__ import annotations
 
 import asyncio
@@ -74,10 +64,8 @@ KODA_DARK = Theme(
 
 class KodaTui(App):
     TITLE = "koda"
-    # textual 8.2.8 결함 회피: 마크다운 표 렌더 직후 셀을 클릭하면 텍스트 선택 로직이
-    # 고아 위젯(parent=None)을 hit-test 해 `container.region` AttributeError 로 앱 전체가
-    # 죽는다(실사용 크래시). 선택 기능을 끄면 그 코드 경로 자체가 실행되지 않는다.
-    # 복사는 터미널 네이티브 선택(Shift+드래그)으로 여전히 가능하다.
+    # textual 8.2.8 결함 회피: 마크다운 표 렌더 직후 셀 클릭 시 텍스트 선택 로직이 고아 위젯을
+    # hit-test 해 앱이 죽는다 — 선택을 꺼서 그 경로를 차단한다(복사는 Shift+드래그로 여전히 가능).
     ALLOW_SELECT = False
     BINDINGS = [("ctrl+q", "graceful_quit", "종료")]
     CSS = """
@@ -105,12 +93,11 @@ class KodaTui(App):
         self._model_name = model_name
         self._mode = "auto" if auto_yes else "manual"  # 승인 모드 뱃지(statusline)
         self._busy = False
-        # 이름 주의: `_closing` 은 textual MessagePump 내부 플래그다 — 덮어쓰면 이후
-        # post_message 가 모든 메시지를 조용히 드롭한다(행 원인). 그 이름을 쓰지 말 것.
+        # 이름 주의: _closing 은 textual MessagePump 내부 플래그라 덮어쓰면 post_message 가
+        # 조용히 드롭된다 — 쓰지 말 것.
         self._close_requested = False
         self._draft = ""         # 현재 턴 스트림 누적 — retry 리셋·finalize 폴백 판단용
-        # 세그먼트 스트림(plan/TUI_CONVERSATION_BLOCKS.md): 산문을 툴 블록과 시간순 교차되도록
-        # 여러 Markdown 세그먼트로 쪼갠다. _cur_prose_stream 은 현재 열린 산문 세그먼트의 스트림.
+        # 세그먼트 스트림: 산문을 툴 블록과 시간순 교차되도록 여러 Markdown 세그먼트로 쪼갠다.
         self._cur_prose_stream = None
         self._turn_widgets: list = []   # 이번 턴 mount 위젯(질의 Static 제외) — retry 폐기용
         # 활동바 상태 (모두 UI thread 전용)
@@ -121,7 +108,7 @@ class KodaTui(App):
         self._activity_detail = ""   # 현재 실행 중인 도구명
         self._turn_tools: Counter = Counter()    # 턴 전체 툴 tally(활동바 롤업)
         self._tool_blocks: dict = {}  # run_id → ToolBlock (ToolStart↔ToolEnd 매칭)
-        # 슬래시 커맨드 레지스트리 — /help 목록·placeholder 의 단일 출처 (plan/TUI_SLASH_COMMANDS).
+        # 슬래시 커맨드 레지스트리 — /help 목록·placeholder 의 단일 출처.
         self._commands: dict[str, tuple[str, object]] = {
             "/help": ("사용 가능한 명령 목록", self._cmd_help),
             "/compact": ("대화 이력을 요약으로 압축", self._cmd_compact),
@@ -197,8 +184,7 @@ class KodaTui(App):
     def _tick_activity(self) -> None:
         self._spin_i = (self._spin_i + 1) % len(_SPINNER)
         elapsed = int(time.monotonic() - self._turn_t0)
-        # 경과시간 3단계 색상 — 로컬 LLM 추론이 원래 느릴 수 있으므로,
-        # 이는 실패 신호가 아니라 '오래 걸리고 있다'는 표시다.
+        # 경과시간 3단계 색상 — 로컬 LLM 추론이 원래 느릴 수 있으므로 실패 신호가 아니라 '오래 걸리고 있다'는 표시다.
         if elapsed < 10:
             time_color = self._theme_color("success")
         elif elapsed <= 30:
@@ -261,9 +247,8 @@ class KodaTui(App):
         self.notify("\n".join(lines), title="사용 가능한 명령", timeout=12)
 
     async def _cmd_clear(self, arg: str) -> None:
-        # claude code /clear: 화면 + 대화 맥락(세션 히스토리)을 비우고 새 스레드로 진입.
-        # 이전 세션은 저장되어 --resume 로 복구 가능, 영구 메모리는 유지된다.
-        # 세션 교체 사이에 큐잉된 Enter 로 새 턴이 끼어들지 않도록 _busy 로 재진입을 막는다.
+        # /clear: 화면+대화 맥락을 비우고 새 스레드로 진입한다(이전 세션은 --resume 로 복구 가능,
+        # 메모리는 유지). 세션 교체 중 새 턴이 끼어들지 않도록 _busy 로 막는다.
         self._busy = True
         try:
             new_id = self.runner.new_thread()
@@ -311,8 +296,8 @@ class KodaTui(App):
         self._cur_prose_stream = None
         self._turn_widgets = []
         conv = self.query_one("#conversation", VerticalScroll)
-        # 질의 Static 은 _turn_widgets 에 넣지 않는다 — retry 시 산문/툴만 폐기하고 질의는 보존.
-        # 산문 세그먼트는 lazy: 첫 토큰(_on_token)에 mount 한다(툴 직전 빈 세그먼트 방지).
+        # 질의 Static 은 _turn_widgets 에 안 넣는다 — retry 시 산문/툴만 폐기하고 질의는 보존.
+        # 산문 세그먼트는 lazy mount(툴 직전 빈 세그먼트 방지).
         await conv.mount(Static(f"» {task}", classes="user-turn", markup=False))
         conv.anchor()
         self._set_status("작업 중")
@@ -324,16 +309,16 @@ class KodaTui(App):
         self._busy = False
         # 산문 세그먼트 스트림은 _on_turn_done/_on_turn_failed 가 _close_prose 로 이미 닫았다(여긴 방어).
         self._cur_prose_stream = None
-        # 턴 종료 시 미완 툴 블록 정리 — worker 가 툴 도중 죽으면(ToolEnd 미도착) '실행 중'
-        # 스피너가 영구히 남는다(code-review M2). 성공 턴은 이미 비어 no-op.
+        # 턴 종료 시 미완 툴 블록 정리 — worker 가 툴 도중 죽으면(ToolEnd 미도착) 스피너가 영구히
+        # 남는다. 성공 턴은 이미 비어 no-op.
         for block in self._tool_blocks.values():
             block.finish("(중단됨)", ok=False)
         self._tool_blocks = {}
         self._activity_off()
         self._set_status(status)
         if isinstance(self.screen, ApprovalModal):
-            # approver timeout(=deny) 으로 응답 없이 턴이 끝난 고아 modal 정리 —
-            # dismiss(False) 의 늦은 resolve 는 이미 반환된 worker 에 no-op 이다
+            # approver timeout(=deny) 으로 응답 없이 턴이 끝난 고아 modal 정리 — 늦은 resolve 는
+            # 이미 반환된 worker 에 no-op.
             self.screen.dismiss(False)
         prompt = self.query_one("#prompt", Input)
         prompt.disabled = False
@@ -373,7 +358,7 @@ class KodaTui(App):
         phase = msg.phase
         if phase.startswith("think:"):
             n = phase[6:]
-            self._think_tok = int(n) if n.isdigit() else 0  # 활동바 전용 (§5.4)
+            self._think_tok = int(n) if n.isdigit() else 0  # 활동바 전용
             return
         if phase.startswith("heartbeat:"):
             return  # 활동바 경과 초가 대체 — 로그·표시 불필요
@@ -400,12 +385,7 @@ class KodaTui(App):
         self._activity_label = phase
 
     async def _reset_turn(self) -> None:
-        """retry: 이번 시도의 산문 세그먼트·툴 블록·매핑을 전부 폐기하고 재시작(질의 Static 보존).
-
-        _tool_blocks 를 반드시 비운다 — 폐기된 시도의 툴 블록이 unmount 됐는데 매핑이 남으면
-        뒤늦게 도착한 그 시도의 ToolEnd 가 stale run_id 로 매칭돼 제거된 위젯에 finish 하거나
-        스피너가 잔존한다 (agy 리뷰). _end_turn 의 _tool_blocks 초기화와 일관.
-        """
+        """retry: 이번 시도의 산문 세그먼트·툴 블록·매핑을 전부 폐기하고 재시작한다(질의 Static 보존). _tool_blocks 를 안 비우면 뒤늦은 ToolEnd 가 stale run_id 로 제거된 위젯에 매칭된다."""
         await self._close_prose()
         for w in self._turn_widgets:
             try:
@@ -421,8 +401,8 @@ class KodaTui(App):
         result = msg.result
         final = (result.get("final") or "").strip()
         await self._close_prose()
-        # 옵션 B (plan §E): 스트림 전면 유실(draft 빔)일 때만 정본을 산문 세그먼트로 폴백 mount.
-        # 스트림된 세그먼트가 있으면 그대로 둔다 — 통째 교체 시 멀티툴 턴의 중간 산문이 소실된다.
+        # 스트림 전면 유실일 때만 정본을 산문 세그먼트로 폴백 mount — 스트림된 세그먼트가 있으면
+        # 통째 교체 시 멀티툴 턴의 중간 산문이 소실되므로 그대로 둔다.
         if final and not self._draft.strip():
             conv = self.query_one("#conversation", VerticalScroll)
             md = Markdown(final, classes="answer")
@@ -494,8 +474,8 @@ class KodaTui(App):
 
     @on(ApprovalRequest)
     def _on_approval(self, msg: ApprovalRequest) -> None:
-        # 라벨은 툴 롤업과 무관하게 항상 노출되므로 승인 대기를 라벨로 띄운다(활동바 detail 은
-        # 롤업에 가려 안 보임). 모달 종료 시 직전 단계 라벨로 복원한다.
+        # 라벨은 툴 롤업과 무관하게 항상 노출되므로 승인 대기를 라벨로 띄운다(detail 은 롤업에
+        # 가려 안 보임). 모달 종료 시 직전 라벨로 복원한다.
         prev_label = self._activity_label
         self._activity_label = "승인 대기"
 

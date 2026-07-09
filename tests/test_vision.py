@@ -1,4 +1,3 @@
-"""vision 이미지 분석 도구의 결정론 검증."""
 from __future__ import annotations
 
 from koda.tools import vision

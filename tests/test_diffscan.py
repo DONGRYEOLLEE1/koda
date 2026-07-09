@@ -1,4 +1,3 @@
-"""핵심 모듈: diffscan (verify 증거 수집). 변경 검출·untracked 본문·제외 규칙·상한 절단."""
 from __future__ import annotations
 
 from koda import diffscan

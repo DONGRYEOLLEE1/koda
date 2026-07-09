@@ -1,4 +1,3 @@
-"""핵심 모듈: session (멀티턴 히스토리 영속). 저장/로드 멱등성과 히스토리 규칙 검증."""
 from __future__ import annotations
 
 from koda.session import Session
@@ -54,7 +53,7 @@ def test_compaction_replaces_old_keeps_recent(tmp_path):
 
 
 def test_compaction_noop_when_nothing_old(tmp_path):
-    # 리뷰 M1: 거대 단일 턴 — 자를 것이 없으면 합성 요약을 덧붙이지 않는다
+    # 거대 단일 턴 — 자를 것이 없으면 합성 요약을 덧붙이지 않는다
     s = Session(tmp_path)
     s.add_turn("q", "x" * 40_000, route="read", verdict=None)
     assert s.needs_compaction is True and s.old_messages() == []
@@ -64,7 +63,7 @@ def test_compaction_noop_when_nothing_old(tmp_path):
 
 
 def test_compaction_preserves_pair_boundary_on_odd_history(tmp_path):
-    # 리뷰 M3: 홀수 히스토리(수동 편집된 세션 파일)에서 assistant 고아가 생기지 않는다
+    # 홀수 히스토리(수동 편집된 세션 파일)에서 assistant 고아가 생기지 않는다
     s = Session(tmp_path)
     for i in range(4):
         s.add_turn(f"q{i}", f"a{i}", route="read", verdict=None)

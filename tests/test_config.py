@@ -1,4 +1,3 @@
-"""핵심 모듈: config (.env + pydantic-settings, 소스에 기본값 없음 → 필수 + 타입검증)."""
 from __future__ import annotations
 
 import pytest

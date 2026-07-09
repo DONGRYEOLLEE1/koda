@@ -1,9 +1,3 @@
-"""파일/폴더 생성·수정·삭제 도구. 위험 작업 — Permission middleware 가 실행 전 게이트한다.
-
-용도: 소스코드/파일 변경. 되돌릴 수 없는 변경이 가능하므로 전부 승인 대상.
-경로는 workspace.resolve 로 루트에 샌드박스된다(루트 밖이면 SandboxError).
-쓰기는 _atomic_write(temp + os.replace + copymode)로 원자적이며 실행 비트를 보존한다.
-"""
 from __future__ import annotations
 
 import difflib
@@ -26,8 +20,7 @@ ENCODING = "utf-8"
 
 
 def _atomic_write(target: Path, content: str) -> None:
-    """temp 파일에 쓴 뒤 os.replace 로 원자 교체. 쓰기 중 오류가 원본을 손상시키지 않게 하고,
-    기존 파일이면 shutil.copymode 로 권한(실행 비트)을 보존한다."""
+    """temp 파일에 쓴 뒤 os.replace 로 원자 교체한다. 기존 파일이면 shutil.copymode 로 실행 비트를 보존한다."""
     target.parent.mkdir(parents=True, exist_ok=True)
     existed = target.exists()
     fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=".koda-tmp-")
@@ -46,13 +39,7 @@ def _atomic_write(target: Path, content: str) -> None:
 
 
 def _apply_patch(text: str, start: int, end: int, replacement: str) -> str:
-    """[start, end] (1-기반, inclusive) 줄을 replacement 로 교체한 새 텍스트를 반환한다.
-
-    - 삭제: replacement == "" (해당 범위 제거).
-    - 삽입: start == end + 1 (end 다음에 앞 삽입; 파일 끝은 start=len+1,end=len; 빈 파일은 1,0).
-    개행 스타일(\\r\\n / \\n)과 파일 끝 개행 유무를 보존한다(silent corruption 방지).
-    호출부(patch_file)가 경계를 먼저 검증한다.
-    """
+    """[start, end](1-기반,inclusive) 줄을 replacement 로 교체한다. 삭제=replacement="", 삽입=start==end+1. 개행 스타일과 EOF 개행 유무를 보존한다."""
     def _nl_of(s: str) -> str | None:
         return "\r\n" if s.endswith("\r\n") else ("\n" if s.endswith("\n") else None)
 

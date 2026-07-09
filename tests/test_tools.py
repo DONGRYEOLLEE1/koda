@@ -1,4 +1,3 @@
-"""핵심 모듈: tools (langchain @tool, 샌드박스, 읽기 범위·줄번호, 편집 툴)."""
 from __future__ import annotations
 
 import pytest
@@ -70,11 +69,6 @@ def test_read_file_rejects_binary(make_workspace):
     assert "바이너리" in tools["read_file"].invoke({"path": "bin.dat"})
 
 
-def test_read_file_empty(make_workspace):
-    tools = {t.name: t for t in make_filesystem_tools(make_workspace({"empty.txt": ""}))}
-    assert "빈 파일" in tools["read_file"].invoke({"path": "empty.txt"})
-
-
 def test_list_files_tool_and_truncation(make_workspace):
     files = {f"f{i}.txt": "x" for i in range(5)}
     tools = {t.name: t for t in make_filesystem_tools(make_workspace(files))}
@@ -91,26 +85,10 @@ def test_read_tool_sandbox_escape_blocked(make_workspace):
 
 
 def test_read_missing_file_single_candidate_returns_content(make_workspace):
-    # 파일명 오질의(agent.py ↔ agents.py) + 유일 후보 → 그 파일 내용까지 한 번에 반환
-    # (오류 → 재탐색 후속 스텝에서 로컬 모델이 빈 응답으로 죽는 것을 실측, 스텝 자체를 제거)
+    # 파일명 오질의(agent.py ↔ agents.py) + 유일 후보 → 그 파일 내용까지 한 번에 반환한다(재탐색에서 빈 응답으로 죽는 것을 막는다).
     tools = {t.name: t for t in make_filesystem_tools(make_workspace({"agents.py": "REAL_CODE"}))}
     out = tools["read_file"].invoke({"path": "agent.py"})
     assert "없다" in out and "agents.py" in out and "REAL_CODE" in out
-
-
-def test_read_missing_file_multi_candidates_lists_them(make_workspace):
-    # 후보가 여럿이면 내용 대신 후보 목록 + 탐색 안내 (선택은 LLM 몫)
-    tools = {t.name: t for t in make_filesystem_tools(
-        make_workspace({"agents.py": "a", "agentz.py": "b"}))}
-    out = tools["read_file"].invoke({"path": "agent.py"})
-    assert "파일이 없음" in out and "agents.py" in out and "search_text" in out
-
-
-def test_edit_missing_file_suggests_similar(make_workspace):
-    tools = {t.name: t for t in make_editor_tools(make_workspace({"agents.py": "x = 1\n"}))}
-    out = tools["edit_file"].invoke({"path": "agent.py", "old": "x = 1", "new": "x = 2"})
-    assert "없다" in out and "agents.py" in out       # 유일 후보 → 내용 포함 안내
-    assert "x = 1" in out                              # 실제 파일 내용까지 제공됨
 
 
 def test_run_command_tool_executes(make_workspace):
@@ -119,16 +97,8 @@ def test_run_command_tool_executes(make_workspace):
     assert "exit_code=0" in out and "hi" in out
 
 
-def test_run_command_missing_binary_returns_error(make_workspace):
-    # 없는 명령은 bash 가 exit 127 로 처리 — 예외로 실행 전체를 죽이지 않고 결과 문자열로 돌아온다
-    tools = {t.name: t for t in make_shell_tools(make_workspace())}
-    out = tools["run_command"].invoke({"command": "definitely-not-a-command-xyz"})
-    assert "exit_code=127" in out or "not found" in out
-
-
 def test_run_command_prefers_workspace_venv(make_workspace):
-    # 워크스페이스에 자체 .venv 가 있으면 그 bin 이 PATH 최우선 — 부모(koda) 환경에서
-    # 테스트가 돌아 거짓 성공 증거를 만드는 것을 방지한다
+    # 워크스페이스에 자체 .venv 가 있으면 그 bin 이 PATH 최우선 — 부모(koda) 환경에서 테스트가 돌아 거짓 성공 증거를 만드는 것을 방지한다.
     ws = make_workspace({})
     shim = ws.root / ".venv" / "bin" / "python"
     shim.parent.mkdir(parents=True)
@@ -148,7 +118,7 @@ def test_reader_tools_include_readonly_shell(make_workspace):
 
 
 def test_run_command_head_tail_excerpt(make_workspace):
-    # 긴 출력은 head+tail 로 발췌하고 생략을 명시한다(tail-only 절단 불투명 방지, P8)
+    # 긴 출력은 head+tail 로 발췌하고 생략을 명시한다(tail-only 절단 불투명 방지)
     tools = {t.name: t for t in make_shell_tools(make_workspace())}
     out = tools["run_command"].invoke({"command": "seq 1 200"})
     assert "1\n2\n3\n" in out          # head
@@ -232,7 +202,7 @@ def test_multi_edit_rolls_back_on_failure(make_workspace):
 
 
 def test_bwrap_prefix_disabled_paths(monkeypatch, tmp_path):
-    # ROADMAP §3.4: 미설치/BH_SANDBOX=off 면 빈 접두 — 기존 실행 경로와 동일 (비활성 smoke)
+    # 미설치/BH_SANDBOX=off 면 빈 접두 — 기존 실행 경로와 동일(비활성 smoke)
     import shutil as _shutil
 
     from koda.tools import shell

@@ -1,4 +1,3 @@
-"""핵심 모듈: MCP 폴더 로더 (설정 파싱/정규화; 네트워크 없이 순수 파싱만 검증)."""
 from __future__ import annotations
 
 import json
@@ -23,7 +22,7 @@ def test_parses_and_normalizes_transport(tmp_path):
 
 
 def test_non_dict_spec_skipped_others_survive(tmp_path):
-    # M1: 비-dict 스펙(문자열 등) 하나가 전체 서버를 드롭하지 않는다
+    # 비-dict 스펙(문자열 등) 하나가 전체 서버를 드롭하지 않는다
     _write(tmp_path, "bad.json", {"mcpServers": {"bad": "https://x"}})
     _write(tmp_path, "good.json", {"mcpServers": {"good": {"url": "https://g"}}})
     conns = load_mcp_configs(str(tmp_path))

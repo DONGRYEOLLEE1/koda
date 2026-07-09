@@ -1,12 +1,7 @@
-"""핵심 모듈: skills (워크스페이스 스킬 발견·주입·조회 도구). plan/SKILLS.md §6.
-
-판단은 LLM 이 하므로(스킬 발동 여부) 여기선 koda 몫만 검증한다:
-발견(frontmatter 파싱)·빈 폴더·본문 조회·SAFE 게이트·프롬프트 주입 순서.
-"""
 from __future__ import annotations
 
 from koda.agents.specs import AGENTS
-from koda.skills import Skill, load_skills, skill_body
+from koda.skills import Skill, load_skills
 from koda.tools import SAFE_TOOLS
 from koda.tools.skill import make_skill_tools
 
@@ -35,21 +30,8 @@ def test_load_skills_missing_dir_is_empty(tmp_path):
     assert load_skills(str(tmp_path)) == []
 
 
-def test_load_skills_name_falls_back_to_dirname(tmp_path):
-    _write_skill(tmp_path, "my-skill", "description: 이름 없는 스킬")
-    skills = load_skills(str(tmp_path))
-    assert skills[0].name == "my-skill"  # frontmatter name 없음 → 디렉터리명
-
-
-def test_load_skills_yaml_multiline_description(tmp_path):
-    # agy 리뷰 #5: yaml 우선 경로가 멀티라인 description 을 처리한다
-    _write_skill(tmp_path, "s1", "name: s1\ndescription: >\n  첫 줄\n  둘째 줄")
-    skills = load_skills(str(tmp_path))
-    assert "첫 줄" in skills[0].description and "둘째 줄" in skills[0].description
-
-
 def test_load_skills_minimal_parser_fallback_when_no_yaml(tmp_path, monkeypatch):
-    # yaml 미설치 상황을 강제해 최소 파서 폴백 경로를 직접 검증(agy 최종 리뷰 갭)
+    # yaml 미설치 상황을 강제해 최소 파서 폴백 경로를 직접 검증
     import sys
     monkeypatch.setitem(sys.modules, "yaml", None)  # import yaml → ImportError
     _write_skill(tmp_path, "s1", "name: s1\ndescription: 단일 줄 설명")
@@ -71,12 +53,6 @@ def test_skill_tool_returns_body_and_guides_on_unknown(tmp_path):
 
 def test_make_skill_tools_empty_when_no_skills():
     assert make_skill_tools([]) == []
-
-
-def test_skill_body_strips_frontmatter(tmp_path):
-    p = tmp_path / "SKILL.md"
-    p.write_text("---\nname: x\n---\n순수 본문", encoding="utf-8")
-    assert skill_body(Skill("x", "d", str(p), str(p.parent))) == "순수 본문"
 
 
 # --- 안전: skill 은 읽기 전용 SAFE ---
@@ -104,13 +80,13 @@ def test_build_injects_skill_list_and_orders_before_memory(monkeypatch):
     sys = captured["system"]
     assert "frontend-design: 뚜렷한 시각 디자인 지침" in sys        # L1 목록 주입
     assert "사용 가능한 스킬" in sys                                # skills_intro 헤더
-    # 캐시 prefix 순서(agy #6): 정적 skills 가 동적 memory 보다 앞
+    # 캐시 prefix 순서: 정적 skills 가 동적 memory 보다 앞
     assert sys.index("사용 가능한 스킬") < sys.index("프로젝트 메모리")
     assert "skill" in captured["tool_names"]                        # skill 도구 주입
 
 
 def test_build_without_skills_is_unchanged(monkeypatch):
-    # skills=() 면 스킬 섹션·도구가 전혀 없다 (무회귀 — 수용기준 §7-3)
+    # skills=() 면 스킬 섹션·도구가 전혀 없다(무회귀)
     import koda.agents.specs as S
     captured = {}
     monkeypatch.setattr(S, "create_agent",

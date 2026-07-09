@@ -1,9 +1,3 @@
-"""TUI 메시지 계약 (plan/TEXTUAL_TUI_PLAN.md §5.2, §5.4).
-
-worker thread → UI 전달은 전부 이 메시지들로만 한다 (post_message 는 thread-safe).
-도메인 상태(Session/Memory)는 여기 싣지 않는다 — runner 가 소유하고 UI 는 표시용
-사본(문자열·카운트)만 받는다.
-"""
 from __future__ import annotations
 
 from typing import Callable
@@ -72,11 +66,7 @@ class CompactDone(Message):
 
 
 class ToolStart(Message):
-    """툴 실행 시작 (langchain on_tool_start). run_id 로 ToolEnd 와 매칭한다.
-
-    title 은 도구별 템플릿으로 만든 표시용 라벨(예: '$ pytest -q', '읽기 · calc.py').
-    raw args 는 싣지 않는다 — 승인/비노출 정책과 무관한 표시 전용 채널이다.
-    """
+    """툴 실행 시작 (langchain on_tool_start). run_id 로 ToolEnd 와 매칭하며, raw args 는 싣지 않는 표시 전용 채널이다."""
 
     def __init__(self, run_id: str, name: str, title: str) -> None:
         self.run_id = run_id

@@ -1,7 +1,3 @@
-"""셸 실행 도구. 위험 작업 — Permission middleware 가 실행 전 게이트한다.
-
-용도: 테스트 실행·빌드 등 명령 실행. 되돌릴 수 없는 변경이 가능하므로 승인 대상.
-"""
 from __future__ import annotations
 
 import os
@@ -28,15 +24,9 @@ def _warn_no_sandbox_once():
 
 
 def _bwrap_prefix(ws: Workspace) -> list[str]:
-    """bubblewrap 가용 시 명령을 OS 격리로 감싸는 argv 접두 (ROADMAP §3.4).
-
-    프로필: 루트 전체 read-only, 워크스페이스만 쓰기, /tmp 는 tmpfs, 새 세션.
-    ~/.cache 는 쓰기 허용(uv/pip 캐시 — 의존성 설치 흐름을 깨지 않기 위함), 네트워크 허용.
-    denygate(§2.5)가 정책 게이트, 이것은 그 아래의 OS 경계다.
-    미설치 또는 BH_SANDBOX=off 면 빈 접두(비활성 경로 — 기존과 동일하게 동작).
-    """
+    """bubblewrap 가용 시 OS 격리 argv 접두. 루트는 read-only·워크스페이스만 쓰기·~/.cache 는 쓰기 허용. 미설치/BH_SANDBOX=off 면 빈 접두."""
     if os.environ.get("BH_SANDBOX") == "off" or not shutil.which("bwrap"):
-        _warn_no_sandbox_once()  # 결정론 보장의 실제 경계가 bwrap 설치 여부임을 알린다 (리뷰 M1)
+        _warn_no_sandbox_once()  # 결정론 보장의 실제 경계가 bwrap 설치 여부임을 알린다
         return []
     prefix = [
         "bwrap",
@@ -55,10 +45,7 @@ def _bwrap_prefix(ws: Workspace) -> list[str]:
 
 
 def _workspace_env(ws: Workspace) -> dict:
-    """워크스페이스에 자체 .venv 가 있으면 그 환경을 우선하는 env 를 만든다.
-
-    없으면 상속 env 그대로. 이게 없으면 `python` 이 koda(부모) venv 로 해석되어, 워크스페이스 의존성과 무관한 환경에서 테스트가 돌아 **거짓 성공 증거**가 된다(실측: workspace 는 langchain 0.3.0 인데 부모 venv 1.x 로 import 테스트가 통과해 검증을 오염).
-    """
+    """워크스페이스에 자체 .venv 가 있으면 그 환경을 우선한다 — 없으면 python 이 부모(koda) venv 로 해석돼 거짓 성공 증거가 된다."""
     env = os.environ.copy()
     venv_bin = ws.root / ".venv" / "bin"
     if venv_bin.is_dir():
@@ -69,7 +56,7 @@ def _workspace_env(ws: Workspace) -> dict:
 
 def _fmt_output(returncode: int, stdout: str, stderr: str,
                 head: int = 40, tail: int = 40, err: int = 20) -> str:
-    """긴 출력을 head+tail 로 발췌하고 생략 줄수를 명시한다 — tail-only 절단의 불투명성 방지(P8)."""
+    """긴 출력을 head+tail 로 발췌하고 생략 줄수를 명시한다 — tail-only 절단의 불투명성을 방지한다."""
     def cut(text: str, h: int, t: int) -> str:
         lines = text.splitlines()
         if len(lines) <= h + t:

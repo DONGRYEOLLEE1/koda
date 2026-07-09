@@ -1,4 +1,3 @@
-"""TUI 위젯: 승인 modal (plan/TEXTUAL_TUI_PLAN.md §5.5)."""
 from __future__ import annotations
 
 import re
@@ -13,11 +12,7 @@ _SECRET_KEY = re.compile(r"(?i)token|secret|key|password|authorization|credentia
 
 
 class ToolBlock(Collapsible):
-    """대화 스트림 안의 툴 실행 블록 (toad/Claude Code 식 '가볍게 렌더').
-
-    접힘이 기본 — 헤더에 상태 아이콘 + 제목만, 펼치면 output. ToolStart 로 mount(진행 중 ○),
-    ToolEnd 로 finish(성공 ✓ / 실패 ✗ + output). Collapsible.title 은 reactive 라 갱신 시 재렌더.
-    """
+    """대화 스트림 안의 툴 실행 블록. 접힘이 기본 — ToolStart 로 mount(진행 중 ○), ToolEnd 로 finish(✓/✗ + output)."""
 
     def __init__(self, title: str) -> None:
         self._label = title
@@ -30,7 +25,7 @@ class ToolBlock(Collapsible):
 
 
 def _args_preview(tool: str, args: object) -> str:
-    """args 요약 — 길이 제한 + secret 성 키 redaction, raw dump 금지 (§9)."""
+    """args 요약 — 길이 제한 + secret 성 키 redaction, raw dump 금지."""
     if tool == "run_command" and isinstance(args, dict):
         v = args.get("argv") or args.get("command") or ""
         text = "$ " + (" ".join(map(str, v)) if isinstance(v, list) else str(v))
@@ -42,7 +37,7 @@ def _args_preview(tool: str, args: object) -> str:
 
 
 class ApprovalModal(ModalScreen[bool]):
-    """위험 도구 승인 — 승인/거부 버튼, ESC(닫기)=거부 (§5.5, AC 7)."""
+    """위험 도구 승인 — 승인/거부 버튼, ESC(닫기)=거부."""
 
     BINDINGS = [("escape", "deny", "거부")]
 

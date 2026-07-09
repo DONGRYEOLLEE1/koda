@@ -1,4 +1,3 @@
-"""핵심 모듈: StepBudgetMiddleware (도구 호출 스텝 하드 캡). request 를 흉내내 단위 검증."""
 from __future__ import annotations
 
 import asyncio

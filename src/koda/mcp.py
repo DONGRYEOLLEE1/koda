@@ -1,17 +1,3 @@
-"""폴더 기반 MCP 로더.
-
-`mcps/` 폴더의 *.json / *.yaml 파일을 일괄로 읽어(프롬프트처럼 파일로 단일화) 외부 MCP 서버의
-도구를 langchain 도구로 로드한다. 각 파일은 아래 형식(Claude/Cursor 호환)이다:
-
-    { "mcpServers": { "exa": { "url": "https://mcp.exa.ai/mcp" } } }
-
-- `url` 만 있으면 transport=streamable_http, `command` 가 있으면 stdio 로 자동 채운다.
-- 로드한 도구는 coder/reader 에이전트 툴셋에 주입되고, SAFE 목록 밖이라 PermissionMiddleware
-  승인 게이트를 거친다(외부 호출이므로 기본 게이트). 실행/입출력은 langfuse 에 추적된다.
-- 서버 하나가 죽어도 나머지는 살리도록 서버별로 격리 로드 + 타임아웃 + graceful skip.
-
-참고: https://github.com/langchain-ai/langchain-mcp-adapters
-"""
 from __future__ import annotations
 
 import asyncio

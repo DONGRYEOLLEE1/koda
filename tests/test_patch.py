@@ -1,4 +1,3 @@
-"""핵심 모듈: patch_file 라인 패치. silent-corruption 위험 지점(경계·개행·앵커)을 엄중 검증한다."""
 from __future__ import annotations
 
 from koda.tools.edit import _apply_patch, make_editor_tools
@@ -83,15 +82,6 @@ def test_patch_out_of_range_no_change(make_workspace):
     assert (ws.root / "a.py").read_text(encoding="utf-8") == "x = 1\n"
 
 
-def test_patch_insert_then_delete(make_workspace):
-    ws = make_workspace({"a.py": "a\nb\n"})
-    tools = {t.name: t for t in make_editor_tools(ws)}
-    tools["patch_file"].invoke({"path": "a.py", "start_line": 3, "end_line": 2, "replacement": "c"})  # EOF 삽입
-    assert (ws.root / "a.py").read_text(encoding="utf-8") == "a\nb\nc\n"
-    tools["patch_file"].invoke({"path": "a.py", "start_line": 1, "end_line": 1, "replacement": ""})   # 삭제
-    assert (ws.root / "a.py").read_text(encoding="utf-8") == "b\nc\n"
-
-
 def test_patch_preserves_exec_bit(make_workspace):
     import os as _os
     ws = make_workspace({"run.sh": "#!/bin/sh\necho old\n"})
@@ -102,25 +92,34 @@ def test_patch_preserves_exec_bit(make_workspace):
     assert (ws.root / "run.sh").read_text(encoding="utf-8") == "#!/bin/sh\necho new\n"
 
 
-# --- codex 적대적 검증에서 나온 회귀(개행/EOF/앵커 손상) ---
+def test_patch_insert_then_delete(make_workspace):
+    ws = make_workspace({"a.py": "a\nb\n"})
+    tools = {t.name: t for t in make_editor_tools(ws)}
+    tools["patch_file"].invoke({"path": "a.py", "start_line": 3, "end_line": 2, "replacement": "c"})  # EOF 삽입
+    assert (ws.root / "a.py").read_text(encoding="utf-8") == "a\nb\nc\n"
+    tools["patch_file"].invoke({"path": "a.py", "start_line": 1, "end_line": 1, "replacement": ""})   # 삭제
+    assert (ws.root / "a.py").read_text(encoding="utf-8") == "b\nc\n"
+
+
+# --- 회귀 방지: 개행/EOF/앵커 손상 ---
 
 def test_apply_insert_eof_no_final_newline():
-    # 무-EOF 파일 끝 삽입: 줄 병합 없이, 무-EOF 상태 보존 (codex HIGH)
+    # 무-EOF 파일 끝 삽입: 줄 병합 없이, 무-EOF 상태 보존
     assert _apply_patch("a\nb", 3, 2, "X") == "a\nb\nX"
 
 
 def test_apply_delete_last_line_no_final_newline():
-    # 무-EOF 파일의 마지막 줄 삭제: EOF 개행을 새로 만들지 않는다 (codex HIGH)
+    # 무-EOF 파일의 마지막 줄 삭제: EOF 개행을 새로 만들지 않는다
     assert _apply_patch("a\nb", 2, 2, "") == "a"
 
 
 def test_apply_mixed_newline_keeps_edited_line_lf():
-    # 파일 어딘가 CRLF 가 있어도 LF 줄 교체는 LF 유지 (codex MEDIUM)
+    # 파일 어딘가 CRLF 가 있어도 LF 줄 교체는 LF 유지
     assert _apply_patch("a\nb\r\nc\n", 1, 1, "A") == "A\nb\r\nc\n"
 
 
 def test_patch_tool_preserves_crlf_bytes(make_workspace):
-    # 도구가 read_text 로 CRLF 를 \n 으로 번역해 손상시키지 않는다 (codex CRITICAL)
+    # 도구가 read_text 로 CRLF 를 \n 으로 번역해 손상시키지 않는다
     ws = make_workspace({})
     (ws.root / "crlf.txt").write_bytes(b"a\r\nb\r\nc\r\n")
     tools = {t.name: t for t in make_editor_tools(ws)}
@@ -129,7 +128,7 @@ def test_patch_tool_preserves_crlf_bytes(make_workspace):
 
 
 def test_patch_insert_anchor_catches_drift(make_workspace):
-    # 삽입에서도 expected_head 로 드리프트를 잡는다 (codex HIGH)
+    # 삽입에서도 expected_head 로 드리프트를 잡는다
     ws = make_workspace({"a.py": "a\nDRIFT\nb\n"})
     tools = {t.name: t for t in make_editor_tools(ws)}
     out = tools["patch_file"].invoke({

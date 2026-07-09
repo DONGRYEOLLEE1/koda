@@ -1,7 +1,3 @@
-"""로컬 LLM 라이브 테스트 (langchain). 엔드포인트 미가용 시 자동 skip(기본 스위트 보호).
-
-    uv run pytest tests/test_live_llm.py -s -v
-"""
 from __future__ import annotations
 
 import pytest

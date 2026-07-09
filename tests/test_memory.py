@@ -1,4 +1,3 @@
-"""핵심 모듈: memory (영구 메모리). 멱등성·상한 신호·주입 형식 검증."""
 from __future__ import annotations
 
 from koda.memory import MAX_CHARS, Memory
@@ -32,7 +31,7 @@ def test_remember_rejects_empty(tmp_path):
 
 
 def test_remember_short_note_not_rejected_as_substring(tmp_path):
-    # 리뷰 M2: 항목 단위 비교 — 기존 항목의 부분문자열이라도 별개 항목이면 저장돼야 한다
+    # 항목 단위 비교 — 기존 항목의 부분문자열이라도 별개 항목이면 저장돼야 한다
     m = Memory(tmp_path)
     m.remember("이 프로젝트는 pytest 를 쓴다")
     assert m.remember("pytest") is True

@@ -1,4 +1,3 @@
-"""핵심 모듈: llm (provider 선택 — 로컬 우선 + OpenAI 폴백, thinking 예산 인스턴스)."""
 from __future__ import annotations
 
 from langchain.chat_models import init_chat_model

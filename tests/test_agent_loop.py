@@ -1,7 +1,3 @@
-"""결정론적 e2e: create_agent + permission middleware 루프 (fake tool-calling model).
-
-라이브 엔드포인트 없이 전체 루프를 검증한다. 도구 실행은 파일시스템 부수효과로 확인한다.
-"""
 from __future__ import annotations
 
 from langchain.agents import create_agent

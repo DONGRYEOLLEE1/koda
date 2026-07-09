@@ -1,5 +1,3 @@
-"""스킬 본문 조회 도구 (읽기 전용). 에이전트가 skill(name) 으로 SKILL.md 전체 지침을 불러온다."""
-
 from __future__ import annotations
 
 from langchain.tools import tool

@@ -1,8 +1,3 @@
-"""파일시스템 도구 (읽기 전용). 워크스페이스 루트에 스코프된다.
-
-용도: 코드베이스 탐색·조회. 위험하지 않음(승인 불필요).
-read_file 은 줄번호를 붙이고 offset/limit 로 범위 발췌를 지원한다(대형 파일 컨텍스트 오염 방지).
-"""
 from __future__ import annotations
 
 from langchain.tools import tool
@@ -21,12 +16,7 @@ def _format_numbered(lines: list[str], start: int) -> str:
 
 
 def not_found_help(ws: Workspace, path: str) -> str:
-    """파일 없음 오류 메시지 + 유사 파일 후보 + 복구 안내 (에이전트가 스스로 재시도하도록).
-
-    유일 후보가 있으면 그 내용까지 함께 반환한다 — 로컬 모델이 "오류 → 재탐색" 후속 스텝에서
-    빈 응답으로 죽는 것을 실측했기에, 한 번의 도구 결과로 판단에 필요한 정보를 전부 준다.
-    (어느 파일을 쓸지·무엇을 할지는 여전히 LLM 이 판단한다.)
-    """
+    """파일 없음 오류 + 유사 파일 후보 + 복구 안내. 유일 후보면 내용까지 반환해 재탐색 스텝에서 빈 응답으로 죽는 것을 막는다."""
     similar = ws.suggest_similar(path)
     if len(similar) == 1:
         try:

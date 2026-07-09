@@ -1,9 +1,3 @@
-"""모델 설정: `.env` + 환경변수를 pydantic-settings 로 로드하고 타입까지 검증한다.
-
-값은 소스에 두지 않는다 — 모든 필드는 **필수**이며 `.env`(gitignore) 또는 환경변수에서만 온다.
-`.env.example` 이 템플릿. 우선순위: 생성자 인자 > 환경변수 > .env. 누락 시 ValidationError.
-로컬 우선(llama.cpp) + OpenAI 폴백 (PLAN §3.0-3).
-"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -13,12 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _resolve_env_file(env_file: str | None = None) -> str | None:
-    """설정 파일 탐색: 명시값 > CWD/.env > ~/.config/koda/.env > None(환경변수).
-
-    "어떤 환경에서든 설치→koda 실행"을 위한 전역 설정 폴백 (plan/KODA_MIGRATION §4.2).
-    존재하는 파일만 반환 — 없으면 None 을 줘 pydantic 이 환경변수로 폴백(없으면 기존대로
-    ValidationError). CWD/.env 는 개발 시 기존 동작을 그대로 유지한다.
-    """
+    """설정 파일 탐색: 명시값 > CWD/.env > ~/.config/koda/.env > None(환경변수 폴백). 존재하는 파일만 반환한다."""
     if env_file:
         return env_file
     cwd = Path(".env")
@@ -53,15 +42,10 @@ class ModelSettings(BaseSettings):
     thinking_budget_reader: int = Field(default=1024, alias="THINKING_BUDGET_READER")
     thinking_budget_explore: int = Field(default=512, alias="THINKING_BUDGET_EXPLORE")
 
-    # 나가는 요청 프롬프트의 토큰 상한(HistoryTrimMiddleware 가 이 값으로 턴 누적을 결정론
-    # 절단해 컨텍스트 창 초과 400 을 막는다). llama.cpp n_ctx=132k 운용에서 실효 예산을 64k 로
-    # 둔다(창의 절반 수준 — char 기반 토큰 추정이 한/중/일·도구호출 혼합에서 실제를 최대 ~1.9x
-    # 과소평가하는 오차를 흡수하고, tools_reserve·system 토큰은 이 안에서 차감). 서버 창을
-    # 조정하면 이 값도 함께 조정.
+    # 나가는 요청 프롬프트 토큰 상한 — HistoryTrimMiddleware 가 이 값으로 턴 누적을 절단해 컨텍스트 초과(400)를 막는다. 서버 n_ctx 조정 시 함께 조정.
     context_budget_tokens: int = Field(default=64000, alias="CONTEXT_BUDGET_TOKENS")
 
-    # 자동 승인할 읽기 전용 MCP 도구 이름(쉼표 구분). 기본 빈 값 = 현행(모든 MCP 가 HITL). opt-in.
-    # 쓰기성·내부망 도달 가능(SSRF) MCP 이름은 넣지 마라 — 자동 실행되어 유출 위험이 된다.
+    # 자동 승인할 읽기 전용 MCP 도구 이름(쉼표 구분, opt-in). 쓰기성·SSRF 가능 MCP 는 넣지 마라 — 자동 실행되어 유출 위험이 된다.
     mcp_auto_approve: str = Field(default="", alias="KODA_MCP_AUTO_APPROVE")
 
     @property

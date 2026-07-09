@@ -1,4 +1,3 @@
-"""pytest 공용 픽스처."""
 from __future__ import annotations
 
 import pytest

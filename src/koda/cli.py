@@ -1,4 +1,3 @@
-"""CLI: `run`(단발) · `chat`(멀티턴 REPL) — 답변 스트리밍 + 단계/도구 진행표시 + langfuse 추적."""
 from __future__ import annotations
 
 import argparse
@@ -7,9 +6,7 @@ import sys
 import time
 import warnings
 
-# langchain 의 with_structured_output → Pydantic v2 직렬화 과정에서 ToolMessage.parsed
-# 필드에 예상치 못한 값(VisionAnalysis 등)이 들어간다는 경고가 stderr 로 누출된다.
-# 직렬화는 정상 동작하므로 경고만 억제한다.
+# with_structured_output 의 Pydantic v2 직렬화 과정에서 나오는 경고는 무해하므로 억제한다.
 warnings.filterwarnings("ignore", message="Pydantic serializer warnings")
 
 from .agents import compact_memory, extract_memories, run_task, summarize_history
@@ -26,9 +23,7 @@ _PHASE = {
 
 
 def _use_rich_renderer() -> bool:
-    """Rich 마크다운 렌더링 사용 여부. stdout 이 TTY 일 때만 활성화한다.
-    stdin 이 아니라 stdout.isatty() 로 판단 — 출력 대상의 능력을 보는 게 맞다
-    (`echo task | koda run` 은 stdin 이 파이프여도 stdout 은 TTY 일 수 있다)."""
+    """Rich 마크다운 렌더링 사용 여부. stdout 이 TTY 일 때만 활성화한다(출력 대상 기준이지 stdin 기준이 아니다)."""
     return sys.stdout.isatty()
 
 
@@ -50,15 +45,7 @@ def _format_phase(phase: str) -> str:
 
 
 class MarkdownStreamRenderer:
-    """Rich Live + Markdown 스트리밍 렌더러 (plan/MARKDOWN_STREAMING.md).
-
-    on_token/on_phase 가 기존 콜백 시그니처를 그대로 만족하므로 graph.py·streaming.py 와의
-    계약을 깨지 않는다. 본문 단일 출력 불변식(§6.4):
-    - TTY(rich): 중간 프레임은 transient Live 로만 그리고, 스크롤백에 남는 최종본은
-      finalize() 가 렌더링본으로 딱 1회 출력한다.
-    - non-TTY(plain): on_token 이 기존과 동일하게 실시간 통과 출력하고 finalize 는
-      재출력하지 않는다 (하위 호환 §6.6).
-    """
+    """Rich Live + Markdown 스트리밍 렌더러. 본문은 TTY 는 finalize() 가 1회, non-TTY 는 on_token 실시간 출력으로 — 정확히 1회만 나온다."""
 
     def __init__(self, use_rich: bool):
         self._buffer = ""
@@ -85,8 +72,7 @@ class MarkdownStreamRenderer:
         return self
 
     def __exit__(self, *args):
-        # 출력하지 않는다 — 최종 출력 지점은 finalize() 하나뿐. finalize 가 이미 stop
-        # 했어도 안전하도록 예외를 무시한다(idempotent 정리).
+        # 출력하지 않는다 — 최종 출력 지점은 finalize() 하나뿐이라, 이미 stop 했어도 예외를 무시한다.
         if self._live:
             try:
                 self._live.stop()
@@ -104,8 +90,8 @@ class MarkdownStreamRenderer:
             self._status = self._phase_status  # 내용 생성 시작 → "생각 중" 표시 해제
         self._char_since_flush += len(text)
         elapsed = time.monotonic() - self._last_flush
-        # md2term 갱신 전략(§4): 문단 경계 즉시 / 80자+50ms / 20자+100ms 안전장치.
-        # 문단 경계는 버퍼 꼬리에서 찾는다 — \n\n 이 청크 2개에 걸쳐 쪼개져도 검출 (deepseek 리뷰)
+        # 갱신 전략: 문단 경계 즉시 / 80자+50ms / 20자+100ms. 문단 경계는 버퍼 꼬리에서 찾아 청크
+        # 2개에 걸쳐 쪼개져도 검출한다.
         if ("\n\n" in self._buffer[-(len(text) + 1):]
                 or (self._char_since_flush >= 80 and elapsed >= 0.05)
                 or (self._char_since_flush >= 20 and elapsed >= 0.1)):
@@ -113,13 +99,10 @@ class MarkdownStreamRenderer:
 
     def on_phase(self, phase: str):
         if phase.startswith("retry:"):
-            # 빈 응답 재시도: 1차 시도의 부분 스트림을 폐기해야 "앞부분이 두 번 나오는"
-            # 버퍼 오염을 막는다. (최종 정본은 finalize(answer) 가 확정)
+            # 빈 응답 재시도: 1차 시도의 부분 스트림을 폐기해 "앞부분이 두 번 나오는" 버퍼 오염을 막는다.
             self._buffer = ""
         if phase.startswith("think:"):
-            # reasoning 진행 표시 — status line 만 갱신한다(초당 최대 1회 도착).
-            # 영구 라벨로 찍으면 스크롤백 스팸이고, plain 모드는 침묵한다(파이프 로그
-            # 오염 방지 — 생존 신호는 30s 하트비트가 담당).
+            # reasoning 진행은 status line 만 갱신한다 — 영구 라벨은 스크롤백 스팸이고, plain 은 침묵(하트비트가 생존 신호 담당).
             if self._live:
                 self._status = _format_phase(phase)
                 self._render()
@@ -128,8 +111,7 @@ class MarkdownStreamRenderer:
         self._status = label
         self._phase_status = label
         if self._live:
-            # Live 가 소유한 같은 console 에 print — rich 가 라이브 영역 위로 안전하게 밀어
-            # 올린다. 별도 stderr Console 은 커서 추적을 깨 화면이 깨진다 (폴백 리뷰 Medium).
+            # Live 가 소유한 같은 console 에 print — 별도 stderr Console 을 쓰면 커서 추적이 깨져 화면이 깨진다.
             self._console.print(label, style="dim italic")
             self._render()
         else:
@@ -138,12 +120,7 @@ class MarkdownStreamRenderer:
             sys.stderr.flush()
 
     def finalize(self, answer: str | None = None):
-        """스트리밍 종료 후 최종 정본을 **단 1회** 출력한다 — 유일한 최종 출력 지점.
-
-        answer 가 주어지면 buffer 를 정본으로 교체(스트림 유실·재시도 폴백).
-        TTY: 렌더링본을 출력해 스크롤백에 '예쁜 버전'이 남는다.
-        plain: on_token 이 이미 실시간 출력했으므로 재출력하지 않는다(이중 출력 방지).
-        """
+        """스트리밍 종료 후 최종 정본을 단 1회 출력한다 — 유일한 최종 출력 지점. TTY 는 렌더링본을, plain 은 이미 출력했으므로 재출력하지 않는다."""
         if answer and answer.strip():
             self._buffer = answer
         if self._live:
@@ -152,8 +129,7 @@ class MarkdownStreamRenderer:
                 self._console.print(self._Markdown(self._buffer))
 
     def _render(self):
-        """누적 버퍼를 Rich Markdown 으로 파싱해 Live 업데이트.
-        rich 마크업은 Markdown 본문 안에서 해석되지 않으므로 status 는 Text 로 합성한다."""
+        """누적 버퍼를 Rich Markdown 으로 파싱해 Live 업데이트한다. rich 마크업은 Markdown 안에서 해석 안 되므로 status 는 Text 로 합성한다."""
         md = self._Markdown(self._buffer)
         view = self._Group(md, self._Text(self._status, style="dim italic")) if self._status else md
         self._live.update(view)
@@ -176,8 +152,7 @@ _auto_approver.auto = True  # denygate confirm 등급이 자동 승인을 거부
 
 
 async def _run_with_heartbeat(coro, on_phase, interval: float = 30.0):
-    """장시간 무출력 생성(로컬 추론 모델) 중에도 살아있음을 표시한다.
-    진행 표시는 on_phase("heartbeat:Ns") 로 통합 — rich 모드는 status line, plain 은 stderr."""
+    """장시간 무출력 생성 중에도 살아있음을 표시한다. on_phase("heartbeat:Ns") 로 통합 — rich 는 status line, plain 은 stderr."""
     task = asyncio.ensure_future(coro)
     start = time.monotonic()
     while True:
@@ -211,7 +186,7 @@ def _cmd_run(args) -> int:
         print(f"판정 근거: {result['verify_detail']}")
     if result.get("trace_url"):
         print(f"langfuse trace: {result['trace_url']}")
-    if result.get("empty_final"):  # 빈 final 은 verdict 유무와 무관하게 실패다 (§1.2)
+    if result.get("empty_final"):  # 빈 final 은 verdict 유무와 무관하게 실패다
         print(f"실행 실패: empty_final ({result.get('empty_reason') or 'unknown'})", file=sys.stderr)
         return 1
     return 0 if verdict in (None, "", "pass") else 1
@@ -223,10 +198,7 @@ def _err(msg: str) -> None:
 
 
 def _preflight_config() -> int | None:
-    """설정 누락 시 raw ValidationError 대신 친절 안내(설치 후 첫 실행 UX). 정상이면 None.
-
-    설정 탐색: CWD/.env → ~/.config/koda/.env → 환경변수 (config._resolve_env_file).
-    """
+    """설정 누락 시 raw ValidationError 대신 친절 안내(설치 후 첫 실행 UX). 정상이면 None."""
     from pydantic import ValidationError
     try:
         load_model_settings()
@@ -241,8 +213,7 @@ def _preflight_config() -> int | None:
 
 
 def _deny_approver(name, args) -> bool:
-    """비대화형 입력에서 승인 질문은 불가 — stdin 을 읽으면 다음 작업 줄을 승인 답변으로
-    삼켜버린다(파이프 오염). --yes 없인 안전하게 거부하고 이유를 알린다."""
+    """비대화형 입력에서 승인 질문은 불가 — stdin 을 읽으면 다음 작업 줄을 승인 답변으로 삼킨다. --yes 없인 안전하게 거부한다."""
     _err(f"[승인 거부] 비대화형 모드에서 --yes 없이 위험 도구 '{name}' 는 실행하지 않습니다.")
     return False
 
@@ -304,14 +275,13 @@ def _cmd_chat(args) -> int:
             _err(memory.read() or "(비어 있음)")
             continue
 
-        # 턴마다 새 renderer — Live 는 턴 종료 시 완전히 정리되고 `» ` 프롬프트는 context
-        # 밖에서 표시되므로 충돌하지 않는다 (§6.3)
+        # 턴마다 새 renderer — Live 는 턴 종료 시 완전히 정리되고 프롬프트는 context 밖에서 표시되므로 충돌하지 않는다.
         with MarkdownStreamRenderer(use_rich=_use_rich_renderer()) as renderer:
             try:
                 result = asyncio.run(_run_with_heartbeat(run_task(
                     line, ws, approver, renderer.on_token, renderer.on_phase,
                     history=session.history, mcp_tools=mcp_tools, mcps_dir=None,
-                    run_id=session.id,  # artifact 를 세션 단위로 이어 쓴다 (§2.3)
+                    run_id=session.id,  # artifact 를 세션 단위로 이어 쓴다
                 ), renderer.on_phase))
             except Exception as e:
                 _err(f"턴 실패: {type(e).__name__}: {e}")
@@ -320,8 +290,7 @@ def _cmd_chat(args) -> int:
         verdict = result.get("verdict")
         _err(f"\n--- route: {result['route']}{f' | verdict: {verdict}' if verdict else ''} ---")
         if result.get("empty_final"):
-            # 빈 final 은 히스토리에 저장하지 않는다 — 다음 턴 프롬프트·compaction·메모리 추출
-            # 입력을 오염시키기 때문 (§1.2). 사용자에게는 실패로 안내.
+            # 빈 final 은 히스토리에 저장하지 않는다 — 다음 턴 프롬프트·compaction·메모리 추출 입력을 오염시키기 때문.
             _err(f"(빈 응답 — 재시도 권장. 사유: {result.get('empty_reason') or 'unknown'})")
             continue
         session.add_turn(line, result["final"], result["route"], verdict)
@@ -344,7 +313,7 @@ def _cmd_chat(args) -> int:
                     continue
                 if memory.remember(note):
                     _err(f"  + 기억함: {note[:60]}")
-            if memory.needs_compaction:  # 상한 초과 시 LLM 통합 요약으로 교체 (리뷰 M5)
+            if memory.needs_compaction:  # 상한 초과 시 LLM 통합 요약으로 교체
                 _err("[메모리 압축 중…]")
                 compacted = asyncio.run(compact_memory(memory.read()))
                 if compacted:
@@ -356,8 +325,7 @@ def _cmd_chat(args) -> int:
 
 
 def _cmd_tui(args) -> int:
-    """Textual TUI (plan/TEXTUAL_TUI_PLAN.md). lazy import — textual(extra: tui) 미설치
-    환경에서 run/chat 경로는 영향받지 않는다."""
+    """Textual TUI. lazy import — textual(extra: tui) 미설치 환경에서 run/chat 경로는 영향받지 않는다."""
     try:
         from .tui.app import run_tui
     except ModuleNotFoundError as e:

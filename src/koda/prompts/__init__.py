@@ -1,7 +1,3 @@
-"""외부 프롬프트 로더. 프롬프트는 이 폴더의 `.md` 파일로 관리한다(코드에 인라인 금지).
-
-용도별 파일: agent.md(실행 에이전트), verifier.md(검증 서브에이전트).
-"""
 from __future__ import annotations
 
 from functools import lru_cache

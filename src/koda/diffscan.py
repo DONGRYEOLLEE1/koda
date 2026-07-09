@@ -1,4 +1,3 @@
-"""워크스페이스 변경 검출: 해시 스냅샷 비교 + unified diff (전 구간 결정론, 파일 생성 없음)."""
 from __future__ import annotations
 
 import difflib
@@ -35,11 +34,7 @@ def snapshot(root: Path) -> dict:
 
 
 def diff_report(before: dict, after: dict) -> tuple[list[str], str]:
-    """(변경 목록, unified diff). 목록 항목은 "A path"/"M path"/"D path".
-
-    신규(A)·삭제(D) 파일도 보관 원문 기준으로 본문 diff 를 만든다 — plain `git diff` 가
-    untracked 를 못 보는 구멍을 해시 스냅샷이 정본이 되어 막는다(ROADMAP §2.2).
-    """
+    """(변경 목록, unified diff). 신규(A)·삭제(D) 파일도 보관 원문 기준으로 diff 를 만든다 — git diff 가 untracked 를 못 보는 구멍을 막는다."""
     changed: list[str] = []
     chunks: list[str] = []
     for rel in sorted(set(before) | set(after)):

@@ -1,12 +1,3 @@
-"""runner: run_task 를 worker thread 에서 실행하고 콜백을 Textual 메시지로 변환 (§5.2).
-
-- Textual 앱은 자체 이벤트 루프를 가지므로 턴 실행은 CLI 와 동일하게 별도 thread 에서
-  `asyncio.run(run_task(...))` 으로 돈다 — 실행 코어 계약 무변경 (§10).
-- worker → UI 는 post_message(thread-safe)만 사용한다. 위젯 직접 접근 금지.
-- approver 는 PermissionMiddleware 의 동기 bool 계약 그대로: worker 를 threading.Event
-  로 재우고 UI modal 응답(resolve)으로 깨운다. timeout 은 deny (§Phase 4.5).
-- Session/Memory 는 runner(worker 쪽)가 소유한다 — UI 는 메시지로 받은 사본만 표시.
-"""
 from __future__ import annotations
 
 import asyncio
@@ -30,8 +21,7 @@ APPROVAL_TIMEOUT_S = 600.0  # modal 무응답은 deny — 위험 도구가 무�
 
 
 class ApprovalBridge:
-    """동기 approver 구현체. `.auto` 속성이 없으므로 denygate confirm 등급을 통과할 수 있는
-    대화형 승인으로 취급된다 (AC 8)."""
+    """동기 approver 구현체. .auto 속성이 없어 denygate confirm 등급을 통과 가능한 대화형 승인으로 취급된다."""
 
     def __init__(self, post, timeout: float = APPROVAL_TIMEOUT_S):
         self._post = post  # app.post_message (thread-safe)
@@ -87,7 +77,7 @@ class TuiTurnRunner:
             return
         try:
             if not result.get("empty_final"):
-                # 빈 final 은 히스토리·세션에 저장하지 않는다 — chat 과 동일한 오염 방지 (AC 9)
+                # 빈 final 은 히스토리·세션에 저장하지 않는다 — chat 과 동일한 오염 방지.
                 self.session.add_turn(task, result["final"], result["route"], result.get("verdict"))
                 old = self.session.old_messages() if self.session.needs_compaction else []
                 if old:
@@ -102,28 +92,18 @@ class TuiTurnRunner:
         post(TurnDone(result, turns=len(self.session.turns)))
 
     def new_thread(self) -> str:
-        """/clear: 현재 세션을 저장하고 새 세션으로 컨텍스트를 초기화한다(claude code /clear).
-
-        이전 대화 맥락(히스토리)을 잊고 새 스레드로 진입한다. 이전 세션은 저장되어
-        `--resume` 로 복구 가능하고, 영구 메모리(Memory)는 스레드와 무관하게 유지된다.
-        LLM 호출이 없어 즉시 수행(worker thread 불필요).
-        """
+        """/clear: 현재 세션을 저장하고 새 세션으로 컨텍스트를 초기화한다. 이전 세션은 --resume 로 복구 가능, 영구 메모리는 유지된다."""
         if self.session.history:
             try:
                 self.session.save()
             except Exception as e:
-                # 저장 실패해도 새 스레드 진입은 막지 않되, 조용히 삼키지 않고 알린다
-                # (close_session 이 저장 실패를 알리는 것과 일관). new_thread 는 UI 스레드에서만 호출.
+                # 저장 실패해도 새 스레드 진입은 막지 않되 조용히 삼키지 않고 알린다(close_session 과 일관).
                 self._app.notify(f"이전 세션 저장 실패({type(e).__name__})", severity="warning", timeout=5)
         self.session = Session(self._ws.root)
         return self.session.id
 
     def compact_now(self) -> None:
-        """/compact: 현재 세션 이력을 요약 압축한다(최근 턴 유지). worker thread 진입점.
-
-        run_turn 의 턴-간 자동 압축(§80-84)과 동일 로직을 사용자가 수동 트리거하는 것.
-        임계값과 무관하게 old_messages()(최근 턴 제외분)를 요약으로 치환한다.
-        """
+        """/compact: 현재 세션 이력을 요약 압축한다(최근 턴 유지). 임계값과 무관하게 수동으로 트리거한다."""
         post = self._app.post_message
         old = self.session.old_messages()
         if not old:

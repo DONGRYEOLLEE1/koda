@@ -1,8 +1,3 @@
-"""조사용 셸 도구 (TOOL_CALLING_REFACTOR §4): denygate 재앙-플로어 + 자유 실행.
-
-정적 read-only 분류기는 폐기(불건전·무한 — agy 우회 다수). 건전한 경계는 승인/샌드박스뿐이라,
-이 SAFE 도구는 유한한 denygate deny-list 만 하드 차단하고 나머지는 LLM 을 신뢰해 실행한다.
-"""
 from __future__ import annotations
 
 from koda.tools.readonly_shell import make_readonly_shell_tools

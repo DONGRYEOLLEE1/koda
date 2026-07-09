@@ -1,10 +1,3 @@
-"""세션: 멀티턴 대화 상태(히스토리 + 턴 기록)와 영속화.
-
-- history 에는 user 질문과 assistant **최종 답변 텍스트만** 저장한다(reasoning·도구 원본 제외
-  — interleaved thinking 규칙: 턴 경계에서 reasoning 은 버린다. plan/MEMORY_MULTITURN.md §3).
-- 저장은 원자적(tmp → rename)이고 멱등: 같은 상태를 다시 저장해도 파일 내용이 같다.
-- 위치: <workspace>/.koda/sessions/<id>.json
-"""
 from __future__ import annotations
 
 import json
@@ -62,8 +55,7 @@ class Session:
         return sum(len(m["content"]) for m in self.history) > COMPACT_THRESHOLD_CHARS
 
     def _cut_index(self) -> int:
-        """압축 경계 인덱스. user/assistant **쌍 경계를 보존**한다(리뷰 M3 — 홀수 히스토리에서
-        assistant 가 user 없이 고아가 되지 않도록). 자를 것이 없으면 0."""
+        """압축 경계 인덱스. user/assistant 쌍 경계를 보존한다(홀수 히스토리에서 assistant 고아 방지). 자를 것이 없으면 0."""
         keep = KEEP_RECENT_TURNS * 2
         if len(self.history) <= keep:
             return 0
@@ -77,11 +69,7 @@ class Session:
         return self.history[: self._cut_index()]
 
     def apply_compaction(self, summary: str) -> None:
-        """오래된 메시지들을 LLM 요약 한 쌍으로 치환한다. 최근 턴 원본은 유지.
-
-        자를 오래된 메시지가 없으면 아무것도 하지 않는다(리뷰 M1 — 거대 단일 턴에서
-        합성 요약만 덧붙어 히스토리가 오히려 커지는 것 방지).
-        """
+        """오래된 메시지들을 LLM 요약 한 쌍으로 치환한다(최근 턴 원본 유지). 자를 것이 없으면 no-op(거대 단일 턴에서 히스토리가 커지는 것 방지)."""
         cut = self._cut_index()
         if cut == 0 or not summary.strip():
             return

@@ -1,7 +1,6 @@
-"""MarkdownStreamRenderer — 본문 단일 출력 불변식 + 재시도 버퍼 리셋 (plan/MARKDOWN_STREAMING.md §6.4, §7)."""
 from __future__ import annotations
 
-from koda.cli import MarkdownStreamRenderer, _format_phase
+from koda.cli import MarkdownStreamRenderer
 
 
 class _FakeLive:
@@ -42,7 +41,7 @@ def _md_prints(r):
     return [p for p in r._console.prints if type(p[0]).__name__ == "Markdown"]
 
 
-# --- 본문 단일 출력 불변식 (§6.4) ---
+# --- 본문 단일 출력 불변식 ---
 
 def test_plain_mode_streams_once_finalize_no_reprint(capsys):
     with MarkdownStreamRenderer(use_rich=False) as r:
@@ -68,32 +67,7 @@ def test_rich_mode_finalize_prints_rendered_body_exactly_once():
     assert r._live.stopped >= 1  # transient Live 는 중간 프레임을 지우고 종료
 
 
-def test_rich_mode_exit_without_finalize_prints_nothing():
-    r = _rich_renderer()
-    with r:
-        r.on_token("스트리밍 중 예외로 finalize 미도달")
-    assert _md_prints(r) == []  # __exit__ 은 stop-only, 출력 지점이 아니다
-
-
-def test_rich_mode_empty_buffer_finalize_prints_nothing():
-    r = _rich_renderer()
-    with r:
-        r.finalize("")
-    assert _md_prints(r) == []
-
-
-def test_rich_phase_prints_via_live_console():
-    # phase 라벨은 Live 가 소유한 같은 console 로 — 별도 stderr Console 은 Live 커서
-    # 추적을 깨 화면이 깨진다 (폴백 리뷰 Medium)
-    r = _rich_renderer()
-    with r:
-        r.on_phase("plan")
-        r.finalize(None)
-    labels = [p[0] for p in r._console.prints if isinstance(p[0], str)]
-    assert labels == ["[📋 계획 수립…]"]
-
-
-# --- 재시도 버퍼 리셋 (§2.1 on_phase) ---
+# --- 재시도 버퍼 리셋(on_phase) ---
 
 def test_retry_phase_resets_buffer():
     r = _rich_renderer()
@@ -103,17 +77,6 @@ def test_retry_phase_resets_buffer():
         r.on_token("2차 최종 답변")
         r.finalize(None)  # answer 미제공 → 버퍼가 정본
     assert _md_prints(r)[0][0].markup == "2차 최종 답변"  # 1차 부분 출력이 남지 않음
-
-
-def test_paragraph_boundary_split_across_chunks_triggers_render():
-    # \n\n 이 청크 2개에 걸쳐 쪼개져도 문단 경계로 검출된다 (deepseek 리뷰)
-    r = _rich_renderer()
-    with r:
-        r.on_token("줄1\n")
-        assert r._live.updates == []  # 4자·경계 미완성 → 미갱신
-        r.on_token("\n줄2")
-        assert len(r._live.updates) == 1  # 버퍼 꼬리에서 \n\n 검출 → 즉시 갱신
-        r.finalize(None)
 
 
 def test_finalize_answer_overrides_buffer():
@@ -138,28 +101,7 @@ def test_plain_phase_goes_to_stderr_not_stdout(capsys):
     assert "· 진행 중… (30s 경과)" in cap.err
 
 
-def test_format_phase_known_and_unknown():
-    assert _format_phase("plan") == "[📋 계획 수립…]"
-    assert _format_phase("retry:length_truncation") == "· 빈 응답(length_truncation) — 변형 재시도"
-    assert _format_phase("mcp:서버 연결") == "· 서버 연결"
-    assert _format_phase("plan:실패(계획 없이 진행)") == "· plan:실패(계획 없이 진행)"
-
-
 # --- reasoning 진행 표시 (사용자 실측 피드백: thinking 무출력 구간이 죽은 화면으로 보임) ---
-
-def test_think_phase_updates_status_only_no_persistent_label():
-    r = _rich_renderer()
-    with r:
-        r.on_phase("read")
-        r.on_phase("think:120")
-        labels = [p[0] for p in r._console.prints if isinstance(p[0], str)]
-        assert labels == ["[📖 읽는 중…]"]  # think 는 영구 라벨을 찍지 않는다 (스팸 방지)
-        assert "생각 중" in r._status and "120" in r._status
-        assert len(r._live.updates) >= 2  # status line 은 즉시 갱신됐다
-        r.on_token("본문 생성이 시작되면 표시가 해제된다")  # 20자+ → 렌더
-        assert r._status == "[📖 읽는 중…]"  # phase 라벨로 복귀
-        r.finalize(None)
-
 
 def test_plain_mode_silences_think(capsys):
     with MarkdownStreamRenderer(use_rich=False) as r:

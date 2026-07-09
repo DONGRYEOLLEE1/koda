@@ -1,9 +1,3 @@
-"""Permission/HITL middleware: 위험 도구 실행 전 게이트 (AgentMiddleware).
-
-**안전(읽기 전용) 도구만 자동 허용**하고, 그 외 모든 도구(내장 위험 도구 + MCP/외부 주입 도구)는
-approver 승인 없이는 실행하지 않는다(default-deny). 동기(wrap_tool_call)·비동기(awrap_tool_call)
-실행 경로 모두에서 게이트한다 — MCP 도구는 async 로 실행되므로 양쪽이 필요하다.
-"""
 from __future__ import annotations
 
 from langchain.agents.middleware import AgentMiddleware
@@ -20,11 +14,7 @@ def _command_text(call: dict) -> str:
 
 
 class PermissionMiddleware(AgentMiddleware):
-    """approver: (tool_name, args) -> bool. SAFE_TOOLS 외 모든 도구를 게이트한다.
-
-    approver 이전에 정적 deny gate(denygate)가 먼저 돈다 — hard deny 는 `--yes`(auto 승인)로도
-    우회 불가, confirm 등급은 대화형 승인만 허용한다(ROADMAP §2.5).
-    """
+    """approver: (tool_name, args) -> bool. SAFE_TOOLS 외 전부 게이트, denygate 가 앞단에서 hard deny/confirm 을 가른다."""
 
     def __init__(self, approver, agent: str = "main", mcp_auto_approve=()):
         super().__init__()

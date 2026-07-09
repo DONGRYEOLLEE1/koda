@@ -1,15 +1,3 @@
-"""조사용 셸 도구 (investigator·planner). LLM 이 안전한 명령을 낸다고 가정하고 자유 실행하되,
-denygate 재앙-플로어만 하드 차단한다 — TOOL_CALLING_REFACTOR §4(분류기 폐기).
-
-"이 셸 문자열이 진짜 read-only 인가"를 정적으로 증명하려던 분류기는 원리적으로 불건전·무한이라
-(agy 우회 다수) 폐기했다. 건전한(sound) 보안 경계는 **승인(사람)** 또는 **샌드박스(OS)** 뿐이고,
-정적 파서는 둘 중 어느 것도 아니다. 그래서 여기서는:
-- **유한한 재앙 deny-list(`denygate`)만 집행** — rm -rf·sudo·자격증명(.ssh/id_rsa/.env) 접근·
-  워크스페이스 밖 쓰기·원격스크립트 실행 등. 이건 작고 유지 가능한 sound 한 하드 차단이다.
-- 그 외는 **LLM 을 신뢰해 `bash -c` 로 자유 실행**(파이프·글롭·순차 조합).
-SAFE_TOOLS(자동 실행)이므로 파일을 바꾸는 명령은 넣지 말라고 프롬프트로 지시하되, 실수의 재앙만
-denygate 가 막는다. 신뢰 불가 저장소를 열 땐 bwrap read-only 샌드박스(§4-B) 권고(있으면 자동 적용).
-"""
 from __future__ import annotations
 
 import os
@@ -34,8 +22,7 @@ def _warn_no_sandbox_once() -> None:
 
 
 def _readonly_bwrap_prefix(ws: Workspace) -> list[str] | None:
-    """있으면 read-only 심층방어 샌드박스(§4-B): 워크스페이스만 ro-bind + 필요한 시스템 디렉터리.
-    호스트 루트 전체는 노출하지 않는다. 부재/off 면 None."""
+    """있으면 read-only 심층방어 샌드박스: 워크스페이스만 ro-bind, 호스트 루트는 노출 안 함. 부재/off 면 None."""
     if os.environ.get("BH_SANDBOX") == "off" or not shutil.which("bwrap"):
         return None
     prefix = ["bwrap", "--unshare-all", "--die-with-parent", "--new-session",
@@ -83,7 +70,7 @@ def make_readonly_shell_tools(ws: Workspace) -> list:
         """
         if not isinstance(command, str):
             return "오류: command 는 문자열이어야 한다."
-        hit = check_command(command)  # 유한한 재앙 deny-list 만 하드 차단(§4)
+        hit = check_command(command)  # 유한한 재앙 deny-list 만 하드 차단
         if hit is not None:
             return f"거부됨(안전 차단): {hit[1]}. 이 명령은 조사 경로에서 실행할 수 없다."
         prefix = _readonly_bwrap_prefix(ws)

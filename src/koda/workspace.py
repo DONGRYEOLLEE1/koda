@@ -1,11 +1,9 @@
-"""워크스페이스 루트 스코프. 루트 밖 경로 접근을 차단한다 (PLAN §3.0 샌드박스 불변식)."""
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-# 순회에서 제외할 무거운/무관한 디렉토리 (컨텍스트 폭증 방지).
-# .koda 는 koda 산출물(세션·메모리·artifact) — 에이전트 파일 도구로 노출하지 않는다(§2.3).
+# 순회에서 제외할 무거운/무관한 디렉토리. .koda 는 koda 산출물(세션·메모리·artifact)이라 노출하지 않는다.
 _IGNORE_DIRS = {
     ".git", ".venv", "venv", "__pycache__", "node_modules", ".mypy_cache",
     ".pytest_cache", ".ruff_cache", ".idea", ".vscode", ".tox", "dist", "build", ".koda",

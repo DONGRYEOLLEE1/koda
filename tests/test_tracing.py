@@ -1,4 +1,3 @@
-"""핵심 모듈: tracing (langfuse 배선; 키 없으면 조용히 비활성, 실행은 계속)."""
 from __future__ import annotations
 
 from koda.tracing import Tracer, get_tracer

@@ -1,9 +1,3 @@
-"""워크스페이스 스킬 로더.
-
-`<workspace>/skills/*/SKILL.md` 를 스캔해 Claude Code Agent Skills 와 동일한 모델로
-에이전트에 주입한다. 각 SKILL.md 는 YAML frontmatter(name, description) + 마크다운 본문.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,11 +14,7 @@ class Skill:
 
 
 def _parse_frontmatter(text: str) -> dict[str, str]:
-    """SKILL.md 첫 --- 블록에서 name/description 을 파싱한다.
-
-    yaml 이 있으면 우선 사용(멀티라인 description 등 정식 YAML 대응), 없으면 key: value
-    단일 줄 최소 파서로 폴백한다 (mcp.py 선례 — yaml 은 전이 의존성이라 없을 수 있다).
-    """
+    """SKILL.md 첫 --- 블록에서 name/description 을 파싱한다. yaml 우선, 없으면 key: value 최소 파서로 폴백."""
     if not text.startswith("---"):
         return {}
     rest = text[3:]
@@ -52,11 +42,7 @@ def _parse_frontmatter(text: str) -> dict[str, str]:
 
 
 def load_skills(ws_root: str) -> list[Skill]:
-    """<ws_root>/skills/*/SKILL.md 를 스캔해 Skill 목록을 반환한다.
-
-    - frontmatter 파싱 실패나 skills/ 폴더 없음은 정상(빈 리스트).
-    - 개별 스킬 파싱 실패는 graceful skip (MCP 선례).
-    """
+    """<ws_root>/skills/*/SKILL.md 를 스캔해 Skill 목록을 반환한다. 폴더 없음/개별 파싱 실패는 빈 리스트·skip 으로 무해 처리."""
     skills_dir = Path(ws_root) / "skills"
     if not skills_dir.is_dir():
         return []

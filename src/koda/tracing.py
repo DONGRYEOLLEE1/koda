@@ -1,9 +1,3 @@
-"""Langfuse 기반 추적. 로컬 파일 저장 없이 langfuse 로 보낸다.
-
-CallbackHandler 를 에이전트 실행 config 에 넘기면, 각 에이전트/툴/모델 호출의 입출력과
-**단계별 token 사용량**이 자동으로 langfuse trace 로 기록된다. 키가 없거나 langfuse 가
-닿지 않으면 추적을 조용히 끄고 실행은 계속한다.
-"""
 from __future__ import annotations
 
 import os
@@ -33,8 +27,7 @@ class Tracer:
                 pass
 
     def trace_url(self):
-        # 실행 종료 후에는 active span 컨텍스트가 없어 특정 trace URL 을 얻을 수 없으므로
-        # langfuse UI 주소를 반환한다(경고 회피).
+        # 종료 후엔 특정 trace URL 을 못 얻어 langfuse UI 주소를 대신 반환한다.
         return self._host if self._client else None
 
 

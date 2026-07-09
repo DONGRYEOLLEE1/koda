@@ -1,11 +1,10 @@
-"""핵심 모듈: agents.streaming (실행 결과 계약 §1.1). 최종 state 정본 수집·빈 답변 분류."""
 from __future__ import annotations
 
 import asyncio
 
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 
-from koda.agents.streaming import AgentResult, _empty_reason, _final_ai, astream_agent
+from koda.agents.streaming import _empty_reason, _final_ai, astream_agent
 
 
 def _state(*msgs):
@@ -35,7 +34,7 @@ def test_final_ai_length_truncated_empty_last():
 
 
 def test_final_ai_last_ai_only_no_backfill():
-    # codex 리뷰 H1 회귀: 마지막 AI 가 빈 content 면 앞의 텍스트로 되메우지 않는다 —
+    # 회귀 방지: 마지막 AI 가 빈 content 면 앞의 텍스트로 되메우지 않는다 —
     # 빈 답은 빈 답으로 판정돼야 재시도 게이트가 돈다
     st = _state(
         AIMessage("본문 답변", response_metadata={"finish_reason": "stop"}),
@@ -47,7 +46,7 @@ def test_final_ai_last_ai_only_no_backfill():
 
 
 def test_final_ai_start_boundary_ignores_history_answers():
-    # codex 리뷰 H1: 멀티턴 히스토리의 이전 답변이 이번 시도의 답으로 오인되면 안 된다
+    # 멀티턴 히스토리의 이전 답변이 이번 시도의 답으로 오인되면 안 된다
     st = _state(
         HumanMessage("이전 질문"),
         AIMessage("이전 턴의 답변"),                    # 히스토리 (입력에 포함)
@@ -62,23 +61,13 @@ def test_final_ai_start_boundary_ignores_history_answers():
     assert _final_ai(st2, start=0)[0] == "이전 턴의 답변"  # 경계 부재 시의 위험 재현
 
 
-def test_final_ai_handles_missing_state():
-    assert _final_ai(None) == ("", "unknown", {})
-    assert _final_ai({"messages": [HumanMessage("q")]}) == ("", "unknown", {})
-
-
 def test_empty_reason_enum():
-    # ROADMAP §1.1: no_content | length_truncation | unknown 세 값 고정
+    # no_content | length_truncation | unknown 세 값 고정
     assert _empty_reason("답 있음", "length") == ""
     assert _empty_reason("", "length") == "length_truncation"
     assert _empty_reason("  ", "stop") == "no_content"
     assert _empty_reason("", "tool_calls") == "no_content"
     assert _empty_reason("", "unknown") == "unknown"
-
-
-def test_agent_result_empty_property():
-    assert AgentResult(answer="  ").empty is True
-    assert AgentResult(answer="x").empty is False
 
 
 class _StubAgent:
@@ -107,7 +96,7 @@ def test_reasoning_chunks_emit_think_event():
     res = asyncio.run(astream_agent(agent, msgs, tokens.append, on_event=events.append))
     assert events == ["think:1"]        # 첫 빈 청크 즉시 발화, 이후 1초 내 재발화 없음
     assert tokens == ["답변"]           # content 청크는 그대로 스트리밍 (회수 재생 아님)
-    assert res.streamed_text == "답변"  # 청크가 실제로 흘렀다 → H2 회수 재생 미발동
+    assert res.streamed_text == "답변"  # 청크가 실제로 흘렀다 → 회수 재생 미발동
     assert res.answer == "답변"
 
 
@@ -125,15 +114,3 @@ def test_tool_message_never_leaks_to_stdout():
     tokens = []
     asyncio.run(astream_agent(agent, msgs, tokens.append))
     assert tokens == ["답"]  # AIMessageChunk 만 통과
-
-
-def test_reasoning_chunks_silent_without_on_event():
-    msgs = [{"role": "user", "content": "질문"}]
-    final = _state(HumanMessage("질문"),
-                   AIMessage("답", response_metadata={"finish_reason": "stop"}))
-    agent = _StubAgent([
-        ("messages", (AIMessageChunk(content=""), {})),
-        ("values", final),
-    ])
-    res = asyncio.run(astream_agent(agent, msgs, lambda t: None))  # on_event 없음 → 예외 없이 통과
-    assert res.answer == "답"

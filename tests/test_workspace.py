@@ -1,4 +1,3 @@
-"""핵심 모듈: workspace (루트 스코프 샌드박스)."""
 from __future__ import annotations
 
 import pytest

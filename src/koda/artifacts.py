@@ -1,4 +1,3 @@
-"""도구 원본 출력 artifact 저장: 발췌는 프롬프트로, 원문은 `.koda/artifacts/` 로 (ROADMAP §2.3)."""
 from __future__ import annotations
 
 import hashlib
@@ -27,8 +26,7 @@ class ArtifactStore:
 
     def __init__(self, ws_root: Path, run_id: str):
         self.dir = Path(ws_root) / ".koda" / "artifacts" / run_id
-        # 같은 세션의 다음 턴이 같은 디렉터리를 이어 쓴다 — 기존 최대 번호+1 로 이어 충돌 방지
-        # (개수 기반이면 retention 삭제 도입 시 기존 파일을 덮어쓴다 — 리뷰 M3)
+        # 같은 세션의 다음 턴이 같은 디렉터리를 이어 쓴다 — 기존 최대 번호+1 로 이어 충돌 방지.
         nums = [int(p.name[:3]) for p in self.dir.glob("*.txt") if p.name[:3].isdigit()] \
             if self.dir.is_dir() else []
         self._seq = max(nums, default=0)

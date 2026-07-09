@@ -1,12 +1,3 @@
-"""langchain 콜백 핸들러: 툴 실행 시작/종료를 TUI 메시지(ToolStart/ToolEnd)로 변환한다.
-
-**설계 핵심(plan/TUI_UI_OVERHAUL.md)**: astream_agent·graph 노드·run_task 의 스트리밍 로직을
-건드리지 않는다. koda 는 이미 langfuse CallbackHandler 를 config.callbacks 로 넘겨 모든 툴 호출
-입출력을 관측한다 — 툴 렌더링도 같은 채널에 얹는다. TUI 전용이므로 CLI(run/chat)는 이 핸들러를
-넘기지 않고, 따라서 툴 output 비노출 동작이 그대로 유지된다.
-
-제목은 별도 LLM 호출 없이 **도구별 템플릿**을 완성된 tool input(args)으로 만든다(모델 부담 0).
-"""
 from __future__ import annotations
 
 import re
@@ -17,9 +8,7 @@ from .model import ToolEnd, ToolStart
 
 _OUTPUT_LIMIT = 2000  # 툴 output 표시 상한 (긴 파일 내용·셸 출력 절단)
 
-# `KEY=value`·`token: ...` 처럼 자격증명 대입으로 보이는 줄의 값만 가린다. read_file 로 .env 를
-# 열거나 셸 출력에 시크릿이 섞여도 스크롤백에 평문으로 남지 않게 한다(승인 modal redaction 과 일관).
-# 값 부분만 치환하므로 일반 코드/산문은 건드리지 않는다.
+# 자격증명 대입으로 보이는 줄의 값만 가려 read_file/.env·셸 출력의 시크릿이 스크롤백에 평문으로 남지 않게 한다.
 _SECRET_LINE = re.compile(
     r"(?im)^(\s*[\w.\-]*(?:token|secret|password|authorization|credential|api[_-]?key)[\w.\-]*\s*[=:]\s*)(\S+)"
 )
@@ -34,10 +23,7 @@ def _trim(text: str) -> str:
 
 
 def tool_title(name: str, args: dict) -> str:
-    """도구 + 완성된 args → 표시용 제목. 모델이 아니라 koda 가 결정론으로 만든다.
-
-    args 가 비거나 예상 키가 없으면 도구 이름으로 폴백 — UI 에 빈 헤더가 나오지 않게.
-    """
+    """도구 + 완성된 args → 표시용 제목. 결정론으로 만들며, 예상 키가 없으면 도구 이름으로 폴백한다."""
     args = args if isinstance(args, dict) else {}
     short = name
     if name in ("run_command", "run_readonly_command"):
@@ -70,11 +56,7 @@ def tool_title(name: str, args: dict) -> str:
 
 
 class ToolActivityHandler(BaseCallbackHandler):
-    """툴 실행을 관측해 TUI 로 post 한다. run_id(툴 실행 단위 UUID)로 start↔end 를 매칭한다.
-
-    post 는 app.post_message(thread-safe) — 콜백은 worker/executor thread 에서 발화하지만
-    runner 의 기존 메시지 계약과 동일하게 안전하다.
-    """
+    """툴 실행을 관측해 TUI 로 post 한다. run_id 로 start↔end 를 매칭하며, post 는 thread-safe 하다."""
 
     def __init__(self, post) -> None:
         self._post = post

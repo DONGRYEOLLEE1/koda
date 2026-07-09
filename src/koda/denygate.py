@@ -1,4 +1,3 @@
-"""정적 deny gate: LLM·사용자 승인 판단 이전의 하드 경계. `--yes` 로도 우회 불가 (ROADMAP §2.5)."""
 from __future__ import annotations
 
 import re
@@ -29,8 +28,7 @@ _CONFIRM = [
     (re.compile(r"\b(cp|mv|tee|dd)\b[^|;&]*(\s/\S+|\s\.\./)"), "워크스페이스 밖 경로 대상 쓰기성 명령"),
 ]
 
-# rm 은 플래그 순서·장문 플래그(--recursive 등) 우회가 많아 단일 정규식 대신 2단 판정한다
-# (리뷰 H1: `rm -rf .`/`rm --recursive --force /` 류가 플래그-결합 패턴을 우회했다).
+# rm 은 플래그 순서·장문 플래그 우회가 많아 단일 정규식 대신 2단으로 판정한다(예: rm --recursive --force /).
 _RM_SEG = re.compile(r"\brm\b([^|;&]*)")
 _RM_RECURSIVE = re.compile(r"(^|\s)-\w*[rR]|\s--recursive\b")
 _RM_DANGER_TARGET = re.compile(
