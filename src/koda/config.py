@@ -60,6 +60,14 @@ class ModelSettings(BaseSettings):
     # 조정하면 이 값도 함께 조정.
     context_budget_tokens: int = Field(default=64000, alias="CONTEXT_BUDGET_TOKENS")
 
+    # 자동 승인할 읽기 전용 MCP 도구 이름(쉼표 구분). 기본 빈 값 = 현행(모든 MCP 가 HITL). opt-in.
+    # 쓰기성·내부망 도달 가능(SSRF) MCP 이름은 넣지 마라 — 자동 실행되어 유출 위험이 된다.
+    mcp_auto_approve: str = Field(default="", alias="KODA_MCP_AUTO_APPROVE")
+
+    @property
+    def mcp_auto_approve_set(self) -> frozenset[str]:
+        return frozenset(x.strip() for x in self.mcp_auto_approve.split(",") if x.strip())
+
     @field_validator("local_base_url", "openai_base_url")
     @classmethod
     def _must_be_http(cls, v: str) -> str:

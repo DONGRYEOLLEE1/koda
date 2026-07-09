@@ -32,8 +32,12 @@ __all__ = [
 
 
 def make_readonly_tools(ws: Workspace) -> list:
-    """읽기 전용 파일 도구만 (reader 에이전트용)."""
-    return make_filesystem_tools(ws)
+    """읽기 전용 파일 도구 + read-only 셸 (reader·explore 에이전트용).
+
+    reader 도 일괄 셸을 갖게 해 '폴더 훑기' 가 read 경로로 오분류돼도 40콜 폭주가 재발하지
+    않게 한다(분기 면역). 쓰기 불변식은 denygate + (가용 시) bwrap 이 유지한다.
+    """
+    return make_filesystem_tools(ws) + make_readonly_shell_tools(ws)
 
 
 def make_inspect_tools(ws: Workspace) -> list:

@@ -16,8 +16,10 @@
 
 변경 도구:
 
-- `write_file(path, content)`: 파일 생성 또는 전체 덮어쓰기.
-- `edit_file(path, old, new)`: 기존 파일의 일부를 치환.
+- `write_file(path, content)`: 파일 생성 또는 전체 덮어쓰기(원자적).
+- `edit_file(path, old, new, replace_all=False)`: 부분 치환. old 는 기본 1회 유일 매칭, `replace_all=True` 면 전역 치환.
+- `multi_edit(path, edits=[{old,new},...])`: 한 파일 여러 hunk 를 1콜로(순서 적용, 하나라도 실패하면 전부 롤백).
+- `patch_file(path, start_line, end_line, replacement, expected_head=None)`: read_file 이 준 줄번호로 범위를 교체/삭제/삽입. `expected_head` 로 그 줄을 검증해 드리프트를 막는다. 다만 내용 매칭이 아니라 좌표 기반이라, 기본 편집은 `edit_file`/`multi_edit`(old/new) 를 우선한다.
 - `create_dir(path)`: 디렉토리 생성.
 - `delete_path(path)`: 파일 또는 디렉토리 삭제.
 
@@ -63,6 +65,8 @@
 - 함수 선언, 주변 조건문, 인접한 여러 줄 등 충분한 문맥을 포함해 유일하게 매칭되도록 구성한다.
 - 같은 코드 조각이 여러 번 있을 가능성이 있으면 먼저 `read_file`로 대상 파일을 다시 확인한다.
 - 유일 매칭을 확신할 수 없으면 더 넓은 문맥을 포함하거나, 전체 파일 덮어쓰기가 더 안전한지 판단한다.
+- 편집이 실패하면 도구 메시지가 근접 후보 줄이나 각 일치 위치를 알려주니, 그 정보로 `old` 를 고쳐 다시 시도한다(같은 실패의 추측 반복 금지).
+- 같은 파일에 수정이 여러 곳이면 `multi_edit` 로 한 콜에 처리한다(승인·재읽기 횟수 절감). 의도적 전역 치환은 `replace_all=True`.
 
 ## 검증 원칙
 

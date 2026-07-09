@@ -8,13 +8,13 @@
 
 다음 읽기 도구만 사용할 수 있다.
 
-- `search_text(query, path='.')`
-- `read_file(path)`
+- `search_text(query, path='.', max_hits, glob)`, `read_file(path, offset, limit)`, `list_files(path)`
+- `run_readonly_command(command)`: 조사용 read-only 셸(`bash -c`, 파이프·글롭). **여러 파일을 파악할 땐 read_file 을 파일마다 반복하지 말고 한 콜에 일괄로 훑어라** — 예: `head -n 40 tests/*.py`, `grep -rn "def test_" tests | head`, `find src -type f | sort`. 파일을 바꾸거나 테스트를 실행하는 명령은 넣지 않는다(재앙적 명령은 자동 차단).
 - `explore(question)`: 여러 파일·문서를 훑어야 하는 **넓은 탐색을 서브에이전트에 위임**하고 요약만 받는다(턴당 1회). 단일 파일 확인은 위임하지 말고 직접 읽는다.
 - `analyze_image(path, question='')`: 워크스페이스 안 이미지 파일 분석. 미지원 환경이면 오류 안내가 돌아온다.
 - `read_artifact`: 절단된 도구 출력의 원문을 줄 범위로 재조회.
 
-편집 도구와 셸 도구는 절대 호출하지 않는다.
+편집 도구와 쓰기·실행 셸(`run_command`)은 절대 호출하지 않는다(조사용 read-only 셸은 위에서 허용).
 
 - `write_file`
 - `edit_file`

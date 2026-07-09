@@ -26,10 +26,11 @@ class PermissionMiddleware(AgentMiddleware):
     우회 불가, confirm 등급은 대화형 승인만 허용한다(ROADMAP §2.5).
     """
 
-    def __init__(self, approver, agent: str = "main"):
+    def __init__(self, approver, agent: str = "main", mcp_auto_approve=()):
         super().__init__()
         self._approver = approver
         self._agent = agent
+        self._mcp_auto = frozenset(mcp_auto_approve)  # 자동 승인 허용된 읽기 전용 MCP 이름(opt-in)
 
     def _tool_error(self, call, msg):
         return ToolMessage(content=msg, tool_call_id=call.get("id", ""), name=call.get("name"), status="error")
@@ -50,7 +51,7 @@ class PermissionMiddleware(AgentMiddleware):
                     return self._tool_error(
                         call, f"거부됨(HITL 필수): {reason}. 자동 승인(--yes)으로는 실행할 수 없다."
                     )
-        if name not in SAFE_TOOLS and not self._approver(name, call.get("args")):
+        if name not in SAFE_TOOLS and name not in self._mcp_auto and not self._approver(name, call.get("args")):
             return ToolMessage(
                 content=f"거부됨: 사용자가 '{name}' 실행을 승인하지 않았습니다.",
                 tool_call_id=call.get("id", ""),

@@ -28,7 +28,7 @@ class AgentSpec:
     max_steps: int = 25  # 이 에이전트 1회 실행당 도구 호출 하드 캡 (도구 루프 폭주 방지)
 
     def build(self, model, ws, approver, extra_tools=(), memory_text: str = "", store=None,
-              skills=(), context_budget: int = 64000):
+              skills=(), context_budget: int = 64000, mcp_auto_approve=()):
         system = load_prompt(self.name)
         # 컨텍스트 예산 소프트 가이드(§Phase A): 약한 모델이 스스로 절약 판단하도록 실효 예산과
         # 전략을 알린다. 하드 집행은 StepBudget·HistoryTrim 이 하고, 이 문구는 유도만 한다.
@@ -61,7 +61,7 @@ class AgentSpec:
             # 순서: 스텝 상한(최외곽) → 권한 게이트 → 도구출력 1건 상한 → 턴 누적 프롬프트 상한.
             middleware=[
                 StepBudgetMiddleware(self.max_steps),
-                PermissionMiddleware(approver, self.name),
+                PermissionMiddleware(approver, self.name, mcp_auto_approve),
                 ToolOutputTrimMiddleware(store=store),
                 HistoryTrimMiddleware(max_prompt_tokens=context_budget),
             ],

@@ -52,6 +52,7 @@ def test_hard_deny(cmd):
     "cp secret.txt /home/user/.bashrc",  # 리뷰 M1: 워크스페이스 밖 쓰기성 명령
     "tee /etc/hosts",
     "mv build ../elsewhere/",
+    "find . -name '*.env' -exec cat {} +",  # -exec 임의 명령: .env 글롭이 confirm 패턴을 우회해도 게이트
 ])
 def test_confirm_required(cmd):
     got = check_command(cmd)

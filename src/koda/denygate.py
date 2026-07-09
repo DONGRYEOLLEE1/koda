@@ -23,6 +23,8 @@ _CONFIRM = [
     (re.compile(r"\bid_(rsa|ed25519)\b|\bcredentials\b|\.pem\b"), "개인키/자격증명 파일 접근"),
     (re.compile(r"(^|[\s;&|/])\.env(\.\w+)?\b"), "환경 비밀 파일 접근"),
     (re.compile(r"\bgit\s+push\s+.*--force\b|\bgit\s+push\s+-f\b"), "원격 히스토리 강제 덮어쓰기"),
+    (re.compile(r"\bfind\b[^|;&]*\s-exec\b"), "find -exec 임의 명령 실행"),  # -exec rm 은 위에서 deny
+
     # 워크스페이스 밖으로의 쓰기 가능 명령(절대경로/상위경로 인자) — OS 격리(bwrap) 부재 시 1차 방어
     (re.compile(r"\b(cp|mv|tee|dd)\b[^|;&]*(\s/\S+|\s\.\./)"), "워크스페이스 밖 경로 대상 쓰기성 명령"),
 ]

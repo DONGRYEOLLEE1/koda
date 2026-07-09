@@ -54,6 +54,10 @@ def tool_title(name: str, args: dict) -> str:
         return f"목록 · {path}" if path and path != "." else "파일 목록"
     if name == "edit_file":
         return f"수정 · {path}" if path else "파일 수정"
+    if name == "multi_edit":
+        return f"다중수정 · {path}" if path else "다중 수정"
+    if name == "patch_file":
+        return f"패치 · {path}" if path else "라인 패치"
     if name == "write_file":
         return f"쓰기 · {path}" if path else "파일 쓰기"
     if name == "create_dir":

@@ -21,6 +21,7 @@ from langchain.tools import tool
 
 from ..denygate import check_command
 from ..workspace import Workspace
+from .shell import _fmt_output
 
 _no_sandbox_warned = False
 
@@ -98,10 +99,6 @@ def make_readonly_shell_tools(ws: Workspace) -> list:
             return f"오류: 시간 초과({timeout}s). 더 좁은 범위로 다시 시도하라."
         except Exception as e:  # 어떤 예외도 그래프로 흘리지 않는다(ToolNode re-raise 크래시 방지)
             return f"오류: 명령 실행 실패({type(e).__name__})."
-        return (
-            f"exit_code={proc.returncode}\n"
-            f"stdout:\n{proc.stdout[-6000:]}\n"
-            f"stderr:\n{proc.stderr[-1000:]}"
-        )
+        return _fmt_output(proc.returncode, proc.stdout, proc.stderr)
 
     return [run_readonly_command]

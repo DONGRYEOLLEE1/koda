@@ -67,6 +67,21 @@ def _workspace_env(ws: Workspace) -> dict:
     return env
 
 
+def _fmt_output(returncode: int, stdout: str, stderr: str,
+                head: int = 40, tail: int = 40, err: int = 20) -> str:
+    """긴 출력을 head+tail 로 발췌하고 생략 줄수를 명시한다 — tail-only 절단의 불투명성 방지(P8)."""
+    def cut(text: str, h: int, t: int) -> str:
+        lines = text.splitlines()
+        if len(lines) <= h + t:
+            return text
+        return "\n".join(lines[:h] + [f"…({len(lines) - h - t}줄 생략)…"] + lines[-t:])
+    return (
+        f"exit_code={returncode}\n"
+        f"stdout:\n{cut(stdout, head, tail)}\n"
+        f"stderr:\n{cut(stderr, err, err)}"
+    )
+
+
 def make_shell_tools(ws: Workspace) -> list:
     """워크스페이스에 바인딩된 셸 도구 목록 (위험)."""
 
@@ -93,10 +108,6 @@ def make_shell_tools(ws: Workspace) -> list:
             return f"오류: 시간 초과({timeout}s): {command}. 더 작은 범위의 명령으로 다시 시도하라."
         except Exception as e:  # 예외를 그래프로 흘리지 않는다 — ToolNode re-raise 크래시 방지
             return f"오류: 명령 실행 실패({type(e).__name__})."
-        return (
-            f"exit_code={proc.returncode}\n"
-            f"stdout:\n{proc.stdout[-4000:]}\n"
-            f"stderr:\n{proc.stderr[-2000:]}"
-        )
+        return _fmt_output(proc.returncode, proc.stdout, proc.stderr)
 
     return [run_command]

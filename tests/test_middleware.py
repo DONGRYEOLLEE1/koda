@@ -59,6 +59,22 @@ def test_gates_unknown_tool_by_default():
     assert ran["called"] is False and "거부" in result.content
 
 
+def test_mcp_auto_approve_allows_named_tool():
+    # opt-in allowlist 에 있는 읽기 전용 MCP 는 승인 없이 통과
+    ran = {"called": False}
+    mw = PermissionMiddleware(approver=lambda n, a: False, mcp_auto_approve={"web_search"})
+    mw.wrap_tool_call(_req("web_search", {"q": "x"}), _handler(ran))
+    assert ran["called"] is True
+
+
+def test_mcp_not_in_allowlist_still_gated():
+    # allowlist 밖 MCP 는 여전히 default-deny 게이트
+    ran = {"called": False}
+    mw = PermissionMiddleware(approver=lambda n, a: False, mcp_auto_approve={"web_search"})
+    result = mw.wrap_tool_call(_req("other_mcp", {}), _handler(ran))
+    assert ran["called"] is False and "거부" in result.content
+
+
 def test_awrap_blocks_dangerous_async():
     # async 실행 경로(MCP 도구는 async)에서도 게이트가 동작해야 한다
     ran = {"called": False}
@@ -143,6 +159,20 @@ def test_trim_leaves_short_output_untouched():
     mw = ToolOutputTrimMiddleware(max_chars=100)
     result = mw.wrap_tool_call(_req("t", {}), lambda r: ToolMessage(content="ok", tool_call_id="t1"))
     assert result.content == "ok"
+
+
+def test_trim_redacts_secrets_in_output():
+    # P9: 접근 경로(cat .env / find -exec cat / read_file)와 무관하게 도구 출력의 secret 을 마스킹
+    from koda.middleware import ToolOutputTrimMiddleware
+
+    mw = ToolOutputTrimMiddleware(max_chars=1000)
+    result = mw.wrap_tool_call(
+        _req("read_file", {}),
+        lambda r: ToolMessage(content="env: api_key=sk-ABCDEFGHIJKLMNOP1234",
+                              tool_call_id="t1", name="read_file"),
+    )
+    assert "[REDACTED]" in result.content
+    assert "sk-ABCDEFGHIJKLMNOP1234" not in result.content
 
 
 def test_trim_saves_artifact_and_links_ref(tmp_path):

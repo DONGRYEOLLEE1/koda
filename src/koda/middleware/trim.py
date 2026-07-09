@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from langchain.agents.middleware import AgentMiddleware
 
+from ..artifacts import redact
+
 # 오픈웹 벌크 검색/크롤류는 한 번에 수천~수만 자를 뱉어 턴 누적의 주범이다(실측: web_search
 # 결과가 스텝당 ~2074토큰씩 쌓여 32k 창 초과). 이 부류만 더 낮은 상한을 적용한다(§5.C).
 _SEARCH_TOOLS = ("web_search", "crawl", "scrape", "deep_research")
@@ -40,23 +42,28 @@ class ToolOutputTrimMiddleware(AgentMiddleware):
         content = getattr(result, "content", None)
         tool_name = getattr(result, "name", "") or ""
         cap = self._cap_for(tool_name)
-        if isinstance(content, str) and len(content) > cap:
-            result.content = content[:cap] + self._cut_note(tool_name, content, cap)
+        if isinstance(content, str):
+            content, _ = redact(content)  # P9: secret 마스킹 — 접근 경로(cat/find/read)와 무관
+            if len(content) > cap:
+                content = content[:cap] + self._cut_note(tool_name, content, cap)
+            result.content = content
         elif isinstance(content, list):  # MCP 도구는 content block 리스트
-            full = "\n".join(b.get("text") for b in content if isinstance(b, dict) and b.get("text"))
+            full = "\n".join(redact(b["text"])[0] for b in content
+                             if isinstance(b, dict) and b.get("text"))
             used, out, truncated = 0, [], False
             for block in content:
                 text = block.get("text") if isinstance(block, dict) else None
                 if text is None:
                     out.append(block)
                     continue
+                text = redact(text)[0]  # P9: 블록별 secret 마스킹
                 if used >= cap:
                     truncated = True
                     break  # 이후 텍스트 블록은 안내 블록으로 대체
                 if used + len(text) > cap:
-                    block = {**block, "text": text[: cap - used] + "…(절단)"}
+                    text = text[: cap - used] + "…(절단)"
                     truncated = True
-                out.append(block)
+                out.append({**block, "text": text})
                 used += len(text)
             if truncated:
                 out.append({"type": "text", "text": self._cut_note(tool_name, full, cap).strip()})

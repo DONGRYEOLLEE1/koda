@@ -107,7 +107,7 @@ class _SpySpec:
         self.models = []
 
     def build(self, model, ws, approver, extra_tools=(), memory_text="", store=None, skills=(),
-              context_budget=28000):
+              context_budget=28000, **kwargs):
         self.models.append(model)
         return object()
 
@@ -146,7 +146,7 @@ class _CaptureSpec(_SpySpec):
         self.extra_tools = []
 
     def build(self, model, ws, approver, extra_tools=(), memory_text="", store=None, skills=(),
-              context_budget=28000):
+              context_budget=28000, **kwargs):
         self.extra_tools = list(extra_tools)
         return super().build(model, ws, approver)
 

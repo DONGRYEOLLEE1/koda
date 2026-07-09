@@ -14,12 +14,12 @@ def test_tool_names_are_namespaced(make_workspace):
     assert names == {
         "read_file", "search_text", "list_files",
         "run_command",
-        "write_file", "edit_file",
+        "write_file", "edit_file", "multi_edit", "patch_file",
         "create_dir", "delete_path",
     }
     # 승인 게이트 대상: 셸 + 편집 도구
     assert DANGEROUS_TOOLS == {
-        "run_command", "write_file", "edit_file",
+        "run_command", "write_file", "edit_file", "multi_edit", "patch_file",
         "create_dir", "delete_path",
     }
 
@@ -139,6 +139,23 @@ def test_run_command_prefers_workspace_venv(make_workspace):
     assert "FROM_WORKSPACE_VENV" in out
 
 
+def test_reader_tools_include_readonly_shell(make_workspace):
+    # 분기 면역: reader 도 read-only 셸을 가져 '폴더 훑기' read 오분류 시 40콜 폭주 방지
+    from koda.tools import make_readonly_tools
+    names = {t.name for t in make_readonly_tools(make_workspace({}))}
+    assert "run_readonly_command" in names
+    assert {"read_file", "search_text", "list_files"} <= names
+
+
+def test_run_command_head_tail_excerpt(make_workspace):
+    # 긴 출력은 head+tail 로 발췌하고 생략을 명시한다(tail-only 절단 불투명 방지, P8)
+    tools = {t.name: t for t in make_shell_tools(make_workspace())}
+    out = tools["run_command"].invoke({"command": "seq 1 200"})
+    assert "1\n2\n3\n" in out          # head
+    assert "199\n200" in out           # tail
+    assert "생략" in out               # 절단 명시
+
+
 def test_editor_write_creates_file(make_workspace):
     ws = make_workspace({})
     tools = {t.name: t for t in make_editor_tools(ws)}
@@ -168,6 +185,50 @@ def test_editor_delete_and_sandbox(make_workspace):
     assert not (ws.root / "gone.txt").exists()
     with pytest.raises(SandboxError):
         tools["write_file"].invoke({"path": "../evil.txt", "content": "x"})
+
+
+def test_atomic_write_preserves_exec_bit(make_workspace):
+    # _atomic_write + copymode: 편집 후에도 실행 비트(chmod +x)가 보존돼야 한다
+    import os as _os
+    ws = make_workspace({"run.sh": "#!/bin/sh\necho old\n"})
+    (ws.root / "run.sh").chmod(0o755)
+    tools = {t.name: t for t in make_editor_tools(ws)}
+    tools["edit_file"].invoke({"path": "run.sh", "old": "old", "new": "new"})
+    assert _os.stat(ws.root / "run.sh").st_mode & 0o111        # 실행 비트 보존
+    assert "new" in (ws.root / "run.sh").read_text(encoding="utf-8")
+
+
+def test_edit_replace_all(make_workspace):
+    ws = make_workspace({"a.py": "v\nv\nv\n"})
+    tools = {t.name: t for t in make_editor_tools(ws)}
+    out = tools["edit_file"].invoke({"path": "a.py", "old": "v", "new": "w", "replace_all": True})
+    assert (ws.root / "a.py").read_text(encoding="utf-8") == "w\nw\nw\n"
+    assert "replace_all 3회" in out
+
+
+def test_edit_no_match_suggests_line(make_workspace):
+    ws = make_workspace({"a.py": "def hello():\n    return 1\n"})
+    tools = {t.name: t for t in make_editor_tools(ws)}
+    out = tools["edit_file"].invoke({"path": "a.py", "old": "def helo():", "new": "x"})
+    assert "실패" in out and "비슷한 줄" in out                  # 근접 후보 안내
+    assert (ws.root / "a.py").read_text(encoding="utf-8") == "def hello():\n    return 1\n"  # 무변경
+
+
+def test_multi_edit_applies_all(make_workspace):
+    ws = make_workspace({"a.py": "x = 1\ny = 2\n"})
+    tools = {t.name: t for t in make_editor_tools(ws)}
+    tools["multi_edit"].invoke({"path": "a.py", "edits": [
+        {"old": "x = 1", "new": "x = 10"}, {"old": "y = 2", "new": "y = 20"}]})
+    assert (ws.root / "a.py").read_text(encoding="utf-8") == "x = 10\ny = 20\n"
+
+
+def test_multi_edit_rolls_back_on_failure(make_workspace):
+    ws = make_workspace({"a.py": "x = 1\ny = 2\n"})
+    tools = {t.name: t for t in make_editor_tools(ws)}
+    out = tools["multi_edit"].invoke({"path": "a.py", "edits": [
+        {"old": "x = 1", "new": "x = 10"}, {"old": "NOPE", "new": "z"}]})
+    assert "실패" in out and "롤백" in out
+    assert (ws.root / "a.py").read_text(encoding="utf-8") == "x = 1\ny = 2\n"  # 전부 롤백
 
 
 def test_bwrap_prefix_disabled_paths(monkeypatch, tmp_path):

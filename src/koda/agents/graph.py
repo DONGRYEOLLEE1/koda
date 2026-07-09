@@ -105,7 +105,8 @@ def _planner_tools(mcp_tools: list) -> list:
 
 
 def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase, mcp_tools,
-                 memory_text="", store=None, explore_model=None, skills=(), context_budget=64000):
+                 memory_text="", store=None, explore_model=None, skills=(), context_budget=64000,
+                 mcp_auto_approve=()):
     # explore 는 reader 와 다른 reasoning 예산을 쓸 수 있다 (미지정 시 reader 와 동일)
     explore_model = model if explore_model is None else explore_model
     # pre-edit 스냅샷 (§2.2): coder 최초 진입 시 1회 채운다. verify-fail 재시도에도 유지 —
@@ -127,7 +128,7 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         explore_used["n"] += 1
         on_phase("tool:explore(위임)")
         sub = AGENTS["explore"].build(explore_model, ws, approver, extra_tools=mcp_tools, store=store,
-                                      context_budget=context_budget)
+                                      context_budget=context_budget, mcp_auto_approve=mcp_auto_approve)
         # 요약만 main 히스토리로 — 탐색 과정(파일 덤프·검색 로그)은 서브에이전트 컨텍스트에 격리
         r = await astream_agent(sub, [{"role": "user", "content": question}], lambda t: None)
         return r.answer or "탐색 실패(빈 응답) — 직접 도구로 확인하라."
@@ -171,7 +172,7 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         # 외부 참조 MCP(문서·웹검색)는 워크스페이스를 변경하지 않으므로 reader 에도 준다.
         # (없으면 "최신 버전 기준 분석" 류 read 작업이 낡은 학습 지식으로 오답을 낸다 — 실측)
         agent = AGENTS["reader"].build(model, ws, approver, extra_tools=[*mcp_tools, explore],
-                                       memory_text=memory_text, store=store, skills=skills, context_budget=context_budget)
+                                       memory_text=memory_text, store=store, skills=skills, context_budget=context_budget, mcp_auto_approve=mcp_auto_approve)
         hist = list(state.get("history") or [])
         msgs = hist + [{"role": "user", "content": state["task"]}]
         res = await astream_agent(agent, msgs, on_token, config, on_event=on_phase)
@@ -182,7 +183,7 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
             on_phase(f"retry:{res.empty_reason}")
             empty_retries = 1
             retry_agent = AGENTS["reader"].build(fast_model, ws, approver, extra_tools=[*mcp_tools, explore],
-                                                 memory_text=memory_text, store=store, skills=skills, context_budget=context_budget)
+                                                 memory_text=memory_text, store=store, skills=skills, context_budget=context_budget, mcp_auto_approve=mcp_auto_approve)
             msgs = hist + [{"role": "user", "content": state["task"] + "\n\n" + load_prompt("empty_retry")}]
             res = await astream_agent(retry_agent, msgs, on_token, config, on_event=on_phase)
         return {"answer": res.answer, "empty_reason": res.empty_reason, "empty_retries": empty_retries}
@@ -192,7 +193,7 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         # read-only 셸 조사 에이전트: 파일 도구 + allowlist read-only 명령(ls/find/grep 등).
         # reader 와 동일 배선(+mcp, +explore) — 분기는 도구 권한 차이지 지식 접근 차이가 아니다.
         agent = AGENTS["investigator"].build(model, ws, approver, extra_tools=[*mcp_tools, explore],
-                                             memory_text=memory_text, store=store, skills=skills, context_budget=context_budget)
+                                             memory_text=memory_text, store=store, skills=skills, context_budget=context_budget, mcp_auto_approve=mcp_auto_approve)
         hist = list(state.get("history") or [])
         msgs = hist + [{"role": "user", "content": state["task"]}]
         res = await astream_agent(agent, msgs, on_token, config, on_event=on_phase)
@@ -201,7 +202,7 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
             on_phase(f"retry:{res.empty_reason}")
             empty_retries = 1
             retry_agent = AGENTS["investigator"].build(fast_model, ws, approver, extra_tools=[*mcp_tools, explore],
-                                                       memory_text=memory_text, store=store, skills=skills, context_budget=context_budget)
+                                                       memory_text=memory_text, store=store, skills=skills, context_budget=context_budget, mcp_auto_approve=mcp_auto_approve)
             msgs = hist + [{"role": "user", "content": state["task"] + "\n\n" + load_prompt("empty_retry")}]
             res = await astream_agent(retry_agent, msgs, on_token, config, on_event=on_phase)
         return {"answer": res.answer, "empty_reason": res.empty_reason, "empty_retries": empty_retries}
@@ -223,7 +224,7 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         # 체크리스트 생성은 구조적 작업이라 깊은 추론이 불필요하다. thinking 모델은 폭주로
         # 시간·토큰만 태우므로(실측 trace e32faab: plan #1 의 52s 가 4096 truncation) coder와 동일하게 fast_model(no_think) 을 쓴다.
         agent = AGENTS["planner"].build(fast_model, ws, approver, extra_tools=_planner_tools(mcp_tools),
-                                        memory_text=memory_text, store=store, skills=skills, context_budget=context_budget)
+                                        memory_text=memory_text, store=store, skills=skills, context_budget=context_budget, mcp_auto_approve=mcp_auto_approve)
         hist = list(state.get("history") or [])
         res = await astream_agent(agent, hist + [{"role": "user", "content": task}],
                                   on_token, config, on_event=on_phase)
@@ -242,7 +243,7 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         if "snap" not in pre_edit:
             pre_edit["snap"] = snapshot(ws.root)
         agent = AGENTS["coder"].build(fast_model, ws, approver, extra_tools=[*mcp_tools, explore],
-                                      memory_text=memory_text, store=store, skills=skills, context_budget=context_budget)
+                                      memory_text=memory_text, store=store, skills=skills, context_budget=context_budget, mcp_auto_approve=mcp_auto_approve)
         task = state["task"]
         if state.get("plan_text"):  # plan 노드가 수립한 체크리스트 (§3.4). 수행 지시는 coder.md.
             task += "\n\n## 작업 계획\n" + state["plan_text"]
@@ -380,7 +381,8 @@ async def run_task(
     tracer = get_tracer()
     graph = _build_graph(reader_model, fast_model, ws, approver, on_token, on_phase, extra_tools,
                          memory_text, store=store, explore_model=explore_model, skills=skills,
-                         context_budget=settings.context_budget_tokens)
+                         context_budget=settings.context_budget_tokens,
+                         mcp_auto_approve=settings.mcp_auto_approve_set)
     # CallbackHandler 가 이 graph 실행을 하나의 langfuse trace 로 자동 기록한다
     # (각 에이전트/툴/모델 호출 = 관측, 단계별 token 사용량 포함).
     # artifact_ns 를 trace metadata 에 실어 langfuse ↔ .koda/artifacts 상호참조를 유지 (리뷰 Low)
