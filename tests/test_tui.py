@@ -18,7 +18,7 @@ from koda.cli import main
 from koda.memory import Memory
 from koda.session import Session
 from koda.tui.app import KodaTui
-from koda.tui.model import ToolEnd, ToolStart
+from koda.tui.model import PhaseEvent, TokenChunk, ToolEnd, ToolStart
 from koda.tui.tool_handler import ToolActivityHandler, tool_title
 from koda.tui.widgets import ApprovalModal, ToolBlock, _args_preview
 from koda.workspace import Workspace
@@ -758,3 +758,139 @@ def test_tool_output_secret_redaction():
     out = posted[0].output
     assert "sk-secret123" not in out and "[REDACTED]" in out
     assert "normal line" in out and "8080" in out   # 일반 줄·비밀 아닌 값은 보존
+
+
+# --- 세그먼트 스트림: 산문↔툴 시간순 인터리브 (plan/TUI_CONVERSATION_BLOCKS.md) ---
+
+def _conv_types(app):
+    return [type(c).__name__ for c in app.query_one("#conversation").children]
+
+
+def test_prose_tool_interleave_order(tmp_path):
+    # 산문① → 툴 → 산문② 순으로 이벤트가 오면 대화가 [Markdown, ToolBlock, Markdown] 으로 쌓인다.
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test() as pilot:
+            app.post_message(TokenChunk("산문①"))
+            assert await _wait(pilot, lambda: bool(app.query("#conversation Markdown")))
+            app.post_message(ToolStart("r1", "workspace_read_file", "읽기 · a.py"))
+            assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
+            app.post_message(ToolEnd("r1", "출력", ok=True))
+            app.post_message(TokenChunk("산문②"))
+            assert await _wait(pilot, lambda: len(app.query("#conversation Markdown")) == 2)
+            assert _conv_types(app) == ["Markdown", "ToolBlock", "Markdown"]
+            assert app._draft == "산문①산문②"
+    asyncio.run(go())
+
+
+def test_no_empty_prose_segment_before_tool(tmp_path):
+    # 툴 직전에 산문 토큰이 없으면 빈 산문 세그먼트를 만들지 않는다(lazy mount).
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test() as pilot:
+            app.post_message(ToolStart("r1", "workspace_read_file", "읽기"))
+            assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
+            assert not app.query("#conversation Markdown")   # 빈 세그먼트 없음
+            assert _conv_types(app) == ["ToolBlock"]
+    asyncio.run(go())
+
+
+def test_retry_discards_segments_and_tool_blocks(tmp_path):
+    # retry 시 이번 시도의 산문 세그먼트·툴 블록·_tool_blocks 매핑을 전부 폐기한다(agy Blocker).
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test() as pilot:
+            app.post_message(TokenChunk("버릴 산문"))
+            app.post_message(ToolStart("r1", "workspace_read_file", "읽기"))
+            assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
+            assert app.query("#conversation Markdown") and app._tool_blocks
+            app.post_message(PhaseEvent("retry:length_truncation"))
+            assert await _wait(pilot, lambda: not app.query(ToolBlock))
+            assert not app.query("#conversation Markdown")   # 세그먼트 폐기(unmount)
+            assert app._tool_blocks == {}                    # 매핑 폐기 — stale run_id 방지
+            assert app._draft == ""
+    asyncio.run(go())
+
+
+def test_finalize_optionB_keeps_streamed_segment(tmp_path):
+    # 정본 옵션 B: 스트림된 세그먼트가 있으면 final 로 통째 교체하지 않는다(중간 산문 보존).
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_token("스트림된 본문")
+        return _result(final="스트림된 본문", route="read")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "질문")
+            assert await _wait(pilot, _turn_done(app))
+            assert len(app.query("#conversation Markdown")) == 1   # 세그먼트 1개(교체·중복 없음)
+            assert app._draft == "스트림된 본문"
+    asyncio.run(go())
+
+
+def test_finalize_optionB_fallback_when_draft_empty(tmp_path):
+    # 스트림 전면 유실(토큰 0) 시에만 정본을 산문 세그먼트로 폴백 mount 한다.
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        return _result(final="정본 답변", route="read")   # on_token 호출 없음
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "질문")
+            assert await _wait(pilot, _turn_done(app))
+            mds = app.query("#conversation Markdown")
+            assert len(mds) == 1                              # 폴백 세그먼트 mount
+    asyncio.run(go())
+
+
+def test_empty_final_shows_placeholder(tmp_path):
+    # 산문·툴이 하나도 없는 빈 턴(empty_final) → '(응답 없음)' placeholder + footer.
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        return _result(final="", route="read", empty_reason="no_content")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "질문")
+            assert await _wait(pilot, _turn_done(app))
+            assert not app.query("#conversation Markdown")   # 세그먼트 없음
+            footers = "\n".join(_static_text(w) for w in app.query(".turn-footer"))
+            assert "(응답 없음)" in footers
+    asyncio.run(go())
+
+
+def test_retry_preserves_user_query(tmp_path):
+    # retry 는 이번 시도의 산문 세그먼트만 폐기하고 사용자 질의(.user-turn)는 보존한다(§F).
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_token("버릴 산문")
+        on_phase("retry:length_truncation")
+        on_token("다시 쓴 본문")
+        return _result(final="다시 쓴 본문", route="read")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "내 질문")
+            assert await _wait(pilot, _turn_done(app))
+            queries = [_static_text(w) for w in app.query(".user-turn")]
+            assert any("내 질문" in q for q in queries)       # 질의 보존
+            assert app._draft == "다시 쓴 본문"                # 1차 폐기 후 재스트림
+            assert len(app.query("#conversation Markdown")) == 1   # 최종 세그먼트 1개
+    asyncio.run(go())
+
+
+def test_multi_cycle_interleave(tmp_path):
+    # 산문·툴이 여러 번 교차하는 턴: [Md, TB, Md, TB, Md] 순서로 쌓인다(§D 다중 경계).
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test() as pilot:
+            app.post_message(TokenChunk("산문1"))
+            app.post_message(ToolStart("r1", "workspace_read_file", "읽기1"))
+            app.post_message(ToolEnd("r1", "o1", ok=True))
+            app.post_message(TokenChunk("산문2"))
+            app.post_message(ToolStart("r2", "workspace_search_text", "검색"))
+            app.post_message(ToolEnd("r2", "o2", ok=True))
+            app.post_message(TokenChunk("산문3"))
+            assert await _wait(pilot, lambda: len(app.query("#conversation Markdown")) == 3)
+            assert _conv_types(app) == ["Markdown", "ToolBlock", "Markdown", "ToolBlock", "Markdown"]
+    asyncio.run(go())

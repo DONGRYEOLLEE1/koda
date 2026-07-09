@@ -109,8 +109,10 @@ class KodaTui(App):
         # post_message 가 모든 메시지를 조용히 드롭한다(행 원인). 그 이름을 쓰지 말 것.
         self._close_requested = False
         self._draft = ""         # 현재 턴 스트림 누적 — retry 리셋·finalize 폴백 판단용
-        self._stream = None      # textual MarkdownStream
-        self._answer_md: Markdown | None = None
+        # 세그먼트 스트림(plan/TUI_CONVERSATION_BLOCKS.md): 산문을 툴 블록과 시간순 교차되도록
+        # 여러 Markdown 세그먼트로 쪼갠다. _cur_prose_stream 은 현재 열린 산문 세그먼트의 스트림.
+        self._cur_prose_stream = None
+        self._turn_widgets: list = []   # 이번 턴 mount 위젯(질의 Static 제외) — retry 폐기용
         # 활동바 상태 (모두 UI thread 전용)
         self._turn_t0 = 0.0
         self._spin_i = 0
@@ -306,11 +308,13 @@ class KodaTui(App):
         self._busy = True
         self.query_one("#prompt", Input).disabled = True
         self._draft = ""
+        self._cur_prose_stream = None
+        self._turn_widgets = []
         conv = self.query_one("#conversation", VerticalScroll)
-        self._answer_md = Markdown("", classes="answer")
-        await conv.mount(Static(f"» {task}", classes="user-turn", markup=False), self._answer_md)
+        # 질의 Static 은 _turn_widgets 에 넣지 않는다 — retry 시 산문/툴만 폐기하고 질의는 보존.
+        # 산문 세그먼트는 lazy: 첫 토큰(_on_token)에 mount 한다(툴 직전 빈 세그먼트 방지).
+        await conv.mount(Static(f"» {task}", classes="user-turn", markup=False))
         conv.anchor()
-        self._stream = Markdown.get_stream(self._answer_md)
         self._set_status("작업 중")
         self._activity_on("시작")
         self.run_worker(partial(self.runner.run_turn, task), thread=True,
@@ -318,7 +322,8 @@ class KodaTui(App):
 
     def _end_turn(self, status: str = "대기 중") -> None:
         self._busy = False
-        self._answer_md = None
+        # 산문 세그먼트 스트림은 _on_turn_done/_on_turn_failed 가 _close_prose 로 이미 닫았다(여긴 방어).
+        self._cur_prose_stream = None
         # 턴 종료 시 미완 툴 블록 정리 — worker 가 툴 도중 죽으면(ToolEnd 미도착) '실행 중'
         # 스피너가 영구히 남는다(code-review M2). 성공 턴은 이미 비어 no-op.
         for block in self._tool_blocks.values():
@@ -340,17 +345,28 @@ class KodaTui(App):
     async def _on_token(self, msg: TokenChunk) -> None:
         self._draft += msg.text
         self._think_tok = 0  # 본문 생성 시작 → reasoning 카운터 해제
-        if self._stream is not None:
-            await self._stream.write(msg.text)
+        if self._cur_prose_stream is None:
+            await self._open_prose()   # lazy — 턴 시작·툴 직후 첫 토큰에 새 산문 세그먼트
+        await self._cur_prose_stream.write(msg.text)
 
-    async def _stop_stream(self) -> None:
-        if self._stream is None:
+    async def _open_prose(self) -> None:
+        """새 산문 세그먼트(Markdown)를 mount 하고 스트림을 연다. 첫 토큰에 lazy 호출."""
+        conv = self.query_one("#conversation", VerticalScroll)
+        md = Markdown("", classes="answer")
+        await conv.mount(md)
+        self._turn_widgets.append(md)
+        self._cur_prose_stream = Markdown.get_stream(md)
+        conv.anchor()
+
+    async def _close_prose(self) -> None:
+        """현재 산문 세그먼트 스트림을 닫는다(툴 블록 진입·턴 종료·retry 시)."""
+        if self._cur_prose_stream is None:
             return
         try:
-            await self._stream.stop()
+            await self._cur_prose_stream.stop()
         except asyncio.CancelledError:
             pass  # 스트림 태스크가 기동 전에 취소된 극단 케이스 방어 — 핸들러 전파 시 앱이 죽는다
-        self._stream = None
+        self._cur_prose_stream = None
 
     @on(PhaseEvent)
     async def _on_phase(self, msg: PhaseEvent) -> None:
@@ -362,7 +378,7 @@ class KodaTui(App):
         if phase.startswith("heartbeat:"):
             return  # 활동바 경과 초가 대체 — 로그·표시 불필요
         if phase.startswith("retry:"):
-            await self._reset_draft()  # 1차 시도 부분 스트림 폐기 (renderer 회귀 불변식과 동일)
+            await self._reset_turn()  # 1차 시도의 산문 세그먼트·툴 블록·매핑 전부 폐기
             reason = phase[6:]
             self._activity_label = "재시도"
             self.notify(f"빈 응답 — 변형 재시도 ({reason})", severity="warning", timeout=4)
@@ -383,20 +399,36 @@ class KodaTui(App):
         # 자유 형식 (문맥 압축 중…, 메모리 갱신 중… 등)
         self._activity_label = phase
 
-    async def _reset_draft(self) -> None:
+    async def _reset_turn(self) -> None:
+        """retry: 이번 시도의 산문 세그먼트·툴 블록·매핑을 전부 폐기하고 재시작(질의 Static 보존).
+
+        _tool_blocks 를 반드시 비운다 — 폐기된 시도의 툴 블록이 unmount 됐는데 매핑이 남으면
+        뒤늦게 도착한 그 시도의 ToolEnd 가 stale run_id 로 매칭돼 제거된 위젯에 finish 하거나
+        스피너가 잔존한다 (agy 리뷰). _end_turn 의 _tool_blocks 초기화와 일관.
+        """
+        await self._close_prose()
+        for w in self._turn_widgets:
+            try:
+                await w.remove()
+            except Exception:
+                pass  # 이미 제거됐거나 mount 전인 위젯 — 폐기 목적이므로 무시
+        self._turn_widgets = []
+        self._tool_blocks = {}
         self._draft = ""
-        await self._stop_stream()
-        if self._answer_md is not None:
-            await self._answer_md.update("")
-            self._stream = Markdown.get_stream(self._answer_md)
 
     @on(TurnDone)
     async def _on_turn_done(self, msg: TurnDone) -> None:
         result = msg.result
         final = (result.get("final") or "").strip()
-        await self._stop_stream()
-        if self._answer_md is not None and final and final != self._draft.strip():
-            await self._answer_md.update(final)  # 스트림 유실·재시도 폴백: 정본으로 교체
+        await self._close_prose()
+        # 옵션 B (plan §E): 스트림 전면 유실(draft 빔)일 때만 정본을 산문 세그먼트로 폴백 mount.
+        # 스트림된 세그먼트가 있으면 그대로 둔다 — 통째 교체 시 멀티툴 턴의 중간 산문이 소실된다.
+        if final and not self._draft.strip():
+            conv = self.query_one("#conversation", VerticalScroll)
+            md = Markdown(final, classes="answer")
+            await conv.mount(md)
+            self._turn_widgets.append(md)
+            conv.anchor()
 
         verdict = result.get("verdict")
         elapsed = int(time.monotonic() - self._turn_t0)
@@ -418,6 +450,8 @@ class KodaTui(App):
                           style=self._theme_color("warning"))
             self.notify(f"빈 응답: {reason} · {hint} · 히스토리 미저장", severity="error", timeout=6)
         conv = self.query_one("#conversation", VerticalScroll)
+        if not self._turn_widgets:   # 산문·툴 세그먼트가 하나도 없는 빈 턴 — 시각적 공백 방지
+            await conv.mount(Static("(응답 없음)", classes="turn-footer", markup=False))
         await conv.mount(Static(footer, classes="turn-footer"))
         conv.anchor()
         # 세션 턴 수 갱신은 _end_turn 의 _set_status 가 statusline 을 재구성하며 반영한다.
@@ -425,7 +459,7 @@ class KodaTui(App):
 
     @on(TurnFailed)
     async def _on_turn_failed(self, msg: TurnFailed) -> None:
-        await self._stop_stream()
+        await self._close_prose()
         conv = self.query_one("#conversation", VerticalScroll)
         err_color = f"bold {self._theme_color('error')}"
         await conv.mount(Static(Text(f"턴 실패: {msg.error}", style=err_color), classes="turn-footer"))
@@ -443,9 +477,11 @@ class KodaTui(App):
 
     @on(ToolStart)
     async def _on_tool_start(self, msg: ToolStart) -> None:
-        # 툴 실행 블록을 대화에 mount(접힘 기본). run_id 로 ToolEnd 와 매칭한다.
+        # 툴 진입 → 현재 산문 세그먼트를 닫아 다음 토큰이 새 세그먼트를 열게 한다(시간순 인터리브).
+        await self._close_prose()
         block = ToolBlock(msg.title)
         self._tool_blocks[msg.run_id] = block
+        self._turn_widgets.append(block)   # retry 폐기 대상
         conv = self.query_one("#conversation", VerticalScroll)
         await conv.mount(block)
         conv.anchor()
