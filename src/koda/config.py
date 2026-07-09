@@ -54,10 +54,11 @@ class ModelSettings(BaseSettings):
     thinking_budget_explore: int = Field(default=512, alias="THINKING_BUDGET_EXPLORE")
 
     # 나가는 요청 프롬프트의 토큰 상한(HistoryTrimMiddleware 가 이 값으로 턴 누적을 결정론
-    # 절단해 컨텍스트 창 초과 400 을 막는다). char 기반 토큰 추정이 한/중/일·도구호출 혼합
-    # 콘텐츠에서 실제를 최대 ~1.9x 과소평가(실측)하므로, n_ctx=32768 의 약 절반으로 보수
-    # 설정해 그 오차를 흡수한다(실측: 이 값에서 최대 실요청 <32768 유지). 서버 창이 크면 상향.
-    context_budget_tokens: int = Field(default=16000, alias="CONTEXT_BUDGET_TOKENS")
+    # 절단해 컨텍스트 창 초과 400 을 막는다). llama.cpp n_ctx=132k 운용에서 실효 예산을 64k 로
+    # 둔다(창의 절반 수준 — char 기반 토큰 추정이 한/중/일·도구호출 혼합에서 실제를 최대 ~1.9x
+    # 과소평가하는 오차를 흡수하고, tools_reserve·system 토큰은 이 안에서 차감). 서버 창을
+    # 조정하면 이 값도 함께 조정.
+    context_budget_tokens: int = Field(default=64000, alias="CONTEXT_BUDGET_TOKENS")
 
     @field_validator("local_base_url", "openai_base_url")
     @classmethod

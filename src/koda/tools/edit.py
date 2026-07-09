@@ -13,8 +13,8 @@ from ..workspace import Workspace
 
 # 승인이 필요한 위험 도구 이름
 DANGEROUS_TOOLS = {
-    "workspace_write_file", "workspace_edit_file",
-    "workspace_create_dir", "workspace_delete_path",
+    "write_file", "edit_file",
+    "create_dir", "delete_path",
 }
 
 
@@ -22,7 +22,7 @@ def make_editor_tools(ws: Workspace) -> list:
     """워크스페이스에 바인딩된 파일 변경 도구 목록 (위험)."""
 
     @tool
-    def workspace_write_file(path: str, content: str) -> str:
+    def write_file(path: str, content: str) -> str:
         """파일을 생성하거나 전체를 content 로 덮어쓴다. path 는 루트 기준 상대경로."""
         p = ws.resolve(path)
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -31,7 +31,7 @@ def make_editor_tools(ws: Workspace) -> list:
         return f"{'덮어씀' if existed else '생성함'}: {path} ({len(content)} chars)"
 
     @tool
-    def workspace_edit_file(path: str, old: str, new: str) -> str:
+    def edit_file(path: str, old: str, new: str) -> str:
         """파일에서 old 를 new 로 바꾼다. old 는 파일에 **정확히 1회** 나타나야 한다(부분 수정용)."""
         from .filesystem import not_found_help
 
@@ -49,13 +49,13 @@ def make_editor_tools(ws: Workspace) -> list:
         return f"수정함: {path}"
 
     @tool
-    def workspace_create_dir(path: str) -> str:
+    def create_dir(path: str) -> str:
         """디렉토리를 생성한다(부모 포함)."""
         ws.resolve(path).mkdir(parents=True, exist_ok=True)
         return f"디렉토리 생성: {path}"
 
     @tool
-    def workspace_delete_path(path: str) -> str:
+    def delete_path(path: str) -> str:
         """파일 또는 디렉토리를 삭제한다(되돌릴 수 없음)."""
         p = ws.resolve(path)
         if not p.exists():
@@ -66,4 +66,4 @@ def make_editor_tools(ws: Workspace) -> list:
             p.unlink()
         return f"삭제함: {path}"
 
-    return [workspace_write_file, workspace_edit_file, workspace_create_dir, workspace_delete_path]
+    return [write_file, edit_file, create_dir, delete_path]

@@ -59,7 +59,7 @@ def test_rich_mode_finalize_prints_rendered_body_exactly_once():
         r.on_phase("edit")  # phase 라벨 출력은 본문 카운트와 무관해야 한다
         for chunk in ("# 제목\n\n", "본문 ", "텍스트"):
             r.on_token(chunk)
-        r.on_phase("tool:workspace_write_file")
+        r.on_phase("tool:write_file")
         r.finalize("# 제목\n\n본문 텍스트")
     # context 종료(__exit__) 후에도 본문 출력은 정확히 1회 — 3중 출력 회귀 방지
     body = _md_prints(r)
@@ -129,12 +129,12 @@ def test_finalize_answer_overrides_buffer():
 def test_plain_phase_goes_to_stderr_not_stdout(capsys):
     with MarkdownStreamRenderer(use_rich=False) as r:
         r.on_phase("route")
-        r.on_phase("tool:workspace_read_file")
+        r.on_phase("tool:read_file")
         r.on_phase("heartbeat:30s")
     cap = capsys.readouterr()
     assert cap.out == ""
     assert "[🔎 라우팅…]" in cap.err
-    assert "· 도구 실행: workspace_read_file" in cap.err
+    assert "· 도구 실행: read_file" in cap.err
     assert "· 진행 중… (30s 경과)" in cap.err
 
 

@@ -105,7 +105,7 @@ def _planner_tools(mcp_tools: list) -> list:
 
 
 def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase, mcp_tools,
-                 memory_text="", store=None, explore_model=None, skills=(), context_budget=16000):
+                 memory_text="", store=None, explore_model=None, skills=(), context_budget=64000):
     # explore 는 reader 와 다른 reasoning 예산을 쓸 수 있다 (미지정 시 reader 와 동일)
     explore_model = model if explore_model is None else explore_model
     # pre-edit 스냅샷 (§2.2): coder 최초 진입 시 1회 채운다. verify-fail 재시도에도 유지 —
@@ -117,7 +117,7 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
     @tool
     async def explore(question: str) -> str:
         """읽기 전용 탐색 보조 에이전트에 위임한다. 여러 파일·문서를 훑어야 하는 넓은 탐색에
-        쓰고, 결과는 요약으로 돌아온다. 단일 파일 확인은 직접 workspace_read_file 을 써라.
+        쓰고, 결과는 요약으로 돌아온다. 단일 파일 확인은 직접 read_file 을 써라.
 
         Args:
             question: 탐색으로 알아내야 할 것 (구체적으로)

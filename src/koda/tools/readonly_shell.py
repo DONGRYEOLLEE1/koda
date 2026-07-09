@@ -66,7 +66,7 @@ def make_readonly_shell_tools(ws: Workspace) -> list:
     """조사용 셸 도구 (investigator·planner). denygate 재앙-플로어 + 자유 실행."""
 
     @tool
-    def workspace_run_readonly_command(command: str, timeout: int = 60) -> str:
+    def run_readonly_command(command: str, timeout: int = 60) -> str:
         """조사용 셸 명령을 실행한다(`bash -c`, 파이프·글롭·순차 조합 가능).
 
         **파일을 하나씩 반복해서 읽지 마라 — 파이프·글롭으로 한 콜에 훑어라.** 예:
@@ -104,4 +104,4 @@ def make_readonly_shell_tools(ws: Workspace) -> list:
             f"stderr:\n{proc.stderr[-1000:]}"
         )
 
-    return [workspace_run_readonly_command]
+    return [run_readonly_command]

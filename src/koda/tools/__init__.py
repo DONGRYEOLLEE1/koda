@@ -1,5 +1,5 @@
 """도구 모음. 용도/기능별로 파일 분리:
-- filesystem.py     : read_file / search_text (읽기 전용)
+- filesystem.py     : read_file / search_text / list_files (읽기 전용)
 - readonly_shell.py : run_readonly_command (읽기 전용 셸 명령, allowlist+샌드박스)
 - shell.py          : run_command (위험, 승인 필요)
 - edit.py           : write_file / edit_file / create_dir / delete_path (위험, 승인 필요)
@@ -17,9 +17,10 @@ DANGEROUS_TOOLS = _SHELL_DANGER | _EDIT_DANGER
 
 # 승인 없이 자동 허용되는 안전(읽기 전용) 도구. Permission middleware 는 이 목록에 없는
 # 모든 도구를 위험으로 간주해 게이트한다 → MCP/외부 주입 도구도 기본적으로 승인 대상.
-# workspace_run_readonly_command 는 SAFE 지만 자체 3-레이어 validator 가 유일 보안 경계다(§5).
+# run_readonly_command 는 SAFE(자동 실행)지만 셸 문자열이다 — 정적 분류기는 폐기됐고(ef8775d),
+# 경계는 denygate(유한 재앙 리스트) + (가용 시) bwrap + LLM 신뢰다.
 SAFE_TOOLS = {
-    "workspace_read_file", "workspace_search_text", "workspace_run_readonly_command",
+    "read_file", "search_text", "list_files", "run_readonly_command",
     "read_artifact", "analyze_image", "explore", "skill",
 }
 

@@ -389,7 +389,7 @@ class KodaTui(App):
             self._activity_detail = ""
             return
         if phase.startswith("tool:"):
-            name = phase[5:].removeprefix("workspace_")
+            name = phase[5:]
             self._activity_detail = name
             self._turn_tools[name] += 1  # 활동바 롤업 tally
             return

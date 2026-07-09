@@ -38,7 +38,7 @@ class PermissionMiddleware(AgentMiddleware):
         """게이트 검사. 거부면 ToolMessage(error), 허용이면 None."""
         call = getattr(request, "tool_call", {}) or {}
         name = call.get("name")
-        if name == "workspace_run_command":
+        if name == "run_command":
             hit = check_command(_command_text(call))
             if hit is not None:
                 tier, reason = hit

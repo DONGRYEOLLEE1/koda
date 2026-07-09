@@ -118,7 +118,7 @@ def test_events_routed(tmp_path):
         on_token("버릴 부분")                     # retry 전 부분 스트림 → 폐기 대상
         on_phase("think:5")
         on_phase("heartbeat:30s")
-        on_phase("tool:workspace_write_file")
+        on_phase("tool:write_file")
         on_phase("retry:length_truncation")
         on_token("다시 쓴 본문")
         return _result(final="다시 쓴 본문", route="edit", verdict="pass",
@@ -178,7 +178,7 @@ def test_activity_indicator_during_turn(tmp_path):
 
 def _approval_fake(record):
     async def fake(task, ws, approver, on_token, on_phase, **kw):
-        ok = approver("workspace_run_command", {"argv": ["pytest", "-q"]})
+        ok = approver("run_command", {"argv": ["pytest", "-q"]})
         record.append(ok)
         return _result(final=f"approved={ok}")
     return fake
@@ -192,7 +192,7 @@ def test_approval_approve(tmp_path):
         async with app.run_test() as pilot:
             await _submit(pilot, "테스트 실행해줘")
             assert await _wait(pilot, lambda: isinstance(app.screen, ApprovalModal))
-            assert "workspace_run_command" in _static_text(app.screen.query_one("#approval_title"))
+            assert "run_command" in _static_text(app.screen.query_one("#approval_title"))
             assert "$ pytest -q" in _static_text(app.screen.query_one("#approval_args"))
             # 승인 대기는 활동바 라벨로 노출된다(롤업에 가려지지 않게 — agy 리뷰 중대)
             assert await _wait(pilot, lambda: "승인 대기" in _static_text(app.query_one("#activity")))
@@ -372,8 +372,8 @@ def test_cli_tui_wiring(tmp_path, monkeypatch):
 # --- §9: 승인 args 미리보기 — 길이 제한 + run_command 명령 표시 + secret redaction ---
 
 def test_args_preview():
-    assert _args_preview("workspace_run_command", {"argv": ["rm", "-rf", "x"]}) == "$ rm -rf x"
-    long = _args_preview("workspace_write_file", {"content": "x" * 2000})
+    assert _args_preview("run_command", {"argv": ["rm", "-rf", "x"]}) == "$ rm -rf x"
+    long = _args_preview("write_file", {"content": "x" * 2000})
     assert len(long) <= 500 + len(" …(생략)") and long.endswith(" …(생략)")
     # secret 성 키는 값이 노출되지 않는다 (§9 redaction)
     masked = _args_preview("some_mcp_tool", {"api_key": "sk-live-123", "path": "a.py"})
@@ -580,9 +580,9 @@ def test_activity_tool_rollup(tmp_path):
     async def fake(task, ws, approver, on_token, on_phase, **kw):
         on_phase("read")
         on_phase("edit")
-        on_phase("tool:workspace_read_file")
-        on_phase("tool:workspace_read_file")
-        on_phase("tool:workspace_edit_file")
+        on_phase("tool:read_file")
+        on_phase("tool:read_file")
+        on_phase("tool:edit_file")
         on_token("완료")
         return _result(final="완료", route="edit", verdict="pass")
 
@@ -675,13 +675,13 @@ def test_theme_command_switches_and_defaults_koda_dark(tmp_path):
 
 def test_tool_title_templates():
     # 별도 LLM 호출 없이 도구+완성 args → 표시용 제목. 빈 args 는 도구 이름으로 폴백.
-    assert tool_title("workspace_run_command", {"command": "pytest -q"}) == "$ pytest -q"
-    assert tool_title("workspace_run_readonly_command", {"argv": ["ls", "-al"]}) == "$ ls -al"
-    assert tool_title("workspace_read_file", {"path": "a.py"}) == "읽기 · a.py"
-    assert tool_title("workspace_search_text", {"query": "foo"}) == "검색 · foo"
-    assert tool_title("workspace_edit_file", {"path": "b.py"}) == "수정 · b.py"
+    assert tool_title("run_command", {"command": "pytest -q"}) == "$ pytest -q"
+    assert tool_title("run_readonly_command", {"argv": ["ls", "-al"]}) == "$ ls -al"
+    assert tool_title("read_file", {"path": "a.py"}) == "읽기 · a.py"
+    assert tool_title("search_text", {"query": "foo"}) == "검색 · foo"
+    assert tool_title("edit_file", {"path": "b.py"}) == "수정 · b.py"
     assert tool_title("explore", {}) == "탐색 위임"
-    assert tool_title("workspace_read_file", {}) == "파일 읽기"      # 빈 args 폴백
+    assert tool_title("read_file", {}) == "파일 읽기"      # 빈 args 폴백
     assert tool_title("some_mcp_tool", {}) == "some_mcp_tool"       # MCP/기타
 
 
@@ -689,7 +689,7 @@ def test_tool_activity_handler_posts_messages():
     # 콜백(langchain on_tool_*) → ToolStart/ToolEnd 메시지. run_id 로 매칭.
     posted: list = []
     h = ToolActivityHandler(posted.append)
-    h.on_tool_start({"name": "workspace_read_file"}, "a.py", run_id="r1", inputs={"path": "a.py"})
+    h.on_tool_start({"name": "read_file"}, "a.py", run_id="r1", inputs={"path": "a.py"})
     h.on_tool_end("파일 내용", run_id="r1")
     assert isinstance(posted[0], ToolStart) and posted[0].run_id == "r1"
     assert posted[0].title == "읽기 · a.py"
@@ -712,7 +712,7 @@ def test_tui_tool_blocks_mount_and_finish(tmp_path):
     async def go():
         app = _make_app(tmp_path, None)
         async with app.run_test() as pilot:
-            app.post_message(ToolStart("r1", "workspace_read_file", "읽기 · calc.py"))
+            app.post_message(ToolStart("r1", "read_file", "읽기 · calc.py"))
             assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
             block = app.query_one(ToolBlock)
             assert "읽기 · calc.py" in str(block.title) and "○" in str(block.title)
@@ -739,7 +739,7 @@ def test_orphan_tool_block_finished_on_turn_end(tmp_path):
     async def go():
         app = _make_app(tmp_path, None)
         async with app.run_test() as pilot:
-            app.post_message(ToolStart("r1", "workspace_run_command", "$ pytest"))
+            app.post_message(ToolStart("r1", "run_command", "$ pytest"))
             assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
             assert "○" in str(app.query_one(ToolBlock).title)   # 진행 중
             app._end_turn()                                     # 턴 종료 공통 경로
@@ -773,7 +773,7 @@ def test_prose_tool_interleave_order(tmp_path):
         async with app.run_test() as pilot:
             app.post_message(TokenChunk("산문①"))
             assert await _wait(pilot, lambda: bool(app.query("#conversation Markdown")))
-            app.post_message(ToolStart("r1", "workspace_read_file", "읽기 · a.py"))
+            app.post_message(ToolStart("r1", "read_file", "읽기 · a.py"))
             assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
             app.post_message(ToolEnd("r1", "출력", ok=True))
             app.post_message(TokenChunk("산문②"))
@@ -788,7 +788,7 @@ def test_no_empty_prose_segment_before_tool(tmp_path):
     async def go():
         app = _make_app(tmp_path, None)
         async with app.run_test() as pilot:
-            app.post_message(ToolStart("r1", "workspace_read_file", "읽기"))
+            app.post_message(ToolStart("r1", "read_file", "읽기"))
             assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
             assert not app.query("#conversation Markdown")   # 빈 세그먼트 없음
             assert _conv_types(app) == ["ToolBlock"]
@@ -801,7 +801,7 @@ def test_retry_discards_segments_and_tool_blocks(tmp_path):
         app = _make_app(tmp_path, None)
         async with app.run_test() as pilot:
             app.post_message(TokenChunk("버릴 산문"))
-            app.post_message(ToolStart("r1", "workspace_read_file", "읽기"))
+            app.post_message(ToolStart("r1", "read_file", "읽기"))
             assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
             assert app.query("#conversation Markdown") and app._tool_blocks
             app.post_message(PhaseEvent("retry:length_truncation"))
@@ -885,10 +885,10 @@ def test_multi_cycle_interleave(tmp_path):
         app = _make_app(tmp_path, None)
         async with app.run_test() as pilot:
             app.post_message(TokenChunk("산문1"))
-            app.post_message(ToolStart("r1", "workspace_read_file", "읽기1"))
+            app.post_message(ToolStart("r1", "read_file", "읽기1"))
             app.post_message(ToolEnd("r1", "o1", ok=True))
             app.post_message(TokenChunk("산문2"))
-            app.post_message(ToolStart("r2", "workspace_search_text", "검색"))
+            app.post_message(ToolStart("r2", "search_text", "검색"))
             app.post_message(ToolEnd("r2", "o2", ok=True))
             app.post_message(TokenChunk("산문3"))
             assert await _wait(pilot, lambda: len(app.query("#conversation Markdown")) == 3)

@@ -39,24 +39,26 @@ def tool_title(name: str, args: dict) -> str:
     args 가 비거나 예상 키가 없으면 도구 이름으로 폴백 — UI 에 빈 헤더가 나오지 않게.
     """
     args = args if isinstance(args, dict) else {}
-    short = name.removeprefix("workspace_")
-    if name in ("workspace_run_command", "workspace_run_readonly_command"):
+    short = name
+    if name in ("run_command", "run_readonly_command"):
         argv = args.get("argv")
         cmd = args.get("command") or (" ".join(map(str, argv)) if isinstance(argv, list) else "")
         return f"$ {cmd}".strip() if cmd else "$ (명령)"
     path = args.get("path")
-    if name == "workspace_read_file":
+    if name == "read_file":
         return f"읽기 · {path}" if path else "파일 읽기"
-    if name == "workspace_search_text":
+    if name == "search_text":
         q = args.get("query")
         return f"검색 · {q}" if q else "텍스트 검색"
-    if name == "workspace_edit_file":
+    if name == "list_files":
+        return f"목록 · {path}" if path and path != "." else "파일 목록"
+    if name == "edit_file":
         return f"수정 · {path}" if path else "파일 수정"
-    if name == "workspace_write_file":
+    if name == "write_file":
         return f"쓰기 · {path}" if path else "파일 쓰기"
-    if name == "workspace_create_dir":
+    if name == "create_dir":
         return f"디렉토리 · {path}" if path else "디렉토리 생성"
-    if name == "workspace_delete_path":
+    if name == "delete_path":
         return f"삭제 · {path}" if path else "삭제"
     if name == "explore":
         return "탐색 위임"

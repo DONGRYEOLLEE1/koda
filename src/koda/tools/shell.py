@@ -14,7 +14,7 @@ from langchain.tools import tool
 from ..workspace import Workspace
 
 # 실행 전 승인이 필요한 도구 이름 (Permission middleware 가 참조)
-DANGEROUS_TOOLS = {"workspace_run_command"}
+DANGEROUS_TOOLS = {"run_command"}
 
 _no_sandbox_warned = False
 
@@ -71,7 +71,7 @@ def make_shell_tools(ws: Workspace) -> list:
     """워크스페이스에 바인딩된 셸 도구 목록 (위험)."""
 
     @tool
-    def workspace_run_command(command: str, timeout: int = 60) -> str:
+    def run_command(command: str, timeout: int = 60) -> str:
         """워크스페이스에서 셸 명령을 실행한다(`bash -c`, 파이프·리다이렉트 사용 가능).
 
         테스트·린트·타입체크·빌드·진단 실행과 파일 구조 파악(`ls`·`find`·`tree -L 2`)에 쓴다.
@@ -99,4 +99,4 @@ def make_shell_tools(ws: Workspace) -> list:
             f"stderr:\n{proc.stderr[-2000:]}"
         )
 
-    return [workspace_run_command]
+    return [run_command]

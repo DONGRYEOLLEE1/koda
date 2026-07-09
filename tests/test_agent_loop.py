@@ -52,7 +52,7 @@ def test_loop_runs_tool_with_approval(tmp_path):
     ws = _ws(tmp_path, {})
     model = ScriptedChatModel(responses=[
         AIMessage(content="", tool_calls=[
-            {"name": "workspace_write_file", "args": {"path": "out.txt", "content": "hi"}, "id": "1"}]),
+            {"name": "write_file", "args": {"path": "out.txt", "content": "hi"}, "id": "1"}]),
         AIMessage(content="파일 생성 완료"),
     ])
     out = _agent(model, ws, lambda n, a: True).invoke({"messages": [{"role": "user", "content": "파일 만들어"}]})
@@ -64,7 +64,7 @@ def test_loop_permission_blocks_dangerous(tmp_path):
     ws = _ws(tmp_path, {})
     model = ScriptedChatModel(responses=[
         AIMessage(content="", tool_calls=[
-            {"name": "workspace_write_file", "args": {"path": "NO.txt", "content": "x"}, "id": "1"}]),
+            {"name": "write_file", "args": {"path": "NO.txt", "content": "x"}, "id": "1"}]),
         AIMessage(content="승인 거부로 실행하지 못했습니다."),
     ])
     _agent(model, ws, lambda n, a: False).invoke({"messages": [{"role": "user", "content": "파일 만들어"}]})

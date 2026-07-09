@@ -31,7 +31,7 @@ class ToolBlock(Collapsible):
 
 def _args_preview(tool: str, args: object) -> str:
     """args 요약 — 길이 제한 + secret 성 키 redaction, raw dump 금지 (§9)."""
-    if tool == "workspace_run_command" and isinstance(args, dict):
+    if tool == "run_command" and isinstance(args, dict):
         v = args.get("argv") or args.get("command") or ""
         text = "$ " + (" ".join(map(str, v)) if isinstance(v, list) else str(v))
     else:
