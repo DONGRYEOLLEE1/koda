@@ -8,6 +8,7 @@ from functools import partial
 from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import VerticalScroll
 from textual.theme import Theme
 from textual.widgets import Footer, Markdown, Static
@@ -67,7 +68,11 @@ class KodaTui(App):
     # textual 8.2.8 결함 회피: 마크다운 표 렌더 직후 셀 클릭 시 텍스트 선택 로직이 고아 위젯을
     # hit-test 해 앱이 죽는다 — 선택을 꺼서 그 경로를 차단한다(복사는 Shift+드래그로 여전히 가능).
     ALLOW_SELECT = False
-    BINDINGS = [("ctrl+q", "graceful_quit", "종료")]
+    BINDINGS = [
+        ("ctrl+q", "graceful_quit", "종료"),
+        # Ctrl+C 도 정상 종료. 입력창(TextArea) focus 시 기본은 copy 라 priority 로 그것을 이겨 종료로 만든다(IDE 가 Ctrl+Q 를 가로채는 환경 대비).
+        Binding("ctrl+c", "graceful_quit", "종료", priority=True, show=False),
+    ]
     CSS = """
     #conversation { width: 1fr; height: 1fr; padding: 0 1; }
     #prompt { height: auto; max-height: 10; }

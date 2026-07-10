@@ -7,6 +7,8 @@ import pytest
 
 pytest.importorskip("textual")
 
+from textual.widgets.text_area import Selection
+
 import koda.tui.runner as runner_mod
 from koda.memory import Memory
 from koda.session import Session
@@ -564,4 +566,33 @@ def test_prompt_autogrows_capped(tmp_path):
             h20 = inp.outer_size.height
             assert h20 > h1        # 성장
             assert h20 <= 10       # max-height 상한
+    asyncio.run(go())
+
+
+def test_ctrl_c_graceful_quit(tmp_path, monkeypatch):
+    # Ctrl+C 는 입력창(TextArea) focus 상태에서도 copy 대신 Ctrl+Q 와 동일한 정상 종료(세션 저장)를 시작한다.
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        return _result(final="답변")
+
+    async def fake_extract(history):
+        return []
+
+    monkeypatch.setattr(runner_mod, "extract_memories", fake_extract)
+
+    async def go():
+        session = Session(tmp_path)
+        app = _make_app(tmp_path, fake, session=session)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "질문")                       # 저장할 히스토리 생성
+            assert await _wait(pilot, _turn_done(app))
+            inp = app.query_one("#prompt", PromptArea)
+            inp.focus()
+            inp.text = "hi"
+            inp.selection = Selection((0, 0), (0, 2))          # 선택 상태 — 기본 ctrl+c 는 copy 라, priority 로 이겨 종료돼야 함(이게 override 실검증)
+            await pilot.pause()
+            await pilot.press("ctrl+c")
+            assert await _wait(pilot, lambda: app._close_requested)   # graceful_quit 시작
+            assert await _wait(pilot, lambda: app.return_value is not None)
+        assert app.return_value is True      # 저장 후 종료
+        assert session.path.exists()
     asyncio.run(go())
