@@ -13,7 +13,7 @@ from koda.session import Session
 from koda.tui.app import KodaTui
 from koda.tui.model import PhaseEvent, TokenChunk, ToolEnd, ToolStart
 from koda.tui.tool_handler import ToolActivityHandler, tool_title
-from koda.tui.widgets import ApprovalModal, ToolBlock, _args_preview
+from koda.tui.widgets import ApprovalModal, PromptArea, ToolBlock, _args_preview
 from koda.workspace import Workspace
 
 
@@ -48,7 +48,7 @@ async def _submit(pilot, text):
     await _wait(pilot, lambda: not inp.disabled)
     inp.focus()
     await pilot.pause()
-    inp.value = text
+    inp.text = text
     await pilot.press("enter")
 
 
@@ -483,4 +483,85 @@ def test_retry_discards_segments_and_tool_blocks(tmp_path):
             assert not app.query("#conversation Markdown")   # 세그먼트 폐기(unmount)
             assert app._tool_blocks == {}                    # 매핑 폐기 — stale run_id 방지
             assert app._draft == ""
+    asyncio.run(go())
+
+
+# --- 질의 입력창: 다중행(Alt+Enter 줄바꿈)·Enter 제출·maximize 차단 (#21·#22) ---
+
+def test_prompt_newline_keys_insert_no_submit(tmp_path):
+    # Alt+Enter·Shift+Enter·Ctrl+J 는 제출이 아니라 줄바꿈 — 턴이 시작되지 않고 개행만 들어간다.
+    async def go():
+        app = _make_app(tmp_path, run_task_fn=None)
+        async with app.run_test() as pilot:
+            inp = app.query_one("#prompt", PromptArea)
+            for key in ("alt+enter", "shift+enter", "ctrl+j"):
+                inp.focus()
+                inp.text = "x"
+                await pilot.pause()
+                await pilot.press(key)
+                await pilot.pause()
+                assert "\n" in inp.text, key       # 줄바꿈 삽입
+                assert not app._busy               # 제출 안 됨(턴 미시작)
+            assert not app.query(".turn-footer")
+    asyncio.run(go())
+
+
+def test_prompt_enter_submits_multiline(tmp_path):
+    # Enter 는 개행 포함 다중행 원문을 그대로 제출한다.
+    seen = {}
+
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        seen["task"] = task
+        on_token("ok")
+        return _result(final="ok")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test() as pilot:
+            inp = app.query_one("#prompt", PromptArea)
+            inp.focus()
+            await pilot.pause()
+            inp.text = "첫 줄\n둘째 줄"
+            await pilot.press("enter")
+            assert await _wait(pilot, _turn_done(app))
+            assert seen["task"] == "첫 줄\n둘째 줄"
+            assert inp.text == ""            # 제출 후 입력창 비움
+    asyncio.run(go())
+
+
+def test_maximize_command_removed_even_with_tool_block(tmp_path):
+    # #21: 어떤 위젯이 포커스돼도 maximize 명령이 없어야 한다. 특히 툴 블록의 제목(CollapsibleTitle)은
+    # focus 가능·maximize 가능이라, 이 위젯이 포커스된 상태에서도 명령이 제거됨을 확인한다(위젯별
+    # ALLOW_MAXIMIZE whack-a-mole 이 아니라 앱 레벨 차단임을 가드).
+    async def go():
+        app = _make_app(tmp_path, run_task_fn=None)
+        async with app.run_test() as pilot:
+            app.post_message(ToolStart("r1", "read_file", "읽기 · a.py"))
+            assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
+            title = app.query_one("CollapsibleTitle")
+            title.focus()
+            await pilot.pause()
+            assert title.allow_maximize is True   # 전제: 이 위젯은 원래 maximize 가능
+            maximize = app.screen.action_maximize
+            ours = list(app.get_system_commands(app.screen))
+            assert all(c.callback != maximize for c in ours)                  # 우리 override: 제거됨
+            base = list(super(type(app), app).get_system_commands(app.screen))
+            assert any(c.callback == maximize for c in base)                  # 대조: 기본은 제공함
+    asyncio.run(go())
+
+
+def test_prompt_autogrows_capped(tmp_path):
+    # 내용에 따라 높이 자동 성장하되 max-height 로 상한(초과분 내부 스크롤).
+    async def go():
+        app = _make_app(tmp_path, run_task_fn=None)
+        async with app.run_test(size=(80, 30)) as pilot:
+            inp = app.query_one("#prompt", PromptArea)
+            inp.text = "한 줄"
+            await pilot.pause()
+            h1 = inp.outer_size.height
+            inp.text = "\n".join(f"줄 {i}" for i in range(20))
+            await pilot.pause()
+            h20 = inp.outer_size.height
+            assert h20 > h1        # 성장
+            assert h20 <= 10       # max-height 상한
     asyncio.run(go())

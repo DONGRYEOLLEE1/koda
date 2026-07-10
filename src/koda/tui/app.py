@@ -10,7 +10,7 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import VerticalScroll
 from textual.theme import Theme
-from textual.widgets import Footer, Input, Markdown, Static
+from textual.widgets import Footer, Markdown, Static
 
 from ..cli import _err
 from ..mcp import load_mcp_tools
@@ -29,7 +29,7 @@ from .model import (
     TurnFailed,
 )
 from .runner import APPROVAL_TIMEOUT_S, TuiTurnRunner
-from .widgets import ApprovalModal, ToolBlock
+from .widgets import ApprovalModal, PromptArea, ToolBlock
 
 _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"  # rich 'dots' 프레임 — toad/Claude Code 계열 표준 스피너
 
@@ -70,6 +70,7 @@ class KodaTui(App):
     BINDINGS = [("ctrl+q", "graceful_quit", "종료")]
     CSS = """
     #conversation { width: 1fr; height: 1fr; padding: 0 1; }
+    #prompt { height: auto; max-height: 10; }
     #activity { height: 1; padding: 0 1; }
     #statusline { height: 1; background: $panel; color: $text-muted; padding: 0 1; }
     .user-turn { color: $accent; text-style: bold; margin: 1 0 0 0; }
@@ -126,7 +127,8 @@ class KodaTui(App):
         yield VerticalScroll(id="conversation")
         yield Static("", id="activity", markup=False)
         yield Static(self._statusline_text(), id="statusline", markup=False)
-        yield Input(placeholder="요청 입력…  (/help 로 명령 목록 · Ctrl+Q 종료)", id="prompt")
+        yield PromptArea(id="prompt", tab_behavior="focus",
+                         placeholder="요청 입력…  (Alt+Enter·Ctrl+J 줄바꿈 · /help 명령 · Ctrl+Q 종료)")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -134,7 +136,16 @@ class KodaTui(App):
         self.theme = "koda-dark"
         self.query_one("#activity", Static).display = False
         self._activity_timer = self.set_interval(0.125, self._tick_activity, pause=True)
-        self.query_one("#prompt", Input).focus()
+        self.query_one("#prompt", PromptArea).focus()
+
+    def get_system_commands(self, screen):
+        # maximize 는 한 위젯으로 화면을 덮어 대화·입력·상태줄을 가린다 — koda 는 이 넷이 한 화면에
+        # 공존하는 단일 뷰라, 어떤 위젯(입력창·툴 블록 등)을 최대화해도 답변이 안 보이는 깨진 상태가
+        # 된다. 그래서 커맨드 팔레트에서 maximize 명령을 통째로 뺀다(#21). maximize 의 유일한 트리거다.
+        for command in super().get_system_commands(screen):
+            if command.callback == screen.action_maximize:
+                continue
+            yield command
 
     # --- statusline: 세션 · 모델 · 턴 · 모드 · 상태 (toad 하단 statusline) ---
 
@@ -219,12 +230,12 @@ class KodaTui(App):
 
     # --- 입력/명령 ---
 
-    @on(Input.Submitted, "#prompt")
-    async def _on_submit(self, event: Input.Submitted) -> None:
+    @on(PromptArea.Submitted)
+    async def _on_submit(self, event: PromptArea.Submitted) -> None:
         line = event.value.strip()
         if not line or self._busy or self._close_requested:
             return
-        event.input.clear()
+        self.query_one("#prompt", PromptArea).clear()
         if line.startswith("/"):          # 슬래시 커맨드 → 레지스트리 디스패치
             name, _, arg = line.partition(" ")
             entry = self._commands.get(name)
@@ -284,14 +295,14 @@ class KodaTui(App):
     async def _cmd_compact(self, arg: str) -> None:
         # 압축은 LLM 요약 호출 → 턴과 동일하게 worker thread 로. busy 가드는 _on_submit 이 이미 함.
         self._busy = True
-        self.query_one("#prompt", Input).disabled = True
+        self.query_one("#prompt", PromptArea).disabled = True
         self._set_status("압축 중")
         self._activity_on("문맥 압축")
         self.run_worker(self.runner.compact_now, thread=True, exclusive=True, group="turn")
 
     async def _start_turn(self, task: str) -> None:
         self._busy = True
-        self.query_one("#prompt", Input).disabled = True
+        self.query_one("#prompt", PromptArea).disabled = True
         self._draft = ""
         self._cur_prose_stream = None
         self._turn_widgets = []
@@ -320,7 +331,7 @@ class KodaTui(App):
             # approver timeout(=deny) 으로 응답 없이 턴이 끝난 고아 modal 정리 — 늦은 resolve 는
             # 이미 반환된 worker 에 no-op.
             self.screen.dismiss(False)
-        prompt = self.query_one("#prompt", Input)
+        prompt = self.query_one("#prompt", PromptArea)
         prompt.disabled = False
         prompt.focus()
 
@@ -498,7 +509,7 @@ class KodaTui(App):
             self.notify("턴 실행 중 — 완료 후 종료할 수 있습니다.", severity="warning")
             return
         self._close_requested = True
-        self.query_one("#prompt", Input).disabled = True
+        self.query_one("#prompt", PromptArea).disabled = True
         self._set_status("세션 저장 중")
         self._activity_on("세션 저장·메모리 갱신")
         self.run_worker(self.runner.close_session, thread=True, exclusive=True, group="turn")
