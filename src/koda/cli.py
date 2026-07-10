@@ -339,8 +339,19 @@ def _cmd_tui(args) -> int:
 
 
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(prog="koda", description="로컬 LLM 기반 coding-agent koda (분기 멀티에이전트)")
-    sub = p.add_subparsers(dest="cmd", required=True)
+    # chat/tui 및 bare `koda` 가 공유하는 사람용 옵션. top-level 에도 얹어 `koda --yes` 처럼 서브커맨드 없이 쓸 수 있게 한다.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--workspace", default=".")
+    common.add_argument("--yes", action="store_true", help="위험 도구 자동 승인")
+    common.add_argument("--resume", metavar="SESSION_ID", help="저장된 세션 재개")
+    common.add_argument("--mcps-dir", default="mcps")
+    common.add_argument("--no-mcp", action="store_true", help="외부 MCP 로드 생략(로컬만, 빠름)")
+
+    # 서브커맨드 없이 `koda [옵션]` 만 실행하면 TUI 로 진입한다 (사람용 기본 진입점).
+    p = argparse.ArgumentParser(prog="koda", parents=[common],
+                                description="로컬 LLM 기반 coding-agent koda (분기 멀티에이전트)")
+    p.set_defaults(func=_cmd_tui)
+    sub = p.add_subparsers(dest="cmd")
 
     pr = sub.add_parser("run", help="작업 실행 (답변 스트리밍, 단계 표시, langfuse 추적)")
     pr.add_argument("task")
@@ -350,20 +361,10 @@ def main(argv=None) -> int:
     pr.add_argument("--no-mcp", action="store_true", help="외부 MCP 로드 생략(로컬만, 빠름)")
     pr.set_defaults(func=_cmd_run)
 
-    pc = sub.add_parser("chat", help="멀티턴 대화 REPL (세션 저장/재개, 영구 메모리)")
-    pc.add_argument("--workspace", default=".")
-    pc.add_argument("--yes", action="store_true", help="위험 도구 자동 승인")
-    pc.add_argument("--resume", metavar="SESSION_ID", help="저장된 세션 재개")
-    pc.add_argument("--mcps-dir", default="mcps")
-    pc.add_argument("--no-mcp", action="store_true")
+    pc = sub.add_parser("chat", parents=[common], help="멀티턴 대화 REPL (세션 저장/재개, 영구 메모리)")
     pc.set_defaults(func=_cmd_chat)
 
-    pt = sub.add_parser("tui", help='Textual TUI 조종석 (사람용 · extra 필요: uv tool install "koda[tui]")')
-    pt.add_argument("--workspace", default=".")
-    pt.add_argument("--yes", action="store_true", help="위험 도구 자동 승인")
-    pt.add_argument("--resume", metavar="SESSION_ID", help="저장된 세션 재개")
-    pt.add_argument("--mcps-dir", default="mcps")
-    pt.add_argument("--no-mcp", action="store_true")
+    pt = sub.add_parser("tui", parents=[common], help='Textual TUI 조종석 (사람용 · extra 필요: uv tool install "koda[tui]")')
     pt.set_defaults(func=_cmd_tui)
 
     args = p.parse_args(argv)

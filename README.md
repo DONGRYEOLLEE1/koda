@@ -18,8 +18,8 @@
 
 ```bash
 # 설치 — 어디서든 koda 실행
-uv tool install .                 # TUI 포함은 "koda[tui]"
-mkdir -p ~/.config/koda && cp .env.example ~/.config/koda/.env
+uv tool install .                 # TUI 포함은 "koda[tui]"	단일 설치 스크립트로 개선 필요.
+mkdir -p ~/.config/koda && cp .env.example ~/.config/koda/.env		# 개선 필요.
 #   설정 탐색 순서: CWD/.env → ~/.config/koda/.env → 환경변수
 
 # 개발 — 레포에서
@@ -44,8 +44,12 @@ koda chat --workspace . --yes
 #   » /exit
 koda chat --workspace . --resume <session-id>
 
-# TUI — 대화 스트림 + 상태/검증/메모리 패널 + 위험 도구 승인 modal
-koda tui --workspace .
+# TUI (기본 진입점) — 대화 스트림 + 상태/검증/메모리 패널 + 위험 도구 승인 modal
+#   서브커맨드 없이 `koda` 만 실행하면 TUI 로 진입한다. --yes/--workspace/--resume 등도 그대로 받는다.
+koda                        # = koda tui
+koda --yes                  # 위험 도구 자동 승인으로 시작
+koda --resume <session-id>  # 저장된 세션 재개
+koda tui --workspace .      # 명시적 형태도 동일
 ```
 
 - `--yes` 없이 실행하면 위험 도구(쓰기·삭제·명령·MCP 호출) 전에 승인을 묻는다. 비대화형(파이프)에서 `--yes` 가 없으면 안전하게 거부한다.
