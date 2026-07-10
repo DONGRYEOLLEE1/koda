@@ -596,3 +596,59 @@ def test_ctrl_c_graceful_quit(tmp_path, monkeypatch):
         assert app.return_value is True      # 저장 후 종료
         assert session.path.exists()
     asyncio.run(go())
+
+
+# --- 편집 도구 diff 색상 렌더 + name 전파 + redaction (TUI_DIFF_RENDER) ---
+
+def _body_content(block):
+    return block._body._Static__content   # Static 이 update() 로 받은 원본 renderable
+
+
+def test_tool_diff_render_branch_and_name(tmp_path):
+    # 편집 도구 성공 diff → Group(요약 Text + Syntax), 비편집/실패 → 평문. name 이 렌더 분기를 가른다.
+    async def go():
+        app = _make_app(tmp_path, run_task_fn=None)
+        async with app.run_test() as pilot:
+            app.post_message(ToolStart("r1", "edit_file", "수정 · a.py"))
+            assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
+            b = app.query(ToolBlock)[0]
+            assert b._tool_name == "edit_file"                 # ToolStart.name → ToolBlock 전파
+            app.post_message(ToolEnd("r1", "수정함: a.py (+1/-1)\n@@ -1 +1 @@\n-x = 1\n+x = 10", ok=True, name="edit_file"))
+            assert await _wait(pilot, lambda: type(_body_content(b)).__name__ == "Group")
+
+            # 비편집 도구: 내용에 @@ 가 있어도 이름으로 차단 → 평문(false positive 방지)
+            app.post_message(ToolStart("r2", "read_file", "읽기"))
+            assert await _wait(pilot, lambda: len(app.query(ToolBlock)) == 2)
+            b2 = app.query(ToolBlock)[1]
+            app.post_message(ToolEnd("r2", "내용\n@@ 이건 diff 아님", ok=True, name="read_file"))
+            await pilot.pause()
+            assert isinstance(_body_content(b2), str)
+
+            # 편집 도구지만 실패 메시지(비diff) → 평문
+            app.post_message(ToolStart("r3", "edit_file", "수정 · b"))
+            assert await _wait(pilot, lambda: len(app.query(ToolBlock)) == 3)
+            b3 = app.query(ToolBlock)[2]
+            app.post_message(ToolEnd("r3", "실패: old 를 찾지 못했다\n비슷한 줄:", ok=True, name="edit_file"))
+            await pilot.pause()
+            assert isinstance(_body_content(b3), str)
+    asyncio.run(go())
+
+
+def test_redaction_masks_diff_prefixed_secrets():
+    # §3.2b: diff 의 +/- 접두(및 문맥) 시크릿 라인도 마스킹된다
+    from koda.tui.tool_handler import _redact
+    out = _redact("@@ -1 +1 @@\n-API_KEY=old\n+API_KEY=new\n TOKEN=ctx")
+    assert "old" not in out and "new" not in out and "ctx" not in out
+    assert out.count("[REDACTED]") == 3
+
+
+def test_edit_tool_gets_larger_trim_limit():
+    # 편집 도구는 별도(더 큰) trim 상한 — diff 가 기본 2000자에서 반토막 나지 않는다
+    from koda.tui.tool_handler import ToolActivityHandler, _OUTPUT_LIMIT
+    posted = []
+    h = ToolActivityHandler(posted.append)
+    h.on_tool_start({"name": "edit_file"}, "", run_id="r1", inputs={})
+    h.on_tool_end("@@\n" + "+ln\n" * 3000, run_id="r1")    # 2000자 훨씬 초과
+    end = posted[-1]
+    assert end.name == "edit_file"
+    assert len(end.output) > _OUTPUT_LIMIT                 # 편집 상한(6000)이 적용돼 기본 초과 보존

@@ -475,7 +475,7 @@ class KodaTui(App):
     async def _on_tool_start(self, msg: ToolStart) -> None:
         # 툴 진입 → 현재 산문 세그먼트를 닫아 다음 토큰이 새 세그먼트를 열게 한다(시간순 인터리브).
         await self._close_prose()
-        block = ToolBlock(msg.title)
+        block = ToolBlock(msg.title, msg.name)
         self._tool_blocks[msg.run_id] = block
         self._turn_widgets.append(block)   # retry 폐기 대상
         conv = self.query_one("#conversation", VerticalScroll)

@@ -224,6 +224,58 @@ def test_multi_edit_rolls_back_on_failure(make_workspace):
     assert (ws.root / "a.py").read_text(encoding="utf-8") == "x = 1\ny = 2\n"  # 전부 롤백
 
 
+def _diff_body(out: str) -> str:
+    return out.split("\n", 1)[1] if "\n" in out else ""
+
+
+def test_edit_success_emits_mixed_hunk(make_workspace):
+    # 교체 → unified 훅에 -/+ 둘 다, 요약에 +1/-1
+    ws = make_workspace({"a.py": "x = 1\ny = 2\n"})
+    tools = {t.name: t for t in make_editor_tools(ws)}
+    out = tools["edit_file"].invoke({"path": "a.py", "old": "x = 1", "new": "x = 10"})
+    assert out.startswith("수정함: a.py") and "+1/-1" in out
+    body = _diff_body(out)
+    assert body.startswith("@@") and "-x = 1" in body and "+x = 10" in body
+
+
+def test_patch_insert_is_add_only(make_workspace):
+    # 삽입 → +줄만, -줄 없음(순수 추가)
+    ws = make_workspace({"a.py": "a\nb\n"})
+    tools = {t.name: t for t in make_editor_tools(ws)}
+    out = tools["patch_file"].invoke({"path": "a.py", "start_line": 2, "end_line": 1, "replacement": "NEW"})
+    assert "+1/-0" in out
+    body = _diff_body(out)
+    assert "+NEW" in body and not any(ln.startswith("-") for ln in body.splitlines())
+
+
+def test_patch_delete_is_remove_only(make_workspace):
+    # 삭제 → -줄만, +줄 없음(순수 삭제)
+    ws = make_workspace({"a.py": "a\nb\nc\n"})
+    tools = {t.name: t for t in make_editor_tools(ws)}
+    out = tools["patch_file"].invoke({"path": "a.py", "start_line": 2, "end_line": 2, "replacement": ""})
+    assert "+0/-1" in out
+    body = _diff_body(out)
+    assert "-b" in body and not any(ln.startswith("+") for ln in body.splitlines())
+
+
+def test_multi_edit_emits_hunk(make_workspace):
+    ws = make_workspace({"a.py": "x = 1\ny = 2\n"})
+    tools = {t.name: t for t in make_editor_tools(ws)}
+    out = tools["multi_edit"].invoke({"path": "a.py", "edits": [{"old": "x = 1", "new": "x = 10"}]})
+    assert _diff_body(out).startswith("@@") and "+x = 10" in out
+
+
+def test_large_edit_counts_accurate_despite_truncation(make_workspace):
+    # 40줄 초과 대형 편집: diff 본문은 절단돼도 요약 +N/-M 은 절단 전 전체 기준이라 정확해야 한다.
+    before = "\n".join(f"old{i}" for i in range(100)) + "\n"
+    after = "\n".join(f"new{i}" for i in range(100)) + "\n"
+    ws = make_workspace({"big.py": before})
+    tools = {t.name: t for t in make_editor_tools(ws)}
+    out = tools["edit_file"].invoke({"path": "big.py", "old": before, "new": after})
+    assert "+100/-100" in out          # 절단돼도 수치는 정확(방향 뒤집힘·과소집계 없음)
+    assert "줄 더" in out               # 본문은 실제로 절단됨
+
+
 def test_bwrap_prefix_disabled_paths(monkeypatch, tmp_path):
     # 미설치/BH_SANDBOX=off 면 빈 접두 — 기존 실행 경로와 동일(비활성 smoke)
     import shutil as _shutil

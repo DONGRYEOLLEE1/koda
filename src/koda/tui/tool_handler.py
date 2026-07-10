@@ -4,13 +4,14 @@ import re
 
 from langchain_core.callbacks import BaseCallbackHandler
 
-from .model import ToolEnd, ToolStart
+from .model import DIFF_TOOLS, ToolEnd, ToolStart
 
 _OUTPUT_LIMIT = 2000  # 툴 output 표시 상한 (긴 파일 내용·셸 출력 절단)
+_EDIT_OUTPUT_LIMIT = 6000  # 편집 도구 diff 는 길 수 있어 별도(더 큰) 상한 — 기본 상한이 diff 를 반토막 내는 것 방지.
 
-# 자격증명 대입으로 보이는 줄의 값만 가려 read_file/.env·셸 출력의 시크릿이 스크롤백에 평문으로 남지 않게 한다.
+# 자격증명 대입으로 보이는 줄의 값만 가려 시크릿이 스크롤백에 평문으로 남지 않게 한다. 선택적 diff 마커([+\-])를 허용해 diff 의 +/- 접두 라인도 마스킹한다.
 _SECRET_LINE = re.compile(
-    r"(?im)^(\s*[\w.\-]*(?:token|secret|password|authorization|credential|api[_-]?key)[\w.\-]*\s*[=:]\s*)(\S+)"
+    r"(?im)^([+\-]?\s*[\w.\-]*(?:token|secret|password|authorization|credential|api[_-]?key)[\w.\-]*\s*[=:]\s*)(\S+)"
 )
 
 
@@ -18,8 +19,8 @@ def _redact(text: str) -> str:
     return _SECRET_LINE.sub(r"\1[REDACTED]", text)
 
 
-def _trim(text: str) -> str:
-    return text[:_OUTPUT_LIMIT] + " …(생략)" if len(text) > _OUTPUT_LIMIT else text
+def _trim(text: str, limit: int = _OUTPUT_LIMIT) -> str:
+    return text[:limit] + " …(생략)" if len(text) > limit else text
 
 
 def tool_title(name: str, args: dict) -> str:
@@ -60,17 +61,22 @@ class ToolActivityHandler(BaseCallbackHandler):
 
     def __init__(self, post) -> None:
         self._post = post
+        self._names: dict[str, str] = {}  # run_id → 도구명. on_tool_end 의 trim 상한·diff 렌더 분기에 쓴다.
 
     def on_tool_start(self, serialized, input_str, *, run_id=None, inputs=None, **kwargs) -> None:
         name = (serialized or {}).get("name") or "tool"
+        self._names[str(run_id)] = name
         args = inputs if isinstance(inputs, dict) else {}
         self._post(ToolStart(str(run_id), name, tool_title(name, args)))
 
     def on_tool_end(self, output, *, run_id=None, **kwargs) -> None:
-        self._post(ToolEnd(str(run_id), _trim(_redact(_to_text(output))), ok=True))
+        name = self._names.pop(str(run_id), "")
+        limit = _EDIT_OUTPUT_LIMIT if name in DIFF_TOOLS else _OUTPUT_LIMIT
+        self._post(ToolEnd(str(run_id), _trim(_redact(_to_text(output)), limit), ok=True, name=name))
 
     def on_tool_error(self, error, *, run_id=None, **kwargs) -> None:
-        self._post(ToolEnd(str(run_id), f"오류: {type(error).__name__}: {error}", ok=False))
+        name = self._names.pop(str(run_id), "")
+        self._post(ToolEnd(str(run_id), f"오류: {type(error).__name__}: {error}", ok=False, name=name))
 
 
 def _to_text(output) -> str:

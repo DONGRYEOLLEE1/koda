@@ -4,6 +4,9 @@ from typing import Callable
 
 from textual.message import Message
 
+# 출력이 unified diff 훅인 편집 도구 — tool_handler(별도 trim 상한)·widgets(diff 색상 렌더)의 단일 출처.
+DIFF_TOOLS = frozenset({"edit_file", "multi_edit", "patch_file"})
+
 
 class TokenChunk(Message):
     """답변 본문 토큰 (astream_agent on_token 통과분)."""
@@ -76,10 +79,11 @@ class ToolStart(Message):
 
 
 class ToolEnd(Message):
-    """툴 실행 종료. output 은 redaction+길이 절단이 끝난 표시용 문자열, ok 는 성공 여부."""
+    """툴 실행 종료. output 은 redaction+길이 절단이 끝난 표시용 문자열, ok 는 성공 여부, name 은 도구 이름(diff 렌더 분기용)."""
 
-    def __init__(self, run_id: str, output: str, ok: bool = True) -> None:
+    def __init__(self, run_id: str, output: str, ok: bool = True, name: str = "") -> None:
         self.run_id = run_id
         self.output = output
         self.ok = ok
+        self.name = name
         super().__init__()

@@ -99,24 +99,33 @@ def _multi_match_help(text: str, old: str, path: str) -> str:
             f"더 긴 문맥으로 유일하게 만들거나 replace_all=true 를 써라.")
 
 
+_DIFF_MAX_LINES = 40
+
+
+def _diff_block(before: str, after: str) -> tuple[str, int, int]:
+    """편집 전/후를 (unified diff 훅, 추가줄 수, 삭제줄 수)로. 수치는 절단 전 전체 기준이라 요약이 실제와 일치한다. splitlines()로 CRLF 를 diff 에 안 싣고(TUI 렌더 보호), 파일헤더(---/+++)는 요약줄에 경로가 있어 제거한다."""
+    d = list(difflib.unified_diff(before.splitlines(), after.splitlines(), lineterm="", n=3))[2:]
+    add = sum(1 for ln in d if ln.startswith("+"))
+    rem = sum(1 for ln in d if ln.startswith("-"))
+    if len(d) > _DIFF_MAX_LINES:
+        d = d[:_DIFF_MAX_LINES] + [f"… ({len(d) - _DIFF_MAX_LINES}줄 더)"]
+    return "\n".join(d), add, rem
+
+
 def _edit_success(path: str, orig: str, old: str, new: str, n: int) -> str:
     tag = f"replace_all {n}회" if n != 1 else f"replace 1회 ({_first_match_line(orig, old)}번째 줄)"
-    preview = ""
-    if len(old) + len(new) < 800:  # 작은 변경만 미리보기
-        old_p = "\n".join(f"- {ln}" for ln in old.splitlines()[:20])
-        new_p = "\n".join(f"+ {ln}" for ln in new.splitlines()[:20])
-        preview = f"\n{old_p}\n{new_p}".rstrip("\n")
-    return f"수정함: {path} ({tag}){preview}"
+    hunk, add, rem = _diff_block(old, new)
+    summary = f"수정함: {path} ({tag}, +{add}/-{rem})"
+    return f"{summary}\n{hunk}" if hunk else summary
 
 
-def _patch_success(path: str, new_text: str, start: int, end: int, replacement: str) -> str:
-    """패치 후 편집 지점 ±맥락을 줄번호와 함께 보여준다(드리프트 완화 — 다음 편집의 좌표 갱신)."""
-    new_lines = new_text.splitlines()
-    n_repl = 0 if replacement == "" else len(replacement.splitlines())
-    lo, hi = max(1, start - 3), min(len(new_lines), start - 1 + n_repl + 3)
-    view = "\n".join(f"{i}| {ln}" for i, ln in enumerate(new_lines[lo - 1:hi], lo)) or "(빈 파일)"
+def _patch_success(path: str, text: str, new_text: str, start: int, end: int, replacement: str) -> str:
+    """패치 전/후를 unified diff(줄번호 포함)로 보여준다."""
     kind = "삭제" if replacement == "" else ("삽입" if start == end + 1 else "교체")
-    return f"패치함: {path} ({kind} {start}-{end} → {n_repl}줄)\n--- 결과(±맥락) ---\n{view}"
+    n_repl = 0 if replacement == "" else len(replacement.splitlines())
+    hunk, add, rem = _diff_block(text, new_text)
+    summary = f"패치함: {path} ({kind} {start}-{end} → {n_repl}줄, +{add}/-{rem})"
+    return f"{summary}\n{hunk}" if hunk else summary
 
 
 def make_editor_tools(ws: Workspace) -> list:
@@ -180,7 +189,9 @@ def make_editor_tools(ws: Workspace) -> list:
                 return f"실패: edits[{i}] 의 old {why} (롤백, 무변경). read_file 로 확인하라."
             work = work.replace(e["old"], e["new"], 1)
         _atomic_write(ws.resolve(path), work)
-        return f"수정함: {path} (multi_edit {len(edits)}건 적용)"
+        hunk, add, rem = _diff_block(text, work)
+        summary = f"수정함: {path} (multi_edit {len(edits)}건 적용, +{add}/-{rem})"
+        return f"{summary}\n{hunk}" if hunk else summary
 
     @tool
     def patch_file(path: str, start_line: int, end_line: int, replacement: str,
@@ -217,7 +228,7 @@ def make_editor_tools(ws: Workspace) -> list:
                         f"  실제: {shown}\nread_file 로 현재 줄번호를 다시 확인하라.")
         new_text = _apply_patch(text, start_line, end_line, replacement)
         _atomic_write(ws.resolve(path), new_text)
-        return _patch_success(path, new_text, start_line, end_line, replacement)
+        return _patch_success(path, text, new_text, start_line, end_line, replacement)
 
     @tool
     def create_dir(path: str) -> str:

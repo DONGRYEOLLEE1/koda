@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import re
 
+from rich.console import Group
+from rich.syntax import Syntax
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.screen import ModalScreen
 from textual.widgets import Button, Collapsible, Static, TextArea
+
+from .model import DIFF_TOOLS
 
 _PREVIEW_LIMIT = 500
 _SECRET_KEY = re.compile(r"(?i)token|secret|key|password|authorization|credential")
@@ -43,16 +48,22 @@ class PromptArea(TextArea):
 
 
 class ToolBlock(Collapsible):
-    """대화 스트림 안의 툴 실행 블록. 접힘이 기본 — ToolStart 로 mount(진행 중 ○), ToolEnd 로 finish(✓/✗ + output)."""
+    """대화 스트림 안의 툴 실행 블록. 접힘이 기본 — ToolStart 로 mount(진행 중 ○), ToolEnd 로 finish(✓/✗ + output). 편집 도구 성공 출력은 diff 색상 렌더."""
 
-    def __init__(self, title: str) -> None:
+    def __init__(self, title: str, name: str = "") -> None:
         self._label = title
+        self._tool_name = name   # DOMNode 가 _name 을 위젯 name 으로 예약하므로 충돌 회피
         self._body = Static("실행 중…", markup=False)
         super().__init__(self._body, title=f"○ 🔧 {title}", collapsed=True)
 
     def finish(self, output: str, ok: bool) -> None:
         self.title = f"{'✓' if ok else '✗'} 🔧 {self._label}"
-        self._body.update(output or "(출력 없음)")
+        summary, _, body = output.partition("\n")
+        if self._tool_name in DIFF_TOOLS and body.startswith("@@"):
+            # 편집 성공: 요약줄은 평문(Text), diff 본문만 Syntax("diff")로 토큰 채색(전체 줄 배경 X — solid-블록 회피).
+            self._body.update(Group(Text(summary), Syntax(body, "diff", theme="ansi_dark", word_wrap=False)))
+        else:
+            self._body.update(output or "(출력 없음)")
 
 
 def _args_preview(tool: str, args: object) -> str:
