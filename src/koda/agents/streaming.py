@@ -13,6 +13,7 @@ class AgentResult:
     finish_reason: str = "unknown"
     usage: dict = field(default_factory=dict)
     empty_reason: str = ""
+    messages: list = field(default_factory=list)  # 정본 state 의 누적 메시지(빈응답 저비용 복구용)
 
     @property
     def empty(self) -> bool:
@@ -96,4 +97,22 @@ async def astream_agent(agent, messages: list, on_token, config=None, on_event=N
         finish_reason=finish,
         usage=usage,
         empty_reason=_empty_reason(answer, finish),
+        messages=list((final_state or {}).get("messages") or []),
     )
+
+
+async def resummarize(model, messages: list, nudge: str, on_token, config=None) -> str:
+    """빈 최종 응답 복구 — 이미 끝난 도구 실행 결과가 담긴 누적 messages 에 요약 지시를 붙여 모델
+    콜 1회로 보고를 받는다. 에이전트 전체 재실행(도구 재호출)을 피하므로 값싸다. 도구를 바인딩하지
+    않은 raw 모델을 쓰므로 추가 도구 루프가 없다."""
+    from langchain_core.messages import HumanMessage
+    if not messages:
+        return ""
+    try:
+        resp = await model.ainvoke(list(messages) + [HumanMessage(nudge)], config=config)
+    except Exception:
+        return ""
+    text = _to_text(resp.content).strip()
+    if text:
+        on_token(text)
+    return text

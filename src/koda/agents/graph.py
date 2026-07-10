@@ -21,7 +21,7 @@ from ..tracing import get_tracer
 from ..workspace import Workspace
 from ..tools.vision import make_vision_tools
 from .specs import AGENTS
-from .streaming import _to_text, astream_agent
+from .streaming import _to_text, astream_agent, resummarize
 from .verify import _judge
 
 
@@ -100,6 +100,17 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         return r.answer or "탐색 실패(빈 응답) — 직접 도구로 확인하라."
 
 
+    async def _recover_empty(res, agent, rerun_msgs, config):
+        """빈 최종 응답 복구. 1순위: 이미 끝난 도구 결과가 담긴 누적 messages 로 요약 1콜(no_think,
+        도구 재호출 없음) — obs 관측상 서버 기동 등 작업은 끝났는데 최종 요약만 빈 경우가 흔하다.
+        messages 가 통째로 비어 요약할 근거가 없을 때만 에이전트 전체 재실행으로 폴백한다."""
+        on_phase(f"retry:{res.empty_reason}")
+        recovered = await resummarize(fast_model, res.messages, load_prompt("empty_recover"), on_token, config)
+        if recovered:
+            res.answer = recovered
+            return res
+        return await astream_agent(agent, rerun_msgs, on_token, config, on_event=on_phase)
+
     async def route(state: _State, config):
         on_phase("route")
         # 멀티턴이면 직전 답변 일부를 맥락으로 제공 — "방금 만든 파일에 추가해줘" 같은 지시를 이해하도록 한다.
@@ -142,14 +153,9 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         res = await astream_agent(agent, msgs, on_token, config, on_event=on_phase)
         empty_retries = 0
         if res.empty:
-            # 빈 응답 재시도(1회): 지시 변형 + no_think 강등 — length 폭주(reasoning 이 출력 예산을
-            # 소진)를 같은 조건으로 재현하지 않기 위함.
-            on_phase(f"retry:{res.empty_reason}")
             empty_retries = 1
-            retry_agent = AGENTS["reader"].build(fast_model, ws, approver, extra_tools=[*mcp_tools, explore],
-                                                 memory_text=memory_text, store=store, skills=skills, context_budget=context_budget, mcp_auto_approve=mcp_auto_approve)
-            msgs = hist + [{"role": "user", "content": state["task"] + "\n\n" + load_prompt("empty_retry")}]
-            res = await astream_agent(retry_agent, msgs, on_token, config, on_event=on_phase)
+            rerun = hist + [{"role": "user", "content": state["task"] + "\n\n" + load_prompt("empty_retry")}]
+            res = await _recover_empty(res, agent, rerun, config)
         return {"answer": res.answer, "empty_reason": res.empty_reason, "empty_retries": empty_retries}
 
     async def investigator(state: _State, config):
@@ -162,12 +168,9 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         res = await astream_agent(agent, msgs, on_token, config, on_event=on_phase)
         empty_retries = 0
         if res.empty:
-            on_phase(f"retry:{res.empty_reason}")
             empty_retries = 1
-            retry_agent = AGENTS["investigator"].build(fast_model, ws, approver, extra_tools=[*mcp_tools, explore],
-                                                       memory_text=memory_text, store=store, skills=skills, context_budget=context_budget, mcp_auto_approve=mcp_auto_approve)
-            msgs = hist + [{"role": "user", "content": state["task"] + "\n\n" + load_prompt("empty_retry")}]
-            res = await astream_agent(retry_agent, msgs, on_token, config, on_event=on_phase)
+            rerun = hist + [{"role": "user", "content": state["task"] + "\n\n" + load_prompt("empty_retry")}]
+            res = await _recover_empty(res, agent, rerun, config)
         return {"answer": res.answer, "empty_reason": res.empty_reason, "empty_retries": empty_retries}
 
     async def plan(state: _State, config):
@@ -190,10 +193,8 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         res = await astream_agent(agent, hist + [{"role": "user", "content": task}],
                                   on_token, config, on_event=on_phase)
         if res.empty:
-            # 이미 no_think 이므로 모델 강등 대신 지시 변형만으로 1회 재시도 (coder 와 동일 패턴).
-            on_phase(f"retry:{res.empty_reason}")
-            msgs = hist + [{"role": "user", "content": task + "\n\n" + load_prompt("empty_retry")}]
-            res = await astream_agent(agent, msgs, on_token, config, on_event=on_phase)
+            rerun = hist + [{"role": "user", "content": task + "\n\n" + load_prompt("empty_retry")}]
+            res = await _recover_empty(res, agent, rerun, config)
         plan_text = enforce_checklist(res.answer)
         if not plan_text:
             on_phase("plan:실패(계획 없이 진행)")
@@ -213,11 +214,10 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         hist = list(state.get("history") or [])
         res = await astream_agent(agent, hist + [{"role": "user", "content": task}], on_token, config, on_event=on_phase)
         empty_retries = state.get("empty_retries", 0)
-        if res.empty:  # 빈 응답으로 루프가 편집 전에 끝남 → 지시 변형 후 1회 재시도 (coder 는 이미 no_think)
-            on_phase(f"retry:{res.empty_reason}")
+        if res.empty:  # 편집을 끝냈는데 최종 요약만 빈 경우가 흔하다 → 재실행 말고 누적 messages 로 요약 복구
             empty_retries += 1
-            msgs = hist + [{"role": "user", "content": task + "\n\n" + load_prompt("empty_retry")}]
-            res = await astream_agent(agent, msgs, on_token, config, on_event=on_phase)
+            rerun = hist + [{"role": "user", "content": task + "\n\n" + load_prompt("empty_retry")}]
+            res = await _recover_empty(res, agent, rerun, config)
         retries = state.get("retries", 0) + (1 if state.get("verdict") == "fail" else 0)
         return {"answer": res.answer, "retries": retries,
                 "empty_reason": res.empty_reason, "empty_retries": empty_retries}

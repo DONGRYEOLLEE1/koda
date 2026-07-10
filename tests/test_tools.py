@@ -126,6 +126,29 @@ def test_run_command_head_tail_excerpt(make_workspace):
     assert "생략" in out               # 절단 명시
 
 
+def test_run_command_background_returns_immediately(make_workspace):
+    # 장수명 프로세스(서버)를 background 로 띄우면 timeout 까지 블록하지 않고 즉시 PID·로그를 돌려준다
+    # (foreground 로 서버를 띄워 60초 타임아웃까지 블록하던 실측 병목의 수정, issue #19)
+    import os as _os
+    import re as _re
+    import signal as _signal
+    import time as _time
+    ws = make_workspace()
+    tools = {t.name: t for t in make_shell_tools(ws)}
+    t0 = _time.monotonic()
+    out = tools["run_command"].invoke({"command": "sleep 30", "background": True, "timeout": 60})
+    elapsed = _time.monotonic() - t0
+    assert elapsed < 3.0                                   # 30초 sleep 인데도 즉시 반환(비블로킹)
+    assert "백그라운드" in out and "PID=" in out
+    assert ".koda/run/" in out                             # 로그 경로 안내
+    assert (ws.root / ".koda" / "run").is_dir()            # 로그 디렉터리 생성
+    pid = int(_re.search(r"PID=(\d+)", out).group(1))
+    try:  # 정리 — start_new_session 로 세션 리더이므로 프로세스 그룹째 종료
+        _os.killpg(pid, _signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        pass
+
+
 def test_editor_write_creates_file(make_workspace):
     ws = make_workspace({})
     tools = {t.name: t for t in make_editor_tools(ws)}

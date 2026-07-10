@@ -126,6 +126,19 @@ class _ReadRouter:
         return _S()
 
 
+class _EditRouter:
+    """route 노드용 fast_model 대역 — edit + plan_needed=False → coder 직행."""
+
+    def with_structured_output(self, schema, method=None):
+        route_obj = schema(route="edit", plan_needed=False)
+
+        class _S:
+            async def ainvoke(self, msgs, config=None):
+                return route_obj
+
+        return _S()
+
+
 class _CaptureSpec(_SpySpec):
     """build 에 전달된 extra_tools 까지 기록한다 (explore 클로저 추출용)."""
 
@@ -200,6 +213,133 @@ def test_plan_uses_fast_model_and_retries_on_empty(monkeypatch, tmp_path):
     # 계획은 데이터 라벨로만 실린다(수행 지시는 coder.md 로 이관 — 인라인 프롬프트 제거)
     assert "## 작업 계획\n" in calls[2]
     assert "- [ ] A" in calls[2]
+
+
+# --- 빈응답 저비용 복구: 전체 재실행 대신 누적 messages 요약 1콜 (issue #19 병목 2) ---
+
+def test_coder_empty_recovers_without_full_rerun(monkeypatch, tmp_path):
+    # 편집을 끝냈는데 최종 요약만 빈 경우: 도구 결과가 담긴 messages 로 요약 복구하고,
+    # 에이전트 전체 재실행(도구 재호출)은 하지 않는다.
+    coder_spy = _SpySpec()
+    monkeypatch.setitem(G.AGENTS, "coder", coder_spy)
+
+    astream_calls: list = []
+
+    async def fake_astream(agent, messages, on_token, config=None, on_event=None):
+        astream_calls.append(messages[-1]["content"])
+        return AgentResult(answer="", empty_reason="no_content", messages=[object(), object()])
+
+    monkeypatch.setattr(G, "astream_agent", fake_astream)
+
+    recover_calls: list = []
+
+    async def fake_resummarize(model, messages, nudge, on_token, config=None):
+        recover_calls.append(messages)
+        return "복구된 요약"
+
+    monkeypatch.setattr(G, "resummarize", fake_resummarize)
+
+    async def fake_judge(model, vtask, config):   # verify 는 이 테스트 관심 밖 → pass 로 종료
+        return "pass", "ok"
+
+    monkeypatch.setattr(G, "_judge", fake_judge)
+
+    g = _build_graph(object(), _EditRouter(), Workspace(tmp_path), lambda n, a: True,
+                     lambda t: None, lambda p: None, [])
+    final = asyncio.run(g.ainvoke({"task": "간단 편집", "history": []}))
+
+    assert len(astream_calls) == 1              # coder 1회만 — 전체 재실행 없음
+    assert len(recover_calls) == 1              # 저비용 요약 복구 사용
+    assert final["answer"] == "복구된 요약"
+
+
+def test_empty_full_rerun_only_when_no_messages(monkeypatch, tmp_path):
+    # messages 조차 통째로 비면(스트림 실패) 요약할 근거가 없어 전체 재실행 폴백을 쓴다.
+    coder_spy = _SpySpec()
+    monkeypatch.setitem(G.AGENTS, "coder", coder_spy)
+
+    astream_calls: list = []
+
+    async def fake_astream(agent, messages, on_token, config=None, on_event=None):
+        astream_calls.append(messages[-1]["content"])
+        if len(astream_calls) == 1:
+            return AgentResult(answer="", empty_reason="unknown", messages=[])  # 근거 없음
+        return AgentResult(answer="재실행 성공", messages=[object()])
+
+    monkeypatch.setattr(G, "astream_agent", fake_astream)
+
+    async def fake_judge(model, vtask, config):   # verify 는 이 테스트 관심 밖 → pass 로 종료
+        return "pass", "ok"
+
+    monkeypatch.setattr(G, "_judge", fake_judge)
+
+    g = _build_graph(object(), _EditRouter(), Workspace(tmp_path), lambda n, a: True,
+                     lambda t: None, lambda p: None, [])
+    final = asyncio.run(g.ainvoke({"task": "편집", "history": []}))
+
+    assert len(astream_calls) == 2                        # 폴백 전체 재실행 1회
+    assert astream_calls[1].endswith(load_prompt("empty_retry"))
+    assert final["answer"] == "재실행 성공"
+
+
+# --- 무변경이어도 verify 는 LLM 판정을 거친다: "편집 요청인데 무변경 → FAIL" 안전 게이트 유지 ---
+
+def test_verify_still_judges_when_no_file_change(monkeypatch, tmp_path):
+    # 파일 변경이 없다고 판정을 건너뛰면 "편집 요청했는데 아무것도 안 함"을 pass 로 은폐한다.
+    # verifier 는 무변경 증거(변경 없음)를 받아 스스로 pass/fail 을 판정해야 한다(재시도 복구 경로 보존).
+    coder_spy, planner_spy = _SpySpec(), _SpySpec()
+    monkeypatch.setitem(G.AGENTS, "coder", coder_spy)
+    monkeypatch.setitem(G.AGENTS, "planner", planner_spy)   # fail → plan 재수립 경로용
+
+    async def fake_astream(agent, messages, on_token, config=None, on_event=None):
+        return AgentResult(answer="완료했다고 주장", messages=[object()])   # 파일 변경 없음
+
+    monkeypatch.setattr(G, "astream_agent", fake_astream)
+
+    seen: list = []
+
+    async def fake_judge(model, vtask, config):
+        seen.append(vtask)
+        return "fail", "변경 없음"
+
+    monkeypatch.setattr(G, "_judge", fake_judge)
+
+    g = _build_graph(object(), _EditRouter(), Workspace(tmp_path), lambda n, a: True,
+                     lambda t: None, lambda p: None, [])
+    final = asyncio.run(g.ainvoke({"task": "a.txt 를 만들어라", "history": []}))
+
+    assert len(seen) >= 1                                  # 무변경이어도 판정을 건너뛰지 않음
+    assert "(변경 없음)" in seen[0]                         # 무변경 증거가 verifier 에 전달됨
+    assert final["verdict"] == "fail"                     # 은폐하지 않고 fail 로 노출
+
+
+# --- resummarize: 누적 messages + nudge 로 요약 1콜 ---
+
+def test_resummarize_recovers_from_messages():
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    from koda.agents.streaming import resummarize
+
+    class _M:
+        async def ainvoke(self, msgs, config=None):
+            assert isinstance(msgs[-1], HumanMessage)     # nudge 가 마지막에 붙는다
+            return AIMessage("요약: 서버를 8000 에 재기동함")
+
+    tokens: list = []
+    out = asyncio.run(resummarize(_M(), [HumanMessage("작업"), AIMessage("")], "요약하라", tokens.append))
+    assert out.startswith("요약:")
+    assert "".join(tokens) == out                         # on_token 으로 흘렸다
+
+
+def test_resummarize_empty_messages_skips_model():
+    from koda.agents.streaming import resummarize
+
+    class _Boom:
+        async def ainvoke(self, msgs, config=None):
+            raise AssertionError("빈 messages 면 모델을 호출하면 안 된다")
+
+    out = asyncio.run(resummarize(_Boom(), [], "요약하라", lambda t: None))
+    assert out == ""
 
 
 # --- 툴 가시화: run_task 가 extra_callbacks 를 config.callbacks 에 얹는다 (TUI 채널) ---
