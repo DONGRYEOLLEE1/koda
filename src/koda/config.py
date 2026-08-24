@@ -98,7 +98,7 @@ class LangfuseSettings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore", populate_by_name=True,
     )
 
-    host: str = Field(default="http://localhost:3002", alias="LANGFUSE_HOST")
+    host: str = Field(default="http://localhost:28900", alias="LANGFUSE_HOST")
     public_key: str = Field(default="", alias="LANGFUSE_PUBLIC_KEY")
     secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")
 

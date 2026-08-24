@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from ..artifacts import ArtifactStore
 from ..config import load_model_settings
 from ..diffscan import diff_report, snapshot
-from ..llm import _no_think, _thinking, build_model
+from ..llm import _no_think, _thinking, astructured, build_model
 from ..mcp import load_mcp_tools
 from ..memory import Memory
 from ..prompts import load_prompt
@@ -26,7 +26,7 @@ from .verify import _judge
 
 
 class _Route(BaseModel):
-    """라우팅 판정 — json_schema 로 문법 강제. enum 밖 토큰은 생성 불가."""
+    """라우팅 판정 — 구조화 출력으로 형식을 강제한다. enum 밖 값은 생성될 수 없다."""
 
     # read=파일 도구만, inspect=read-only 셸 조사(investigator), edit=파일 변경
     route: Literal["read", "inspect", "edit"]
@@ -120,13 +120,10 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         if last_answer:
             rtask = f"[직전 대화 맥락]\n{last_answer[-400:]}\n\n[분류할 현재 요청]\n{state['task']}"
         msgs = [SystemMessage(load_prompt("router")), HumanMessage(rtask)]
-        try:  # json_schema 문법 강제 (no_think 모델) — 형식 이탈이 구조적으로 불가능
-            r = await fast_model.with_structured_output(_Route, method="json_schema").ainvoke(
-                msgs, config=config
-            )
+        # 구조화 출력이 되면 형식 이탈이 불가능하고 plan_needed 판단도 함께 얻는다.
+        r = await astructured(fast_model, _Route, msgs, config)
+        if r is not None:
             return {"route": r.route, "plan_needed": r.plan_needed, "retries": 0}
-        except Exception:  # 문법 옵션 미지원/실패 → 기존 텍스트 파싱 폴백
-            pass
         resp = await fast_model.ainvoke(msgs, config=config)
         text = _to_text(resp.content).strip().lower()
         first = text.split()[0] if text.split() else ""

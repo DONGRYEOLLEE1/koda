@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+import pytest
 from langchain.chat_models import init_chat_model
+from pydantic import BaseModel
 
 from koda.config import ModelSettings
-from koda.llm import _no_think, _thinking, select_provider
+from koda.llm import (
+    _UNSUPPORTED_METHODS,
+    _no_think,
+    _thinking,
+    astructured,
+    select_provider,
+    structured,
+)
 
 _BASE = {
     "primary": "local", "local_api_key": "nothing",
@@ -77,3 +86,89 @@ def test_invalid_reasoning_style_rejected():
     import pytest
     with pytest.raises(ValueError):
         _cfg(reasoning_style="thinking")
+
+
+# --- 구조화 출력: 방식 폴백 + 미지원 캐시 ---
+
+class _Schema(BaseModel):
+    ok: bool = True
+
+
+class _FakeModel:
+    """with_structured_output 이 method 별로 성패를 달리하는 가짜 모델. 시도 이력을 기록한다."""
+
+    def __init__(self, works: str | None, model_name: str = "fake"):
+        self.model_name = model_name
+        self._works = works        # 이 method 만 성공, 나머지는 400
+        self.attempts: list[str] = []
+
+    def with_structured_output(self, schema, method):
+        self.attempts.append(method)
+        works = self._works
+        outer = self
+
+        class _Runnable:
+            def invoke(self, messages, config=None):
+                if method != works:
+                    raise _bad_request()
+                return schema()
+
+            async def ainvoke(self, messages, config=None):
+                return self.invoke(messages, config)
+
+        return _Runnable()
+
+
+def _bad_request():
+    e = Exception("Error code: 400 - This response_format type is unavailable now")
+    e.status_code = 400
+    return e
+
+
+@pytest.fixture(autouse=True)
+def _clear_unsupported():
+    # 전역 캐시라 테스트 간 오염을 막는다
+    _UNSUPPORTED_METHODS.clear()
+    yield
+    _UNSUPPORTED_METHODS.clear()
+
+
+def test_structured_falls_back_to_function_calling():
+    # json_schema 미지원 엔드포인트에서도 구조화 출력이 유지된다 — 텍스트 폴백으로 떨어지면
+    # router 의 plan_needed 판단이 통째로 죽는다.
+    m = _FakeModel(works="function_calling")
+    assert structured(m, _Schema, []) is not None
+    assert m.attempts == ["json_schema", "function_calling"]
+
+
+def test_structured_remembers_unsupported_method():
+    # 400 은 능력 부재라 재시도해도 같다 — 두 번째 호출은 json_schema 를 건너뛴다.
+    m = _FakeModel(works="function_calling")
+    structured(m, _Schema, [])
+    m.attempts.clear()
+    structured(m, _Schema, [])
+    assert m.attempts == ["function_calling"]
+
+
+def test_structured_returns_none_when_all_methods_fail():
+    m = _FakeModel(works=None)
+    assert structured(m, _Schema, []) is None      # 호출부가 텍스트 폴백으로 간다
+
+
+def test_structured_does_not_cache_transient_errors():
+    # 네트워크·타임아웃(400 아님)을 캐시하면 그 방식이 세션 내내 죽는다.
+    class _Flaky(_FakeModel):
+        def with_structured_output(self, schema, method):
+            self.attempts.append(method)
+            raise TimeoutError("네트워크 지연")
+
+    m = _Flaky(works=None)
+    assert structured(m, _Schema, []) is None
+    assert not _UNSUPPORTED_METHODS
+
+
+def test_astructured_shares_the_same_fallback():
+    import asyncio
+    m = _FakeModel(works="function_calling")
+    assert asyncio.run(astructured(m, _Schema, [])) is not None
+    assert m.attempts == ["json_schema", "function_calling"]

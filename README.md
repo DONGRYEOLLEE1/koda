@@ -25,7 +25,7 @@ mkdir -p ~/.config/koda && cp .env.example ~/.config/koda/.env		# 개선 필요.
 # 개발 — 레포에서
 uv sync
 cp .env.example .env
-docker compose up -d              # langfuse → http://localhost:3002
+docker compose up -d              # langfuse → http://localhost:28900
 uv run pytest --ignore=tests/test_live_llm.py
 ```
 
@@ -113,4 +113,4 @@ langgraph `StateGraph` 분기: **router → { reader → 끝 | [plan →] coder 
 
 ## 추적 (langfuse)
 
-로컬 파일로 저장하지 않고 langfuse(`http://localhost:3002`)에 기록한다. 실행 1건 = 1 trace 이며, 각 에이전트의 툴 호출 IO와 모델 호출별 토큰(input/output/total)이 관측으로 남아 재구성·비용 분석이 가능하다.
+로컬 파일로 저장하지 않고 langfuse(`http://localhost:28900`)에 기록한다. 실행 1건 = 1 trace 이며, 각 에이전트의 툴 호출 IO와 모델 호출별 토큰(input/output/total)이 관측으로 남아 재구성·비용 분석이 가능하다.

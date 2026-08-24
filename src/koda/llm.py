@@ -78,6 +78,47 @@ def _derive(model, settings: ModelSettings, enabled: bool, budget: int = 0):
     )
 
 
+# 구조화 출력 방식은 강제력이 센 순서로 시도한다. json_schema 는 문법으로 형식을 강제하지만
+# 지원하는 엔드포인트가 적고, function_calling 은 tools API 라 훨씬 널리 통한다.
+STRUCTURED_METHODS = ("json_schema", "function_calling")
+
+# 이 프로세스에서 미지원이 확인된 (모델, method). 400 은 능력 부재라 재시도해도 결과가 같으므로,
+# 한 번 겪은 뒤로는 건너뛰어 턴마다 같은 400 왕복을 반복하지 않는다.
+_UNSUPPORTED_METHODS: set[tuple[str, str]] = set()
+
+
+def _remember_if_unsupported(model_name: str, method: str, exc: Exception) -> None:
+    """400(능력 부재)만 기억한다 — 네트워크·타임아웃 같은 일시 오류를 캐시하면 그 방식이 영구히 죽는다."""
+    if getattr(exc, "status_code", None) == 400:
+        _UNSUPPORTED_METHODS.add((model_name, method))
+
+
+async def astructured(model, schema, messages, config=None, methods=STRUCTURED_METHODS):
+    """지원되는 방식으로 구조화 출력을 받는다. 전부 실패하면 None — 호출부가 텍스트 폴백을 쓴다."""
+    name = getattr(model, "model_name", "") or ""
+    for method in methods:
+        if (name, method) in _UNSUPPORTED_METHODS:
+            continue
+        try:
+            return await model.with_structured_output(schema, method=method).ainvoke(messages, config=config)
+        except Exception as e:
+            _remember_if_unsupported(name, method, e)
+    return None
+
+
+def structured(model, schema, messages, config=None, methods=STRUCTURED_METHODS):
+    """astructured 의 동기 버전 (도구 안에서 쓴다)."""
+    name = getattr(model, "model_name", "") or ""
+    for method in methods:
+        if (name, method) in _UNSUPPORTED_METHODS:
+            continue
+        try:
+            return model.with_structured_output(schema, method=method).invoke(messages, config=config)
+        except Exception as e:
+            _remember_if_unsupported(name, method, e)
+    return None
+
+
 def _thinking(model, settings: ModelSettings, budget_tokens: int):
     """reasoning 활성 인스턴스 + 에이전트별 예산. llama.cpp 서버가 --reasoning-budget 플래그로 뜨면 요청별 예산이 무시되니 플래그 없이(-1) 띄워야 한다."""
     return _derive(model, settings, enabled=True, budget=budget_tokens)

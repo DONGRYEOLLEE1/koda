@@ -5,6 +5,7 @@ from typing import Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
+from ..llm import astructured
 from ..prompts import load_prompt
 from .streaming import _to_text
 
@@ -26,12 +27,9 @@ def _parse_verdict_text(text: str) -> str:
 async def _judge(model, vtask: str, config=None):
     """단일 구조화 판정 (tool-loop 없음 → 빠르고 안정적). 실패 시 텍스트 파싱 폴백."""
     msgs = [SystemMessage(load_prompt("verifier")), HumanMessage(vtask)]
-    try:
-        # json_schema: 스키마를 문법으로 강제해 형식 밖 토큰 생성이 불가하다. 미지원 endpoint 는 예외 → 폴백.
-        v = await model.with_structured_output(Verdict, method="json_schema").ainvoke(msgs, config=config)
+    v = await astructured(model, Verdict, msgs, config)
+    if v is not None:
         return v.verdict, v.reasoning
-    except Exception:
-        pass
     try:  # 폴백: 일반 호출 + 텍스트 첫 줄 파싱
         resp = await model.ainvoke(
             [SystemMessage(load_prompt("verifier")), HumanMessage(vtask + "\n\n첫 줄에 PASS 또는 FAIL 만 써라.")],

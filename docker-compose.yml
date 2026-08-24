@@ -1,8 +1,12 @@
 name: koda-langfuse
 
 # koda 전용 langfuse 스택. 프로젝트명으로 컨테이너/볼륨/네트워크가 격리되어
-# 다른 langfuse 인스턴스와 충돌하지 않는다. web UI 는 http://localhost:3002.
+# 다른 langfuse 인스턴스와 충돌하지 않는다. web UI 는 http://localhost:28900.
 # API 키는 LANGFUSE_INIT_* 로 부트스트랩되어 아래 값이 그대로 .env 에 쓰인다.
+#
+# 호스트로 여는 포트는 langfuse-web 하나뿐이고, 나머지 서비스는 내부 네트워크로만 통신한다.
+# 28900 은 well-known(0-1023) 과 리눅스 ephemeral 범위(32768-60999) 를 모두 피한 값이라
+# 다른 스택이나 커널의 임의 할당과 겹치지 않는다 — 바꿀 때도 이 두 구간은 피해야 한다.
 
 x-lf-env: &lf_env
   DATABASE_URL: postgresql://postgres:postgres@langfuse-postgres:5432/postgres
@@ -118,10 +122,10 @@ services:
     restart: unless-stopped
     depends_on: *lf_deps
     ports:
-      - "3002:3000"
+      - "28900:3000"
     environment:
       <<: *lf_env
-      NEXTAUTH_URL: http://localhost:3002
+      NEXTAUTH_URL: http://localhost:28900
       NEXTAUTH_SECRET: "bh-nextauth-d0a50595f57d119c34924f313d1949d475cacee40ce4bc21"
       LANGFUSE_INIT_ORG_ID: org-koda
       LANGFUSE_INIT_ORG_NAME: koda

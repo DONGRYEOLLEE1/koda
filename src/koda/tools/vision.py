@@ -8,6 +8,7 @@ from langchain.tools import tool
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 
+from ..llm import structured
 from ..prompts import load_prompt
 from ..workspace import SandboxError, Workspace
 
@@ -102,8 +103,9 @@ def make_vision_tools(ws: Workspace, model, props_url: str) -> list:
                 {"type": "text", "text": _analysis_instruction(question)},
                 {"type": "image_url", "image_url": {"url": f"data:image/{ext};base64,{b64}"}},
             ]
-            structured = model.with_structured_output(VisionAnalysis, method="json_schema")
-            result = structured.invoke([HumanMessage(content=content)])
+            result = structured(model, VisionAnalysis, [HumanMessage(content=content)])
+            if result is None:
+                return "오류: 이 엔드포인트는 구조화 출력을 지원하지 않는다. 텍스트 정보로만 진행하라."
             raw = result.model_dump_json(indent=None)
             # 서버 측 오류가 LLM 출력에 섞이면 손상된 결과 대신 복구 가능한 오류로 처리한다.
             if _has_server_error(raw):
