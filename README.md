@@ -59,7 +59,7 @@ koda tui --workspace .      # 명시적 형태도 동일
 
 langgraph `StateGraph` 분기: **router → { reader → 끝 | [plan →] coder → verifier(fail 시 plan 재수립 후 재시도 1회) }**.
 
-- **LLM** — 로컬 llama.cpp 우선 + OpenAI 폴백 (`init_chat_model`).
+- **LLM** — 로컬 llama.cpp 우선 + OpenAI 폴백 (`init_chat_model`). reasoning 파라미터는 엔드포인트마다 이름이 달라 `REASONING_STYLE`(`off`·`qwen`·`effort`)로 고르며, 기본값 `off`는 아무것도 보내지 않아 어디에도 거절당하지 않는다 — llama.cpp 로 사고 예산을 쓰려면 `qwen` 으로 켠다.
 - **에이전트** — `AgentSpec` 레지스트리 + `create_agent`. reader/coder/planner + 컨텍스트 격리용 `explore`(위임 탐색). verifier 는 diff 기반 단일 판정.
 - **구조화 출력** — router `{route, plan_needed}`·verifier `{verdict, reasoning}` 를 llama.cpp `json_schema`(문법 강제)로. 실패 시 텍스트 폴백.
 - **미들웨어** — 도구 스텝 상한(루프 폭주 차단) → 승인 게이트 → 출력 트림+redaction → 히스토리 트림(토큰 예산).

@@ -45,8 +45,24 @@ def build_model(settings: ModelSettings):
     return chat, provider, reason
 
 
-def _thinking(model, budget_tokens: int):
-    """Qwen thinking 활성 + 에이전트별 reasoning 예산(새 인스턴스 필요 — extra_body 는 bind_tools() 통과 시 소실). 서버가 --reasoning-budget 플래그로 뜨면 이 값이 무시되니 플래그 없이(-1) 띄워야 한다."""
+def reasoning_params(settings: ModelSettings, enabled: bool, budget: int = 0) -> dict:
+    """엔드포인트가 존중하는 reasoning 파라미터만 조립한다. 미지원(off)이면 빈 dict — 알 수 없는 필드를 실어 보내 400 으로 거절당하지 않게 한다."""
+    if settings.reasoning_style == "qwen":  # llama.cpp 는 chat_template 인자로 사고를 켜고 끈다
+        extra: dict = {"chat_template_kwargs": {"enable_thinking": enabled}}
+        if enabled and budget:
+            extra["thinking_budget_tokens"] = budget  # 최상위 요청 파라미터 (chat_template_kwargs 밖!)
+        return {"extra_body": extra}
+    if settings.reasoning_style == "effort":  # vLLM·OpenAI gpt-5 계열은 등급으로 제어한다
+        # langchain_openai 의 정식 필드라 extra_body 우회가 필요 없다(Responses API 로도 변환된다).
+        return {"reasoning_effort": settings.reasoning_effort if enabled else "none"}
+    return {}
+
+
+def _derive(model, settings: ModelSettings, enabled: bool, budget: int = 0):
+    """reasoning 설정만 바꾼 새 인스턴스. bind() 가 아니라 재생성인 이유는 extra_body 가 bind_tools() 를 통과할 때 소실되기 때문이다."""
+    params = reasoning_params(settings, enabled, budget)
+    if not params:
+        return model  # 미지원 엔드포인트 — 바꿀 파라미터가 없으니 새 인스턴스를 만들지 않는다
     api_key = model.openai_api_key
     if hasattr(api_key, "get_secret_value"):
         api_key = api_key.get_secret_value()
@@ -57,24 +73,16 @@ def _thinking(model, budget_tokens: int):
         api_key=api_key or "nothing",
         temperature=model.temperature,
         max_tokens=model.max_tokens,
-        extra_body={"chat_template_kwargs": {"enable_thinking": True},
-                    "thinking_budget_tokens": budget_tokens},
         stream_usage=True,
+        **params,
     )
 
 
-def _no_think(model):
-    """Qwen thinking 비활성 — bind() 는 extra_body 가 bind_tools() 통과 시 소실되어 init_chat_model 로 새 인스턴스를 만든다. coder 의 퇴행성 무한 사고(빈 생성)를 차단한다."""
-    api_key = model.openai_api_key
-    if hasattr(api_key, "get_secret_value"):
-        api_key = api_key.get_secret_value()
-    return init_chat_model(
-        model.model_name,
-        model_provider="openai",
-        base_url=model.openai_api_base,
-        api_key=api_key or "nothing",
-        temperature=model.temperature,
-        max_tokens=model.max_tokens,
-        extra_body={"chat_template_kwargs": {"enable_thinking": False}},
-        stream_usage=True,
-    )
+def _thinking(model, settings: ModelSettings, budget_tokens: int):
+    """reasoning 활성 인스턴스 + 에이전트별 예산. llama.cpp 서버가 --reasoning-budget 플래그로 뜨면 요청별 예산이 무시되니 플래그 없이(-1) 띄워야 한다."""
+    return _derive(model, settings, enabled=True, budget=budget_tokens)
+
+
+def _no_think(model, settings: ModelSettings):
+    """reasoning 비활성 인스턴스. coder 의 퇴행성 무한 사고(빈 생성)를 차단한다."""
+    return _derive(model, settings, enabled=False)

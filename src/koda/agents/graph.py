@@ -313,15 +313,12 @@ async def run_task(
             except Exception as e:
                 on_phase(f"mcp:로드 실패 {type(e).__name__}")
 
-    # 로컬 Qwen 에만 thinking 비활성 적용 (OpenAI 폴백은 chat_template_kwargs 를 모른다)
-    fast_model = _no_think(model) if provider == "local" else model
-    # reader·explore: thinking 활성 + 에이전트별 reasoning 예산 차등 적용(.env 재정의 가능).
-    # 서버는 --reasoning-budget 플래그 없이 떠야 요청별 값이 적용된다.
-    if provider == "local":
-        reader_model = _thinking(model, settings.thinking_budget_reader)
-        explore_model = _thinking(model, settings.thinking_budget_explore)
-    else:
-        reader_model = explore_model = model
+    # reasoning 제어는 provider 가 아니라 REASONING_STYLE 이 정한다 — 미지원 엔드포인트면 조립
+    # 결과가 비어 원본 인스턴스가 그대로 돌아오므로 여기서 provider 를 분기할 필요가 없다.
+    fast_model = _no_think(model, settings)
+    # reader·explore 는 reasoning 활성 + 에이전트별 예산 차등 적용(.env 재정의 가능).
+    reader_model = _thinking(model, settings, settings.thinking_budget_reader)
+    explore_model = _thinking(model, settings, settings.thinking_budget_explore)
     memory_text = Memory(ws.root).read()  # 영구 메모리 주입 (없으면 빈 문자열)
     skills = load_skills(ws.root)  # 워크스페이스 스킬 (없으면 빈 리스트)
     artifact_ns = run_id or uuid4().hex[:8]

@@ -373,8 +373,8 @@ def test_run_task_appends_extra_callbacks_without_touching_core(monkeypatch, tmp
 
     monkeypatch.setattr(G, "_build_graph", lambda *a, **k: _FakeGraph())
     monkeypatch.setattr(G, "build_model", lambda s: (object(), "local", None))
-    monkeypatch.setattr(G, "_no_think", lambda m: m)
-    monkeypatch.setattr(G, "_thinking", lambda m, b: m)
+    monkeypatch.setattr(G, "_no_think", lambda m, s: m)
+    monkeypatch.setattr(G, "_thinking", lambda m, s, b: m)
     monkeypatch.setattr(G, "make_vision_tools", lambda *a, **k: [])
     monkeypatch.setattr(G, "get_tracer", lambda: _NoTracer())
 
