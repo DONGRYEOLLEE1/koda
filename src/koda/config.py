@@ -28,15 +28,16 @@ class ModelSettings(BaseSettings):
         populate_by_name=True,  # 필드명/alias 둘 다로 생성 가능(테스트 편의)
     )
 
-    # 기본값 없음 → .env / 환경변수 필수 (소스에 값 노출 금지)
-    primary: str = Field(alias="PRIMARY")
-    local_api_key: str = Field(alias="LOCAL_API_KEY")
-    local_base_url: str = Field(alias="LOCAL_OPENAI_BASE_URL")
-    local_model: str = Field(alias="LOCAL_MODEL_NAME")
-    fallback_enabled: bool = Field(alias="FALLBACK_ENABLED")
-    openai_api_key: str = Field(alias="OPENAI_API_KEY")
-    openai_base_url: str = Field(alias="OPENAI_BASE_URL")
-    openai_model: str = Field(alias="OPENAI_MODEL_NAME")
+    # 설정 파일 없이도 뜬다 — 기본은 DeepSeek(OpenAI 호환) API 이고 키만 환경변수로 넘기면 된다.
+    # 로컬 llama.cpp 를 주로 쓰면 PRIMARY=local 로 바꾸고, 그때 DeepSeek 는 폴백이 된다.
+    primary: str = Field(default="openai", alias="PRIMARY")
+    openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    openai_base_url: str = Field(default="https://api.deepseek.com", alias="OPENAI_BASE_URL")
+    openai_model: str = Field(default="deepseek-v4-flash", alias="OPENAI_MODEL_NAME")
+    local_api_key: str = Field(default="nothing", alias="LOCAL_API_KEY")
+    local_base_url: str = Field(default="http://localhost:8080/v1", alias="LOCAL_OPENAI_BASE_URL")
+    local_model: str = Field(default="local", alias="LOCAL_MODEL_NAME")
+    fallback_enabled: bool = Field(default=True, alias="FALLBACK_ENABLED")
 
     # reasoning 제어 방식 — 엔드포인트가 실제로 존중하는 파라미터 계열을 고른다. 알 수 없는 필드를
     # 보내면 정식 OpenAI API 는 400 으로 거절하므로, 기본값은 아무것도 보내지 않는 'off' 다.

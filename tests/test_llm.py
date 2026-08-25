@@ -39,6 +39,20 @@ def test_provider_no_fallback_without_key():
     assert select_provider(_cfg(openai_api_key=""), health=lambda u: False)[0] == "local"
 
 
+def test_provider_openai_primary_uses_key_without_health_check():
+    # 기본 구성(primary=openai): 키가 있으면 로컬 헬스체크 없이 바로 openai
+    called = []
+    p, _ = select_provider(_cfg(primary="openai", openai_api_key="sk-test"),
+                           health=lambda u: called.append(u) or True)
+    assert p == "openai" and not called
+
+
+def test_provider_openai_primary_falls_back_to_local_without_key():
+    assert select_provider(_cfg(primary="openai", openai_api_key=""), health=lambda u: True)[0] == "local"
+    # 로컬도 죽어 있으면 openai 로 남는다 — preflight 가 키 안내를 낸다
+    assert select_provider(_cfg(primary="openai", openai_api_key=""), health=lambda u: False)[0] == "openai"
+
+
 def _base_model():
     return init_chat_model("m.gguf", model_provider="openai", base_url="http://h:1/v1",
                            api_key="k", temperature=0, max_tokens=4096)

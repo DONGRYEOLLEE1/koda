@@ -16,8 +16,14 @@ def _health(base_url: str, timeout: float = 3.0) -> bool:
 
 
 def select_provider(settings: ModelSettings, health=_health) -> tuple[str, str]:
-    """규칙 코드는 판단하지 않고 헬스체크로 provider 만 고른다."""
-    if settings.primary == "local" and health(settings.local_base_url):
+    """규칙 코드는 판단하지 않고 키 유무·헬스체크로 provider 만 고른다. primary 가 못 쓰이면 반대쪽으로 폴백한다."""
+    if settings.primary == "openai":
+        if settings.openai_api_key:
+            return "openai", "openai key present"
+        if settings.fallback_enabled and health(settings.local_base_url):
+            return "local", "no openai key -> local fallback"
+        return "openai", "no openai key, no local fallback"
+    if health(settings.local_base_url):
         return "local", "local healthy"
     if settings.fallback_enabled and settings.openai_api_key:
         return "openai", "local unavailable -> openai fallback"

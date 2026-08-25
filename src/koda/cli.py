@@ -198,16 +198,20 @@ def _err(msg: str) -> None:
 
 
 def _preflight_config() -> int | None:
-    """설정 누락 시 raw ValidationError 대신 친절 안내(설치 후 첫 실행 UX). 정상이면 None."""
+    """쓸 수 있는 엔드포인트가 하나도 없으면 첫 호출의 401/연결 오류 대신 안내를 낸다. 정상이면 None."""
     from pydantic import ValidationError
+    from .llm import select_provider
     try:
-        load_model_settings()
-    except ValidationError:
-        _err("설정을 찾지 못했습니다. 전역 설정 파일을 만드세요:")
-        _err("  mkdir -p ~/.config/koda")
-        _err("  cp .env.example ~/.config/koda/.env   # 배포된 템플릿 복사 후 편집")
-        _err("  # 필수: PRIMARY, LOCAL_OPENAI_BASE_URL, LOCAL_MODEL_NAME, LOCAL_API_KEY 등")
-        _err("  # (또는 CWD 에 .env 를 두거나 환경변수로 지정)")
+        settings = load_model_settings()
+    except ValidationError as e:
+        _err(f"설정값이 잘못됐습니다: {e}")
+        return 2
+    provider, _reason = select_provider(settings)
+    if provider == "openai" and not settings.openai_api_key:
+        _err("API 키가 없습니다. 기본 엔드포인트(DeepSeek, OpenAI 호환)를 쓰려면 키를 환경변수로 넘기세요:")
+        _err("  export OPENAI_API_KEY=sk-...")
+        _err(f"  # 다른 엔드포인트: OPENAI_BASE_URL / OPENAI_MODEL_NAME (현재 {settings.openai_base_url})")
+        _err(f"  # 로컬 llama.cpp 를 쓰려면: PRIMARY=local LOCAL_OPENAI_BASE_URL=... (현재 {settings.local_base_url} 미응답)")
         return 2
     return None
 

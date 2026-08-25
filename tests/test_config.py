@@ -26,10 +26,19 @@ def _clear_env(monkeypatch):
         monkeypatch.delenv(k, raising=False)
 
 
-def test_missing_config_raises():
-    # 소스에 기본값이 없으므로 .env/환경변수 없이는 실패한다
-    with pytest.raises(ValidationError):
-        ModelSettings(_env_file=None)
+def test_no_config_loads_deepseek_defaults():
+    # 설정 파일·환경변수 없이도 뜬다 — 기본은 DeepSeek(OpenAI 호환), 키만 비어 있다
+    s = ModelSettings(_env_file=None)
+    assert s.primary == "openai" and s.openai_api_key == ""
+    assert s.openai_base_url == "https://api.deepseek.com"
+    assert s.fallback_enabled is True
+
+
+def test_env_var_overrides_default(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
+    monkeypatch.setenv("OPENAI_MODEL_NAME", "gpt-5")
+    s = ModelSettings(_env_file=None)
+    assert s.openai_api_key == "sk-env" and s.openai_model == "gpt-5"
 
 
 def test_load_from_env_file_and_types(tmp_path):
