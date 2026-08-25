@@ -28,8 +28,8 @@ from .verify import _judge
 class _Route(BaseModel):
     """라우팅 판정 — 구조화 출력으로 형식을 강제한다. enum 밖 값은 생성될 수 없다."""
 
-    # read=파일 도구만, inspect=read-only 셸 조사(investigator), edit=파일 변경
-    route: Literal["read", "inspect", "edit"]
+    # answer=워크스페이스 무관 일반 질의(지식 우선), read=파일 도구만, inspect=read-only 셸 조사, edit=파일 변경
+    route: Literal["answer", "read", "inspect", "edit"]
     # 복잡 편집 여부 — plan 서브단계 가동 조건. 판단은 router LLM, 집행은 koda.
     plan_needed: bool = False
 
@@ -129,6 +129,8 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         first = text.split()[0] if text.split() else ""
         if first.startswith("edit"):
             route_val = "edit"
+        elif first.startswith("answer"):
+            route_val = "answer"
         elif first.startswith("inspect"):
             route_val = "inspect"
         elif first.startswith("read"):
@@ -140,11 +142,11 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         # 폴백에선 복잡도 판단 불가 → 보수적으로 plan 미가동
         return {"route": route_val, "plan_needed": False, "retries": 0}
 
-    async def reader(state: _State, config):
-        on_phase("read")
-        # 외부 참조 MCP(문서·웹검색)는 워크스페이스를 변경하지 않으므로 reader 에도 준다 — 없으면 낡은 학습 지식으로 오답을 낸다.
-        agent = AGENTS["reader"].build(model, ws, approver, extra_tools=[*mcp_tools, explore],
-                                       memory_text=memory_text, store=store, skills=skills, context_budget=context_budget, mcp_auto_approve=mcp_auto_approve)
+    async def _respond(name: str, phase: str, extra_tools: list, state: _State, config, **build_kw):
+        """읽기 전용 응답 노드 공통 본문 — 에이전트 실행 + 빈 응답 복구. reader·investigator·answer 는 툴셋만 다르다."""
+        on_phase(phase)
+        agent = AGENTS[name].build(model, ws, approver, extra_tools=extra_tools, store=store,
+                                   context_budget=context_budget, mcp_auto_approve=mcp_auto_approve, **build_kw)
         hist = list(state.get("history") or [])
         msgs = hist + [{"role": "user", "content": state["task"]}]
         res = await astream_agent(agent, msgs, on_token, config, on_event=on_phase)
@@ -155,20 +157,20 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
             res = await _recover_empty(res, agent, rerun, config)
         return {"answer": res.answer, "empty_reason": res.empty_reason, "empty_retries": empty_retries}
 
+    async def reader(state: _State, config):
+        # 외부 참조 MCP(문서·웹검색)는 워크스페이스를 변경하지 않으므로 reader 에도 준다 — 없으면 낡은 학습 지식으로 오답을 낸다.
+        return await _respond("reader", "read", [*mcp_tools, explore], state, config,
+                              memory_text=memory_text, skills=skills)
+
     async def investigator(state: _State, config):
-        on_phase("inspect")
         # read-only 셸 조사 에이전트. reader 와 동일 배선(+mcp, +explore) — 분기는 도구 권한 차이지 지식 접근 차이가 아니다.
-        agent = AGENTS["investigator"].build(model, ws, approver, extra_tools=[*mcp_tools, explore],
-                                             memory_text=memory_text, store=store, skills=skills, context_budget=context_budget, mcp_auto_approve=mcp_auto_approve)
-        hist = list(state.get("history") or [])
-        msgs = hist + [{"role": "user", "content": state["task"]}]
-        res = await astream_agent(agent, msgs, on_token, config, on_event=on_phase)
-        empty_retries = 0
-        if res.empty:
-            empty_retries = 1
-            rerun = hist + [{"role": "user", "content": state["task"] + "\n\n" + load_prompt("empty_retry")}]
-            res = await _recover_empty(res, agent, rerun, config)
-        return {"answer": res.answer, "empty_reason": res.empty_reason, "empty_retries": empty_retries}
+        return await _respond("investigator", "inspect", [*mcp_tools, explore], state, config,
+                              memory_text=memory_text, skills=skills)
+
+    async def answer(state: _State, config):
+        # 워크스페이스 무관 일반 질의 — 파일 도구·explore·메모리·스킬 없이 외부 참조(MCP)만 쥔다.
+        # 지식으로 답할 질문에 도구 스키마·검색 지시를 실어 보내면 불필요한 검색 루프가 생긴다.
+        return await _respond("answer", "answer", list(mcp_tools), state, config)
 
     async def plan(state: _State, config):
         # 독립 plan 노드 — 읽기 전용 도구로 탐색하며 체크리스트를 on_token 으로 스트리밍한다.
@@ -262,7 +264,7 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
     def route_edge(state: _State):
         if state["route"] == "edit":
             return plan_edge(state)
-        return "investigator" if state["route"] == "inspect" else "reader"
+        return {"inspect": "investigator", "answer": "answer"}.get(state["route"], "reader")
 
     def verify_edge(state: _State):
         # fail 재시도는 coder 재실행이 아니라 plan 재수립부터 한다. retries 증가는 coder 가
@@ -273,6 +275,7 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
 
     g = StateGraph(_State)
     g.add_node("route", route)
+    g.add_node("answer", answer)
     g.add_node("reader", reader)
     g.add_node("investigator", investigator)
     g.add_node("plan", plan)
@@ -280,9 +283,11 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
     g.add_node("verify", verify)
     g.add_edge(START, "route")
     g.add_conditional_edges("route", route_edge,
-                            {"reader": "reader", "investigator": "investigator", "plan": "plan", "coder": "coder"})
+                            {"answer": "answer", "reader": "reader", "investigator": "investigator",
+                             "plan": "plan", "coder": "coder"})
     # read 경로는 verify 를 거치지 않는다 — 검증은 워크스페이스 부수효과에 대한 게이트이고,
     # 부수효과 없는 산문 품질 평가는 비용만 들고 신뢰할 수 없다.
+    g.add_edge("answer", END)
     g.add_edge("reader", END)
     g.add_edge("investigator", END)
     g.add_edge("plan", "coder")

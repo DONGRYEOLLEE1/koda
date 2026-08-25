@@ -17,7 +17,7 @@ from .session import Session
 from .workspace import Workspace
 
 _PHASE = {
-    "route": "🔎 라우팅", "read": "📖 읽는 중", "edit": "✏️  편집 중",
+    "route": "🔎 라우팅", "answer": "💬 답변 중", "read": "📖 읽는 중", "edit": "✏️  편집 중",
     "verify": "🔍 검증 중", "plan": "📋 계획 수립", "review": "🧐 독립 리뷰",
 }
 

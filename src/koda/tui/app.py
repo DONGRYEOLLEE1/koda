@@ -38,6 +38,7 @@ _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"  # rich 'dots' 프레임 — toad/Cl
 # 색상은 theme_variables 키 (self._theme_color 로 라이트/다크 적응 조회).
 _PHASE_TUI = {
     "route": ("요청 분류", "accent"),
+    "answer": ("답변 작성", "accent"),
     "read": ("코드 읽는 중", "accent"),
     "plan": ("작업 계획 수립", "primary"),
     "edit": ("코드 작성", "warning"),

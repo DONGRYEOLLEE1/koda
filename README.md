@@ -1,8 +1,8 @@
 # koda
 
-**로컬 LLM 기반 분기 멀티에이전트 coding agent** (langchain 1.x). `router` 가 요청을 분류해 읽기는 **reader**, 파일 변경은 **coder** 로 보내고, 부수효과가 있는 편집 경로에만 **verifier** 를 건다. 각 에이전트는 도구를 자율 호출하며, 외부 **MCP**(문서·웹검색)와 워크스페이스 **스킬**을 스스로 판단해 쓴다.
+**로컬 LLM 기반 분기 멀티에이전트 coding agent** (langchain 1.x). `router` 가 요청을 분류해 워크스페이스와 무관한 일반 질문은 **answer**, 읽기는 **reader**, 셸 조사는 **investigator**, 파일 변경은 **coder** 로 보내고, 부수효과가 있는 편집 경로에만 **verifier** 를 건다. 각 에이전트는 도구를 자율 호출하며, 외부 **MCP**(문서·웹검색)와 워크스페이스 **스킬**을 스스로 판단해 쓴다.
 
-- **분기 실행** — `router → { reader → 끝 | [plan →] coder → verifier }`. 복잡 편집은 독립 plan 노드가 체크리스트를 만들고 coder 가 순서대로 수행한다. 전 경로 async.
+- **분기 실행** — `router → { answer | reader | investigator → 끝 | [plan →] coder → verifier }`. 일반 질문은 파일 도구 없이 지식으로 답하고(외부 참조만 보유), 복잡 편집은 독립 plan 노드가 체크리스트를 만들고 coder 가 순서대로 수행한다. 전 경로 async.
 - **컨텍스트 효율** — 줄번호·범위 읽기, 검색 캡, 일괄 탐색 셸, `explore` 위임(요약만 반환), 에이전트별 도구 스텝 상한, 결정론 히스토리 트림.
 - **안전** — 정적 deny gate → 승인 게이트(default-deny) → bubblewrap 격리 → 출력 시크릿 redaction. 모든 도구 경로가 워크스페이스에 샌드박스된다.
 - **원자적 편집** — 임시파일+교체 쓰기(실행비트 보존), 라인패치(앵커 자기검증), 다중 편집(전체 롤백), 실패 시 근접 후보 안내.
@@ -57,11 +57,11 @@ koda tui --workspace .      # 명시적 형태도 동일
 
 ## 아키텍처
 
-langgraph `StateGraph` 분기: **router → { reader → 끝 | [plan →] coder → verifier(fail 시 plan 재수립 후 재시도 1회) }**.
+langgraph `StateGraph` 분기: **router → { answer | reader | investigator → 끝 | [plan →] coder → verifier(fail 시 plan 재수립 후 재시도 1회) }**.
 
 - **LLM** — 로컬 llama.cpp 우선 + OpenAI 폴백 (`init_chat_model`). reasoning 파라미터는 엔드포인트마다 이름이 달라 `REASONING_STYLE`(`off`·`qwen`·`effort`)로 고르며, 기본값 `off`는 아무것도 보내지 않아 어디에도 거절당하지 않는다 — llama.cpp 로 사고 예산을 쓰려면 `qwen` 으로 켠다.
-- **에이전트** — `AgentSpec` 레지스트리 + `create_agent`. reader/coder/planner + 컨텍스트 격리용 `explore`(위임 탐색). verifier 는 diff 기반 단일 판정.
-- **구조화 출력** — router `{route, plan_needed}`·verifier `{verdict, reasoning}` 를 llama.cpp `json_schema`(문법 강제)로. 실패 시 텍스트 폴백.
+- **에이전트** — `AgentSpec` 레지스트리 + `create_agent`. answer/reader/investigator/coder/planner + 컨텍스트 격리용 `explore`(위임 탐색). answer 는 워크스페이스 도구를 쥐지 않아 개념·용어 질문에 검색 루프를 돌지 않는다. verifier 는 diff 기반 단일 판정.
+- **구조화 출력** — router `{route, plan_needed}`·verifier `{verdict, reasoning}` 를 `json_schema` → `function_calling` 순으로 시도(`STRUCTURED_METHOD` 로 고정 가능). 전부 실패 시 텍스트 폴백.
 - **미들웨어** — 도구 스텝 상한(루프 폭주 차단) → 승인 게이트 → 출력 트림+redaction → 히스토리 트림(토큰 예산).
 - **프롬프트** — 외부 `prompts/*.md`, 코드 인라인 금지.
 
@@ -86,7 +86,7 @@ langgraph `StateGraph` 분기: **router → { reader → 끝 | [plan →] coder 
 
 ## MCP 확장
 
-외부 MCP 서버를 `mcps/` 폴더의 `*.json`(또는 `*.yaml`)으로 단일화해 일괄 로드하고 reader·coder·planner 에 주입한다. LLM 이 최신 문서·웹검색이 필요하다고 판단하면 스스로 호출한다.
+외부 MCP 서버를 `mcps/` 폴더의 `*.json`(또는 `*.yaml`)으로 단일화해 일괄 로드하고 answer·reader·investigator·coder·planner 에 주입한다. LLM 이 최신 문서·웹검색이 필요하다고 판단하면 스스로 호출한다.
 
 ```jsonc
 // mcps/exa.json — 웹 검색

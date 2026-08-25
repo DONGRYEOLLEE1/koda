@@ -86,6 +86,48 @@ def test_graph_has_plan_node_and_edges():
     assert ("verify", "coder") not in pairs
 
 
+def test_graph_has_answer_node_direct_to_end():
+    ws = Workspace(Path(tempfile.mkdtemp()))
+    g = _build_graph(None, None, ws, lambda n, a: True, lambda t: None, lambda p: None, [])
+    drawable = g.get_graph()
+    pairs = {(e.source, e.target) for e in drawable.edges}
+    assert ("route", "answer") in pairs
+    assert ("answer", "__end__") in pairs     # 일반 질의는 verify 를 거치지 않는다
+    assert ("answer", "verify") not in pairs
+
+
+class _AnswerRouter:
+    """route 노드용 fast_model 대역 — 항상 answer 로 분류."""
+
+    def with_structured_output(self, schema, method=None):
+        route_obj = schema(route="answer", plan_needed=False)
+
+        class _S:
+            async def ainvoke(self, msgs, config=None):
+                return route_obj
+
+        return _S()
+
+
+def test_answer_gets_mcp_only_no_file_tools(monkeypatch, tmp_path):
+    # 일반 질의 에이전트는 외부 참조(MCP)만 쥔다 — 파일 도구·explore 가 있으면 지식으로 답할
+    # 질문에도 검색부터 한다(실측: "베스쳔이 뭐야?" 에 search_text 2회 + 웹검색 1회).
+    spy = _CaptureSpec()
+    monkeypatch.setitem(G.AGENTS, "answer", spy)
+
+    async def fake_astream(agent, messages, on_token, config=None, on_event=None):
+        return AgentResult(answer="배스천은 폐쇄망의 유일한 출입구 서버다.")
+
+    monkeypatch.setattr(G, "astream_agent", fake_astream)
+    mcp = [_FakeTool("web_search_exa")]
+    g = _build_graph(object(), _AnswerRouter(), Workspace(tmp_path), lambda n, a: True,
+                     lambda t: None, lambda p: None, mcp)
+    final = asyncio.run(g.ainvoke({"task": "베스쳔이 뭐야?", "history": []}))
+    assert final["route"] == "answer" and final.get("verdict") is None
+    names = [getattr(t, "name", "") for t in spy.extra_tools]
+    assert names == ["web_search_exa"]        # explore 없음, MCP 만
+
+
 # --- plan 빈 응답 재시도: LLM 없는 결정론 e2e ---
 
 class _SpySpec:

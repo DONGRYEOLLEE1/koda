@@ -67,6 +67,8 @@ class AgentSpec:
 
 # max_steps 는 조사 경로가 관측된 40콜 폭주보다 확실히 낮게, coder 는 편집·검증 루프용이라 여유를 둔다.
 AGENTS = {
+    # answer 는 파일 도구가 없다 — 일반 질의에 워크스페이스 도구를 쥐여 주면 지식으로 답할 질문에도 검색부터 한다.
+    "answer": AgentSpec("answer", lambda ws: [], max_steps=5),
     "reader": AgentSpec("reader", make_readonly_tools, max_steps=20),
     "investigator": AgentSpec("investigator", make_inspect_tools, max_steps=25),
     "coder": AgentSpec("coder", make_all_tools, max_steps=35),
