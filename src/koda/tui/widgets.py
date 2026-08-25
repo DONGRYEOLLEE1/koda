@@ -92,7 +92,7 @@ class ApprovalModal(ModalScreen[bool]):
         with Vertical(id="approval_dialog"):
             yield Static(f"[승인 필요] 도구: {self.tool}", id="approval_title", markup=False)
             yield Static(_args_preview(self.tool, self._args), id="approval_args", markup=False)
-            yield Static("대화형 승인입니다 (--yes 자동 승인과 구분됨).", id="approval_note")
+            yield Static("대화형 승인입니다 (--yolo 자동 승인과 구분됨).", id="approval_note")
             with Horizontal(id="approval_buttons"):
                 yield Button("승인", variant="success", id="approve")
                 yield Button("거부", variant="error", id="deny")

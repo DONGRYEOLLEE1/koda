@@ -90,7 +90,7 @@ _auto.auto = True
 
 
 def test_denygate_blocks_even_with_auto_yes():
-    # 안전 불변식: hard deny 는 --yes(자동 승인)로도 우회 불가
+    # 안전 불변식: hard deny 는 --yolo(자동 승인)로도 우회 불가
     ran = {"called": False}
     mw = PermissionMiddleware(approver=_auto)
     result = mw.wrap_tool_call(

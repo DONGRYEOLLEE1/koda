@@ -186,7 +186,7 @@ def test_approval_timeout_denies(tmp_path):
     asyncio.run(go())
 
 
-# --- AC 8: --yes 는 auto 승인(.auto=True) — confirm 등급 차단은 middleware 계약이 담당 ---
+# --- AC 8: --yolo 는 auto 승인(.auto=True) — confirm 등급 차단은 middleware 계약이 담당 ---
 
 def test_auto_yes_flag(tmp_path):
     app = _make_app(tmp_path, None, auto_yes=True)

@@ -557,7 +557,7 @@ def run_tui(args) -> int:
     except Exception:
         pass
 
-    app = KodaTui(ws, session, memory, mcp_tools, auto_yes=args.yes, model_name=model_name)
+    app = KodaTui(ws, session, memory, mcp_tools, auto_yes=args.yolo, model_name=model_name)
     app.run()
     final = app.runner.session   # /clear 로 세션이 교체됐을 수 있으므로 최종 세션 기준
     if final.history:

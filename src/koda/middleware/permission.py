@@ -39,7 +39,7 @@ class PermissionMiddleware(AgentMiddleware):
                     )
                 if getattr(self._approver, "auto", False):  # confirm: 자동 승인 무효
                     return self._tool_error(
-                        call, f"거부됨(HITL 필수): {reason}. 자동 승인(--yes)으로는 실행할 수 없다."
+                        call, f"거부됨(HITL 필수): {reason}. 자동 승인(--yolo)으로는 실행할 수 없다."
                     )
         if name not in SAFE_TOOLS and name not in self._mcp_auto and not self._approver(name, call.get("args")):
             return ToolMessage(

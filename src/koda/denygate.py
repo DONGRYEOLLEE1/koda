@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-# (패턴, 사유). deny = 무조건 차단, confirm = 대화형 사용자 승인 필수(--yes 자동승인 무효).
+# (패턴, 사유). deny = 무조건 차단, confirm = 대화형 사용자 승인 필수(--yolo 자동승인 무효).
 _DENY = [
     (re.compile(r"(^|[;&|]\s*)sudo\b"), "권한 상승(sudo)"),
     (re.compile(r"(^|[;&|]\s*)(env|nohup|nice|setsid|command|xargs|timeout\s+\S+)\s+sudo\b"),

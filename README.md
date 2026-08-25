@@ -33,11 +33,11 @@ uv run pytest --ignore=tests/test_live_llm.py
 
 ```bash
 # 단발 — 답변 스트리밍 + 단계 표시
-koda run "calc.py에 두 수를 빼는 sub 함수를 추가해줘" --workspace . --yes
+koda run "calc.py에 두 수를 빼는 sub 함수를 추가해줘" --workspace . --yolo
 koda run "이 프로젝트 구조를 설명해줘" --workspace .
 
 # 멀티턴 대화 — 세션 저장/재개, 영구 메모리
-koda chat --workspace . --yes
+koda chat --workspace . --yolo
 #   » calc.py 만들어 add 함수 작성해줘
 #   » 방금 만든 파일에 mul 함수도 추가해줘      ← 히스토리로 지시어 해소
 #   » /remember 함수 이름은 snake_case 로       ← 영구 메모리 (새 세션에도 적용)
@@ -45,14 +45,14 @@ koda chat --workspace . --yes
 koda chat --workspace . --resume <session-id>
 
 # TUI (기본 진입점) — 대화 스트림 + 상태/검증/메모리 패널 + 위험 도구 승인 modal
-#   서브커맨드 없이 `koda` 만 실행하면 TUI 로 진입한다. --yes/--workspace/--resume 등도 그대로 받는다.
+#   서브커맨드 없이 `koda` 만 실행하면 TUI 로 진입한다. --yolo/--workspace/--resume 등도 그대로 받는다.
 koda                        # = koda tui
-koda --yes                  # 위험 도구 자동 승인으로 시작
+koda --yolo                  # 위험 도구 자동 승인으로 시작
 koda --resume <session-id>  # 저장된 세션 재개
 koda tui --workspace .      # 명시적 형태도 동일
 ```
 
-- `--yes` 없이 실행하면 위험 도구(쓰기·삭제·명령·MCP 호출) 전에 승인을 묻는다. 비대화형(파이프)에서 `--yes` 가 없으면 안전하게 거부한다.
+- `--yolo` 없이 실행하면 위험 도구(쓰기·삭제·명령·MCP 호출) 전에 승인을 묻는다. 비대화형(파이프)에서 `--yolo` 가 없으면 안전하게 거부한다.
 - `--no-mcp` 로 외부 MCP 없이 로컬만 빠르게 실행한다.
 
 ## 아키텍처
@@ -79,7 +79,7 @@ langgraph `StateGraph` 분기: **router → { answer | reader | investigator →
 
 ## 안전
 
-1. **정적 deny gate** (`denygate.py`) — `sudo` · `curl|sh` · 대량 삭제 · `find -exec` 등은 `--yes` 로도 우회 불가, 시크릿 접근은 대화형 승인 필수.
+1. **정적 deny gate** (`denygate.py`) — `sudo` · `curl|sh` · 대량 삭제 · `find -exec` 등은 `--yolo` 로도 우회 불가, 시크릿 접근은 대화형 승인 필수.
 2. **승인 게이트** (`PermissionMiddleware`) — 읽기 외 모든 도구를 HITL 게이트(default-deny). sync·async 양쪽 훅에 걸려 MCP(async) 경로도 우회 불가.
 3. **샌드박스** — 모든 경로가 워크스페이스 루트에 confine(`.koda/` 비노출). bubblewrap 설치 시 셸을 루트 read-only OS 격리로 실행.
 4. **시크릿 redaction** — 접근 경로와 무관하게 모든 도구 출력의 시크릿 패턴을 마스킹(`.env`·키 유출 차단).

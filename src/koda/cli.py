@@ -166,7 +166,7 @@ def _cmd_run(args) -> int:
     if (rc := _preflight_config()) is not None:
         return rc
     ws = Workspace(args.workspace)
-    approver = _auto_approver if args.yes else _interactive_approver
+    approver = _auto_approver if args.yolo else _interactive_approver
     mcps_dir = None if args.no_mcp else args.mcps_dir
     with MarkdownStreamRenderer(use_rich=_use_rich_renderer()) as renderer:
         try:
@@ -213,8 +213,8 @@ def _preflight_config() -> int | None:
 
 
 def _deny_approver(name, args) -> bool:
-    """비대화형 입력에서 승인 질문은 불가 — stdin 을 읽으면 다음 작업 줄을 승인 답변으로 삼킨다. --yes 없인 안전하게 거부한다."""
-    _err(f"[승인 거부] 비대화형 모드에서 --yes 없이 위험 도구 '{name}' 는 실행하지 않습니다.")
+    """비대화형 입력에서 승인 질문은 불가 — stdin 을 읽으면 다음 작업 줄을 승인 답변으로 삼킨다. --yolo 없인 안전하게 거부한다."""
+    _err(f"[승인 거부] 비대화형 모드에서 --yolo 없이 위험 도구 '{name}' 는 실행하지 않습니다.")
     return False
 
 
@@ -223,7 +223,7 @@ def _cmd_chat(args) -> int:
     if (rc := _preflight_config()) is not None:
         return rc
     ws = Workspace(args.workspace)
-    if args.yes:
+    if args.yolo:
         approver = _auto_approver
     elif sys.stdin.isatty():
         approver = _interactive_approver
@@ -339,10 +339,10 @@ def _cmd_tui(args) -> int:
 
 
 def main(argv=None) -> int:
-    # chat/tui 및 bare `koda` 가 공유하는 사람용 옵션. top-level 에도 얹어 `koda --yes` 처럼 서브커맨드 없이 쓸 수 있게 한다.
+    # chat/tui 및 bare `koda` 가 공유하는 사람용 옵션. top-level 에도 얹어 `koda --yolo` 처럼 서브커맨드 없이 쓸 수 있게 한다.
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--workspace", default=".")
-    common.add_argument("--yes", action="store_true", help="위험 도구 자동 승인")
+    common.add_argument("--yolo", action="store_true", help="위험 도구 자동 승인")
     common.add_argument("--resume", metavar="SESSION_ID", help="저장된 세션 재개")
     common.add_argument("--mcps-dir", default="mcps")
     common.add_argument("--no-mcp", action="store_true", help="외부 MCP 로드 생략(로컬만, 빠름)")
@@ -356,7 +356,7 @@ def main(argv=None) -> int:
     pr = sub.add_parser("run", help="작업 실행 (답변 스트리밍, 단계 표시, langfuse 추적)")
     pr.add_argument("task")
     pr.add_argument("--workspace", default=".")
-    pr.add_argument("--yes", action="store_true", help="위험 도구 자동 승인")
+    pr.add_argument("--yolo", action="store_true", help="위험 도구 자동 승인")
     pr.add_argument("--mcps-dir", default="mcps", help="MCP 설정 폴더 (기본: mcps)")
     pr.add_argument("--no-mcp", action="store_true", help="외부 MCP 로드 생략(로컬만, 빠름)")
     pr.set_defaults(func=_cmd_run)
