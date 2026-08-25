@@ -66,9 +66,8 @@ KODA_DARK = Theme(
 
 class KodaTui(App):
     TITLE = "koda"
-    # textual 8.2.8 결함 회피: 마크다운 표 렌더 직후 셀 클릭 시 텍스트 선택 로직이 고아 위젯을
-    # hit-test 해 앱이 죽는다 — 선택을 꺼서 그 경로를 차단한다(복사는 Shift+드래그로 여전히 가능).
-    ALLOW_SELECT = False
+    # 텍스트 선택은 켜 둔다. 드래그로 고른 뒤 놓으면 클립보드(OSC 52)로 복사되고, Ctrl+C 도 선택이 있으면 복사다.
+    # 과거 표 셀 클릭 크래시(textual 8.2.8) 회피용으로 꺼 두었으나 스트리밍 재렌더 중 클릭·드래그 반복으로도 재현되지 않아 되살렸다.
     BINDINGS = [
         ("ctrl+q", "graceful_quit", "종료"),
         # Ctrl+C 도 정상 종료. 입력창(TextArea) focus 시 기본은 copy 라 priority 로 그것을 이겨 종료로 만든다(IDE 가 Ctrl+Q 를 가로채는 환경 대비).
@@ -553,9 +552,28 @@ class KodaTui(App):
         # modal 닫힘(ESC)·거부·승인 결과가 resolve 로 worker 의 threading.Event 를 깨운다
         self.push_screen(ApprovalModal(msg.tool, msg.args), resolve)
 
+    # --- 텍스트 선택 → 복사 ---
+
+    def on_mouse_up(self, event) -> None:
+        # 선택 구간은 mouse move 로 갱신되고 up 에서 확정된다. 렌더 뒤에 읽어야 마지막 구간까지 들어온다.
+        self.call_after_refresh(self._copy_selection)
+
+    def _copy_selection(self) -> bool:
+        """화면 선택 텍스트가 있으면 클립보드로 보내고 True. 없으면 False (호출자가 원래 동작을 이어간다)."""
+        text = self.screen.get_selected_text()
+        if not text:
+            return False
+        self.copy_to_clipboard(text)
+        self.notify(f"복사됨 · {len(text)}자", timeout=2)
+        return True
+
     # --- 종료 ---
 
     def action_graceful_quit(self) -> None:
+        # Ctrl+C 관례: 선택이 있으면 복사, 없으면 종료.
+        if self._copy_selection():
+            self.screen.clear_selection()
+            return
         self._begin_close()
 
     def _begin_close(self) -> None:

@@ -302,11 +302,11 @@ def test_args_preview():
     assert "sk-live-123" not in masked and "[REDACTED]" in masked and "a.py" in masked
 
 
-# --- 마크다운 표 클릭 크래시 회피 (textual 8.2.8 결함) ---
+# --- 텍스트 선택 활성 + 마크다운 표 클릭 안전 (과거 textual 8.2.8 크래시 회귀 감시) ---
 
-def test_allow_select_disabled_and_table_click_safe(tmp_path):
-    """textual 8.2.8 은 마크다운 표 재렌더 직후 셀 클릭 시 텍스트 선택 로직이 고아 위젯을 hit-test 해 앱이 죽는다. ALLOW_SELECT=False 로 차단하며, 되살아나면 크래시가 재발하므로 불변식으로 고정한다."""
-    assert KodaTui.ALLOW_SELECT is False
+def test_select_enabled_and_table_click_safe(tmp_path):
+    """선택을 켠 상태에서 표 셀 클릭이 앱을 죽이지 않아야 한다. 과거 이 경로가 고아 위젯 hit-test 로 죽어 선택을 껐던 적이 있다."""
+    assert KodaTui.ALLOW_SELECT is True
 
     # 뷰포트(100x40) 안에 표 전체가 보이는 크기 — 스크롤 밖 셀은 pilot.click 이 OutOfBounds
     table_md = "| 항목 | 값 |\n| --- | --- |\n" + "\n".join(f"| r{i} | {i} |" for i in range(4))
@@ -322,7 +322,7 @@ def test_allow_select_disabled_and_table_click_safe(tmp_path):
             assert await _wait(pilot, _turn_done(app))
             cells = app.query(".cell")
             assert cells, "마크다운 표 셀이 렌더링되어야 한다"
-            await pilot.click(".cell")   # 선택 비활성 상태에서 표 클릭이 안전해야 한다
+            await pilot.click(".cell")   # 선택 활성 상태에서 표 클릭이 안전해야 한다
             await pilot.pause()
             assert not app.query_one("#prompt").disabled  # 앱 생존 확인
     asyncio.run(go())
@@ -694,3 +694,34 @@ def test_resume_unknown_id_keeps_current_session(tmp_path):
             assert app.runner.session.id == cur and not app._busy
 
     asyncio.run(run())
+
+
+# --- 드래그 선택 → 클립보드 복사 ---
+
+def test_drag_selection_copies_to_clipboard(tmp_path):
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_token("복사대상텍스트")
+        return _result("복사대상텍스트")
+
+    copied: list[str] = []
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        app.copy_to_clipboard = copied.append          # OSC 52 대신 기록만
+        async with app.run_test(size=(100, 30)) as pilot:
+            await _submit(pilot, "질문")
+            assert await _wait(pilot, _turn_done(app))
+            md = app.query_one("#conversation").query(".answer").first()
+            r = md.region
+            await pilot.mouse_down(offset=(r.x, r.y))
+            await pilot.hover(offset=(r.x + 6, r.y))
+            await pilot.mouse_up(offset=(r.x + 6, r.y))
+            assert await _wait(pilot, lambda: bool(copied))
+            # 드래그 구간만큼(한글은 2셀/자) 앞에서부터 잘린 텍스트가 복사된다
+            assert copied[0] and "복사대상텍스트".startswith(copied[0])
+            # Ctrl+C: 선택이 남아 있으면 복사(종료 아님)
+            n = len(copied)
+            await pilot.press("ctrl+c")
+            await pilot.pause()
+            assert len(copied) == n + 1 and not app._close_requested
+    asyncio.run(go())
