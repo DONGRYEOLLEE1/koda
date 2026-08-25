@@ -47,6 +47,7 @@ def build_model(settings: ModelSettings):
         max_tokens=4096,
         # 스트리밍 생성도 토큰 사용량을 보고하게 한다 — 없으면 astream 호출의 usage 가 langfuse 에 과소집계된다.
         stream_usage=True,
+        use_responses_api=settings.use_responses_api if provider == "openai" else False,
     )
     return chat, provider, reason
 
@@ -80,6 +81,7 @@ def _derive(model, settings: ModelSettings, enabled: bool, budget: int = 0):
         temperature=model.temperature,
         max_tokens=model.max_tokens,
         stream_usage=True,
+        use_responses_api=bool(getattr(model, "use_responses_api", False)),
         **params,
     )
 
@@ -97,9 +99,9 @@ _METHOD_OVERRIDE: tuple[str, ...] | None = None
 
 
 def set_structured_method(method: str) -> None:
-    """구조화 출력 방식을 고정한다(빈 값이면 자동 탐색). run_task 진입 시 설정에서 1회 반영한다."""
+    """구조화 출력 방식을 고정한다(빈 값·auto 면 자동 탐색). run_task 진입 시 설정에서 1회 반영한다."""
     global _METHOD_OVERRIDE
-    _METHOD_OVERRIDE = (method,) if method else None
+    _METHOD_OVERRIDE = (method,) if method and method != "auto" else None
 
 
 def _remember_if_unsupported(model_name: str, method: str, exc: Exception) -> None:

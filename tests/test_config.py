@@ -9,6 +9,7 @@ _ENV_KEYS = [
     "PRIMARY", "LOCAL_API_KEY", "LOCAL_OPENAI_BASE_URL", "LOCAL_MODEL_NAME",
     "FALLBACK_ENABLED", "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL_NAME",
     "THINKING_BUDGET_READER", "THINKING_BUDGET_EXPLORE",
+    "MODEL", "DEEPSEEK_API_KEY", "REASONING_STYLE", "STRUCTURED_METHOD",
 ]
 
 _FULL = {
@@ -103,3 +104,47 @@ def test_resolve_env_file_priority(tmp_path, monkeypatch):
     # 4) CWD/.env 가 전역보다 우선 (개발 시 기존 동작 유지)
     (tmp_path / ".env").write_text("PRIMARY=local", encoding="utf-8")
     assert _resolve_env_file() == ".env"
+
+
+# --- provider 프로필: 모델명만 바꿔 전환 ---
+
+def test_model_name_infers_openai_profile(monkeypatch):
+    monkeypatch.setenv("MODEL", "gpt-5.6-terra")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-oai")
+    s = ModelSettings(_env_file=None)
+    assert s.openai_base_url == "https://api.openai.com/v1"
+    assert s.reasoning_style == "effort" and s.structured_method == "json_schema"
+    assert s.openai_api_key == "sk-oai" and s.provider_name == "openai"
+    assert s.use_responses_api is True                       # 도구+reasoning 은 Responses API 에서만 된다
+
+
+def test_deepseek_uses_provider_key_then_falls_back_to_openai_key(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-oai")
+    s = ModelSettings(_env_file=None)                       # 기본 모델 deepseek-v4-flash
+    assert s.openai_api_key == "ds-key" and s.structured_method == "function_calling"
+    monkeypatch.delenv("DEEPSEEK_API_KEY")
+    assert ModelSettings(_env_file=None).openai_api_key == "sk-oai"   # 예전 방식(OPENAI_API_KEY 겸용) 호환
+
+
+def test_explicit_values_beat_profile(monkeypatch):
+    monkeypatch.setenv("MODEL", "gpt-5.6-terra")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://proxy.local/v1")
+    monkeypatch.setenv("STRUCTURED_METHOD", "function_calling")
+    monkeypatch.setenv("REASONING_STYLE", "off")
+    s = ModelSettings(_env_file=None)
+    assert s.openai_base_url == "https://proxy.local/v1"
+    assert s.structured_method == "function_calling" and s.reasoning_style == "off"
+
+
+def test_unknown_model_needs_no_profile_and_keeps_deepseek_base(monkeypatch):
+    monkeypatch.setenv("MODEL", "my-finetune")
+    s = ModelSettings(_env_file=None)
+    assert s.provider_name == "custom" and s.openai_base_url == "https://api.deepseek.com"
+    assert s.reasoning_style == "effort" and s.structured_method == "function_calling"
+    assert s.use_responses_api is False
+
+
+def test_legacy_openai_model_name_alias_still_works(monkeypatch):
+    monkeypatch.setenv("OPENAI_MODEL_NAME", "gpt-5.6-terra")
+    assert ModelSettings(_env_file=None).openai_model == "gpt-5.6-terra"

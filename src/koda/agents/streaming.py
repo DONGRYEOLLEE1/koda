@@ -21,9 +21,18 @@ class AgentResult:
 
 
 def _to_text(content) -> str:
+    """메시지 content 를 본문 텍스트로. Responses API 등은 블록 리스트를 주는데 text 블록만 본문이고 reasoning·function_call 블록은 버린다."""
     if isinstance(content, str):
         return content
-    return "".join(str(c) for c in content) if content else ""
+    if not content:
+        return ""
+    out = []
+    for c in content:
+        if isinstance(c, str):
+            out.append(c)
+        elif isinstance(c, dict) and c.get("type") == "text":
+            out.append(c.get("text") or "")
+    return "".join(out)
 
 
 def _final_ai(final_state, start: int = 0) -> tuple[str, str, dict]:

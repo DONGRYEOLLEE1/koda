@@ -114,3 +114,13 @@ def test_tool_message_never_leaks_to_stdout():
     tokens = []
     asyncio.run(astream_agent(agent, msgs, tokens.append))
     assert tokens == ["답"]  # AIMessageChunk 만 통과
+
+
+def test_to_text_keeps_only_text_blocks():
+    # Responses API 는 reasoning·function_call·text 블록을 한 리스트로 준다 — 본문은 text 블록뿐이다.
+    from koda.agents.streaming import _to_text
+    blocks = [{"type": "reasoning", "summary": [], "id": "rs_1"},
+              {"type": "function_call", "name": "read_file", "arguments": "{}"},
+              {"type": "text", "text": "서울"}, "입니다"]
+    assert _to_text(blocks) == "서울입니다"
+    assert _to_text([]) == "" and _to_text("그대로") == "그대로"

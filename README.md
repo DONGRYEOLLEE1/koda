@@ -12,7 +12,7 @@
 ## 요구사항
 
 - Python ≥ 3.13, [uv](https://docs.astral.sh/uv/)
-- OpenAI 호환 엔드포인트 하나. 기본은 DeepSeek API 라 키만 있으면 되고, 로컬 llama.cpp 를 쓰려면 `PRIMARY=local` 로 바꾼다.
+- OpenAI 호환 엔드포인트 하나. 모델명으로 provider(OpenAI·DeepSeek)를 유추하므로 모델명과 키만 있으면 되고, 로컬 llama.cpp 를 쓰려면 `PRIMARY=local` 로 바꾼다.
 - (선택) Docker + Compose — langfuse 추적 스택
 
 ## 빠른 시작
@@ -20,18 +20,19 @@
 ```bash
 git clone https://github.com/DONGRYEOLLEE1/koda && cd koda
 uv tool install ".[tui]"          # 어디서든 `koda` 로 실행
-export OPENAI_API_KEY=sk-...
-koda
+export DEEPSEEK_API_KEY=...       # 기본 모델 deepseek-v4-flash 의 키 — 설정은 이것뿐이다
+koda                              # TUI 진입 (= koda tui)
 ```
 
 - `--yolo` 없이 뜨면 위험 도구(쓰기·삭제·명령·MCP) 전에 승인을 묻고, `koda --yolo` 는 자동 승인한다. 재앙적 명령(`sudo`·`rm -rf /` 류)은 `--yolo` 로도 막힌다.
 - TUI 슬래시 명령: `/help` 목록 · `/resume` 저장된 세션을 골라 이전 대화를 띄우고 이어서 진행 · `/compact` 이력 압축 · `/clear` 새 스레드 · `/remember <내용>` 영구 메모리 · `/exit`.
 - 줄바꿈은 `Ctrl+J`(터미널이 확장 키를 지원하면 `Alt+Enter`·`Shift+Enter` 도 된다), `Ctrl+Q`/`Ctrl+C` 종료.
 
-**다른 엔드포인트·로컬 모델** — 환경변수로 넘기거나 `CWD/.env` · `~/.config/koda/.env` 에 둔다(환경변수가 파일보다 우선). 전체 항목과 설명은 `.env.example`.
+**모델 전환·로컬 모델** — 모델명으로 provider 를 유추해 base_url·reasoning·구조화 출력 방식을 맞추므로 `MODEL` 과 키만 바꾸면 된다. 환경변수로 넘기거나 `CWD/.env` · `~/.config/koda/.env` 에 둔다(환경변수가 파일보다 우선). 전체 항목은 `.env.example`.
 
 ```bash
-export OPENAI_BASE_URL=https://api.openai.com/v1 OPENAI_MODEL_NAME=gpt-4o-mini
+export MODEL=gpt-5.6-terra OPENAI_API_KEY=sk-...                                   # OpenAI 로 전환 (base_url 자동)
+export MODEL=my-model OPENAI_BASE_URL=https://my-host/v1 OPENAI_API_KEY=...        # 유추 안 되는 자체 호스팅
 export PRIMARY=local LOCAL_OPENAI_BASE_URL=http://localhost:8080/v1 REASONING_STYLE=qwen STRUCTURED_METHOD=json_schema   # llama.cpp 우선, API 는 폴백
 ```
 
@@ -50,11 +51,23 @@ uv run pytest --ignore=tests/test_live_llm.py
 docker compose up -d
 ```
 
+## 엔드포인트 호환
+
+모델명 접두로 프로필을 골라 아래 값을 채운다. 어느 칸이든 같은 이름의 환경변수를 주면 그 값이 우선한다. 실측 기준(2026-08).
+
+| provider | 모델명 (`MODEL`) | base_url | 키 | API 형태 | reasoning (`REASONING_STYLE`) | 구조화 출력 (`STRUCTURED_METHOD`) | 비고 |
+|---|---|---|---|---|---|---|---|
+| **OpenAI** | `gpt-*`, `o1/o3/o4*`, `chatgpt-*` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | Responses | `effort` → `reasoning_effort` | `json_schema` | Chat Completions 는 도구 + `reasoning_effort≠none` 을 400 으로 거절해 Responses API 로 보낸다. reasoning 파라미터를 모르는 gpt-4o 류는 `REASONING_STYLE=off` |
+| **DeepSeek** (기본) | `deepseek-*` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` (없으면 `OPENAI_API_KEY` 겸용) | Chat Completions | `effort` → `reasoning_effort` | `function_calling` | `json_schema` 거절. reasoning 파라미터를 안 보내면 thinking 이 켜진 채라 강제 `tool_choice` 를 거절하므로 `off` 로 두지 말 것. `/anthropic` 경로는 Anthropic SDK 용이라 쓰지 않는다 |
+| **llama.cpp** (로컬) | 임의 (`LOCAL_MODEL_NAME`) | `LOCAL_OPENAI_BASE_URL` (기본 `http://localhost:8080/v1`) | `LOCAL_API_KEY` | Chat Completions | `qwen` → `chat_template_kwargs.enable_thinking` + `thinking_budget_tokens` | `json_schema` (문법 강제) | `PRIMARY=local` 로 우선시키고, 죽어 있으면 API 로 폴백. 서버는 `--reasoning-budget` 없이 띄워야 요청별 예산이 먹는다 |
+| **자체 호스팅·기타 OpenAI 호환** (vLLM 등) | 임의 | `OPENAI_BASE_URL` 명시 | `OPENAI_API_KEY` | Chat Completions | 명시 (기본 `effort`) | 명시 (기본 `function_calling`, 탐색은 `auto`) | 유추되지 않는 모델명은 이 행으로 떨어진다. 파라미터를 거절하면 `off`·`auto` 로 조정 |
+| **Anthropic** | — | — | — | — | — | — | OpenAI 호환 API 가 아니라 미지원(별도 어댑터 필요) |
+
 ## 아키텍처
 
 langgraph `StateGraph` 분기: **router → { answer | reader | investigator → 끝 | [plan →] coder → verifier(fail 시 plan 재수립 후 재시도 1회) }**.
 
-- **LLM** — OpenAI 호환 엔드포인트 하나(`init_chat_model`). 기본은 DeepSeek API 이고 `PRIMARY=local` 이면 llama.cpp 를 우선하며 API 는 폴백이 된다(반대 방향도 대칭). reasoning 파라미터는 엔드포인트마다 이름이 달라 `REASONING_STYLE`(`effort`·`off`·`qwen`)로 고른다. 기본값 `effort`는 DeepSeek·gpt-5 계열용이고(DeepSeek 는 안 보내면 thinking 이 켜진 채라 구조화 출력이 깨진다), 파라미터를 모르는 gpt-4o 류는 `off`, llama.cpp 는 `qwen` 으로 사고 예산을 쓴다.
+- **LLM** — OpenAI 호환 엔드포인트 하나(`init_chat_model`). 모델명 접두로 provider 프로필(`gpt-*`→OpenAI, `deepseek-*`→DeepSeek)을 골라 base_url·`REASONING_STYLE`·`STRUCTURED_METHOD` 를 채우고, 명시한 환경변수가 우선한다. `PRIMARY=local` 이면 llama.cpp 를 우선하며 API 는 폴백(반대 방향도 대칭). reasoning 파라미터를 모르는 gpt-4o 류는 `REASONING_STYLE=off`, llama.cpp 는 `qwen` 으로 사고 예산을 쓴다.
 - **에이전트** — `AgentSpec` 레지스트리 + `create_agent`. answer/reader/investigator/coder/planner + 컨텍스트 격리용 `explore`(위임 탐색). answer 는 워크스페이스 도구를 쥐지 않아 개념·용어 질문에 검색 루프를 돌지 않는다. verifier 는 diff 기반 단일 판정.
 - **구조화 출력** — router `{route, plan_needed}`·verifier `{verdict, reasoning}` 를 `STRUCTURED_METHOD` 방식으로 받는다(기본 `function_calling`, llama.cpp 는 문법 강제 `json_schema`, 빈 값이면 강제력 순 탐색). 실패 시 텍스트 폴백.
 - **미들웨어** — 도구 스텝 상한(루프 폭주 차단) → 승인 게이트 → 출력 트림+redaction → 히스토리 트림(토큰 예산).

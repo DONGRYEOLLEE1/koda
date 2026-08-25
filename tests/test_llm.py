@@ -209,3 +209,11 @@ def test_structured_method_override_empty_restores_probing():
 def test_invalid_structured_method_rejected():
     with pytest.raises(ValueError):
         _cfg(structured_method="grammar")
+
+
+def test_derive_carries_responses_api_flag():
+    from langchain.chat_models import init_chat_model
+    base = init_chat_model("gpt-5.6-terra", model_provider="openai", base_url="https://api.openai.com/v1",
+                           api_key="k", temperature=0, max_tokens=4096, use_responses_api=True)
+    m = _no_think(base, _cfg(reasoning_style="effort"))
+    assert m.use_responses_api is True and m.reasoning_effort == "none"

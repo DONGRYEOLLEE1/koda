@@ -208,9 +208,10 @@ def _preflight_config() -> int | None:
         return 2
     provider, _reason = select_provider(settings)
     if provider == "openai" and not settings.openai_api_key:
-        _err("API 키가 없습니다. 기본 엔드포인트(DeepSeek, OpenAI 호환)를 쓰려면 키를 환경변수로 넘기세요:")
-        _err("  export OPENAI_API_KEY=sk-...")
-        _err(f"  # 다른 엔드포인트: OPENAI_BASE_URL / OPENAI_MODEL_NAME (현재 {settings.openai_base_url})")
+        key_env = "DEEPSEEK_API_KEY" if settings.provider_name == "deepseek" else "OPENAI_API_KEY"
+        _err(f"API 키가 없습니다. 모델 '{settings.openai_model}' ({settings.provider_name}, {settings.openai_base_url}) 에 쓸 키를 넘기세요:")
+        _err(f"  export {key_env}=...")
+        _err("  # 모델 전환은 MODEL=gpt-5 / MODEL=deepseek-v4-flash 처럼 모델명만 바꾸면 된다 (base_url·파라미터는 자동)")
         _err(f"  # 로컬 llama.cpp 를 쓰려면: PRIMARY=local LOCAL_OPENAI_BASE_URL=... (현재 {settings.local_base_url} 미응답)")
         return 2
     return None
