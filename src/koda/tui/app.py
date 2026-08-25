@@ -598,12 +598,15 @@ def run_tui(args) -> int:
         except Exception as e:
             _err(f"  · MCP 로드 실패({type(e).__name__}) — 로컬 도구만 사용")
 
-    # statusline 에 표시할 활성 모델명 (설정 로드 실패는 _preflight 가 이미 걸러 여기선 방어만)
+    # statusline 에 표시할 활성 모델명 — PRIMARY 가 아니라 실제로 선택된 provider 기준. primary 가 죽어
+    # 폴백으로 뜬 경우 PRIMARY 기준 표시는 호출되지 않는 모델을 보여 준다.
     model_name = ""
     try:
         from ..config import load_model_settings
+        from ..llm import select_provider
         st = load_model_settings()
-        model_name = st.local_model if st.primary == "local" else st.openai_model
+        provider, _ = select_provider(st)
+        model_name = st.local_model if provider == "local" else st.openai_model
     except Exception:
         pass
 
