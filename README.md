@@ -11,55 +11,50 @@
 
 ## 요구사항
 
-- Python ≥ 3.13, [uv](https://docs.astral.sh/uv/), Docker + Compose (langfuse 스택)
-- (운영) llama.cpp OpenAI 호환 엔드포인트. 미가용 시 `.env` 의 OpenAI API 폴백.
+- Python ≥ 3.13, [uv](https://docs.astral.sh/uv/)
+- OpenAI 호환 엔드포인트 하나. 기본은 DeepSeek API 라 키만 있으면 되고, 로컬 llama.cpp 를 쓰려면 `PRIMARY=local` 로 바꾼다.
+- (선택) Docker + Compose — langfuse 추적 스택
 
 ## 빠른 시작
 
 ```bash
-# 설치 — 어디서든 koda 실행
-uv tool install .                 # TUI 포함은 "koda[tui]"	단일 설치 스크립트로 개선 필요.
-mkdir -p ~/.config/koda && cp .env.example ~/.config/koda/.env		# 개선 필요.
-#   설정 탐색 순서: CWD/.env → ~/.config/koda/.env → 환경변수
-
-# 개발 — 레포에서
-uv sync
-cp .env.example .env
-docker compose up -d              # langfuse → http://localhost:28900
-uv run pytest --ignore=tests/test_live_llm.py
+git clone https://github.com/DONGRYEOLLEE1/koda && cd koda
+uv tool install ".[tui]"          # 어디서든 `koda` 로 실행
+export OPENAI_API_KEY=sk-...      # 기본 엔드포인트(DeepSeek)의 키 — 설정은 이것뿐이다
+koda                              # TUI 진입 (= koda tui)
 ```
 
-**실행** (설치본은 `koda`, 레포에서는 `uv run koda`)
+- `--yolo` 없이 뜨면 위험 도구(쓰기·삭제·명령·MCP) 전에 승인을 묻고, `koda --yolo` 는 자동 승인한다. 재앙적 명령(`sudo`·`rm -rf /` 류)은 `--yolo` 로도 막힌다.
+- TUI 슬래시 명령: `/help` 목록 · `/resume` 저장된 세션을 골라 이전 대화를 띄우고 이어서 진행 · `/compact` 이력 압축 · `/clear` 새 스레드 · `/remember <내용>` 영구 메모리 · `/exit`.
+- 줄바꿈은 `Ctrl+J`(터미널이 확장 키를 지원하면 `Alt+Enter`·`Shift+Enter` 도 된다), `Ctrl+Q`/`Ctrl+C` 종료.
+
+**다른 엔드포인트·로컬 모델** — 환경변수로 넘기거나 `CWD/.env` · `~/.config/koda/.env` 에 둔다(환경변수가 파일보다 우선). 전체 항목과 설명은 `.env.example`.
 
 ```bash
-# 단발 — 답변 스트리밍 + 단계 표시
-koda run "calc.py에 두 수를 빼는 sub 함수를 추가해줘" --workspace . --yolo
-koda run "이 프로젝트 구조를 설명해줘" --workspace .
-
-# 멀티턴 대화 — 세션 저장/재개, 영구 메모리
-koda chat --workspace . --yolo
-#   » calc.py 만들어 add 함수 작성해줘
-#   » 방금 만든 파일에 mul 함수도 추가해줘      ← 히스토리로 지시어 해소
-#   » /remember 함수 이름은 snake_case 로       ← 영구 메모리 (새 세션에도 적용)
-#   » /exit
-koda chat --workspace . --resume <session-id>
-
-# TUI (기본 진입점) — 대화 스트림 + 상태/검증/메모리 패널 + 위험 도구 승인 modal
-#   서브커맨드 없이 `koda` 만 실행하면 TUI 로 진입한다. --yolo/--workspace/--resume 등도 그대로 받는다.
-koda                        # = koda tui
-koda --yolo                  # 위험 도구 자동 승인으로 시작
-koda --resume <session-id>  # 저장된 세션 재개
-koda tui --workspace .      # 명시적 형태도 동일
+export OPENAI_BASE_URL=https://api.openai.com/v1 OPENAI_MODEL_NAME=gpt-4o-mini            # 다른 OpenAI 호환 API
+export PRIMARY=local LOCAL_OPENAI_BASE_URL=http://localhost:8080/v1 REASONING_STYLE=qwen   # llama.cpp 우선, API 는 폴백
 ```
 
-- `--yolo` 없이 실행하면 위험 도구(쓰기·삭제·명령·MCP 호출) 전에 승인을 묻는다. 비대화형(파이프)에서 `--yolo` 가 없으면 안전하게 거부한다.
-- `--no-mcp` 로 외부 MCP 없이 로컬만 빠르게 실행한다.
+**자동화·파이프** — TUI 없이 쓰는 진입점. `--no-mcp` 는 외부 MCP 를 건너뛰어 빠르게 뜬다.
+
+```bash
+koda run "calc.py에 두 수를 빼는 sub 함수를 추가해줘" --workspace . --yolo   # 단발 실행, 답변 스트리밍
+koda chat --workspace . --yolo                                            # 줄 단위 REPL, stdin 파이프 가능
+```
+
+**개발** — 레포에서.
+
+```bash
+uv sync && uv tool install -e ".[tui]"   # editable 설치 — 코드 수정이 재설치 없이 반영된다
+uv run pytest --ignore=tests/test_live_llm.py
+docker compose up -d                      # (선택) langfuse → http://localhost:28900, 키는 .env.example 의 LANGFUSE_*
+```
 
 ## 아키텍처
 
 langgraph `StateGraph` 분기: **router → { answer | reader | investigator → 끝 | [plan →] coder → verifier(fail 시 plan 재수립 후 재시도 1회) }**.
 
-- **LLM** — 로컬 llama.cpp 우선 + OpenAI 폴백 (`init_chat_model`). reasoning 파라미터는 엔드포인트마다 이름이 달라 `REASONING_STYLE`(`off`·`qwen`·`effort`)로 고르며, 기본값 `off`는 아무것도 보내지 않아 어디에도 거절당하지 않는다 — llama.cpp 로 사고 예산을 쓰려면 `qwen` 으로 켠다.
+- **LLM** — OpenAI 호환 엔드포인트 하나(`init_chat_model`). 기본은 DeepSeek API 이고 `PRIMARY=local` 이면 llama.cpp 를 우선하며 API 는 폴백이 된다(반대 방향도 대칭). reasoning 파라미터는 엔드포인트마다 이름이 달라 `REASONING_STYLE`(`off`·`qwen`·`effort`)로 고르며, 기본값 `off`는 아무것도 보내지 않아 어디에도 거절당하지 않는다 — llama.cpp 로 사고 예산을 쓰려면 `qwen` 으로 켠다.
 - **에이전트** — `AgentSpec` 레지스트리 + `create_agent`. answer/reader/investigator/coder/planner + 컨텍스트 격리용 `explore`(위임 탐색). answer 는 워크스페이스 도구를 쥐지 않아 개념·용어 질문에 검색 루프를 돌지 않는다. verifier 는 diff 기반 단일 판정.
 - **구조화 출력** — router `{route, plan_needed}`·verifier `{verdict, reasoning}` 를 `json_schema` → `function_calling` 순으로 시도(`STRUCTURED_METHOD` 로 고정 가능). 전부 실패 시 텍스트 폴백.
 - **미들웨어** — 도구 스텝 상한(루프 폭주 차단) → 승인 게이트 → 출력 트림+redaction → 히스토리 트림(토큰 예산).
