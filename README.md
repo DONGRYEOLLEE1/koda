@@ -28,7 +28,7 @@ koda                              # TUI 진입 (= koda tui)
 - TUI 슬래시 명령: `/help` 목록 · `/resume` 저장된 세션을 골라 이전 대화를 띄우고 이어서 진행 · `/compact` 이력 압축 · `/clear` 새 스레드 · `/remember <내용>` 영구 메모리 · `/exit`.
 - 줄바꿈은 `Ctrl+J`(터미널이 확장 키를 지원하면 `Alt+Enter`·`Shift+Enter` 도 된다), `Ctrl+Q`/`Ctrl+C` 종료.
 
-**모델 전환·로컬 모델** — 모델명으로 provider 를 유추해 base_url·reasoning·구조화 출력 방식을 맞추므로 `MODEL` 과 키만 바꾸면 된다. 환경변수로 넘기거나 `CWD/.env` · `~/.config/koda/.env` 에 둔다(환경변수가 파일보다 우선). 전체 항목은 `.env.example`.
+**모델 전환·로컬 모델** — 모델명으로 provider 를 유추해 base_url·reasoning·구조화 출력 방식을 맞추므로 `MODEL` 과 키만 바꾸면 된다. 회사별 환경변수 블록과 주의사항은 [`providers/`](providers/README.md) 에 있다. 환경변수로 넘기거나 `CWD/.env` · `~/.config/koda/.env` 에 둔다(환경변수가 파일보다 우선). 전체 항목은 `.env.example`.
 
 ```bash
 export MODEL=gpt-5.6-terra OPENAI_API_KEY=sk-...                                   # OpenAI 로 전환 (base_url 자동)
@@ -53,7 +53,7 @@ docker compose up -d
 
 ## 엔드포인트 호환
 
-모델명 접두로 프로필을 골라 아래 값을 채운다. 어느 칸이든 같은 이름의 환경변수를 주면 그 값이 우선한다. 실측 기준(2026-08).
+모델명 접두로 프로필을 골라 아래 값을 채운다. 어느 칸이든 같은 이름의 환경변수를 주면 그 값이 우선한다. 실측 기준(2026-08). provider 별 환경변수 블록·문제 해결은 [`providers/<이름>.md`](providers/README.md).
 
 | provider | 모델명 (`MODEL`) | base_url | 키 | API 형태 | reasoning (`REASONING_STYLE`) | 구조화 출력 (`STRUCTURED_METHOD`) | 비고 |
 |---|---|---|---|---|---|---|---|
