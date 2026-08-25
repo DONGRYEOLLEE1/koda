@@ -104,7 +104,7 @@ langgraph `StateGraph` 분기: **router → { answer | reader | investigator →
 ```
 <workspace>/.koda/
   ├─ memory.md            # 영구 메모리 — /remember + 세션 종료 시 LLM 자동 추출, 새 세션에 주입
-  └─ sessions/<id>.json   # 세션(히스토리) — chat --resume <id> 로 재개
+  └─ sessions/<id>.json   # 세션(히스토리) — TUI 에서 /resume 으로 목록 선택·재개
 ```
 
 - 세션이 히스토리를 유지·영속해 "방금 만든 파일에 …" 같은 지시어를 해소한다.

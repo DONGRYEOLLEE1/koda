@@ -102,6 +102,17 @@ class TuiTurnRunner:
         self.session = Session(self._ws.root)
         return self.session.id
 
+    def resume(self, session_id: str) -> Session:
+        """/resume: 현재 세션을 저장하고 저장된 세션으로 교체한다. 없으면 FileNotFoundError."""
+        loaded = Session.load(self._ws.root, session_id)
+        if self.session.history and self.session.id != session_id:
+            try:
+                self.session.save()
+            except Exception as e:
+                self._app.notify(f"이전 세션 저장 실패({type(e).__name__})", severity="warning", timeout=5)
+        self.session = loaded
+        return loaded
+
     def compact_now(self) -> None:
         """/compact: 현재 세션 이력을 요약 압축한다(최근 턴 유지). 임계값과 무관하게 수동으로 트리거한다."""
         post = self._app.post_message

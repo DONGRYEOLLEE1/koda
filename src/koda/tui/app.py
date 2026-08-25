@@ -30,7 +30,7 @@ from .model import (
     TurnFailed,
 )
 from .runner import APPROVAL_TIMEOUT_S, TuiTurnRunner
-from .widgets import ApprovalModal, PromptArea, ToolBlock
+from .widgets import ApprovalModal, PromptArea, SessionPicker, ToolBlock
 
 _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"  # rich 'dots' 프레임 — toad/Claude Code 계열 표준 스피너
 
@@ -87,6 +87,10 @@ class KodaTui(App):
     #approval_args { color: $text-muted; margin: 1 0; }
     #approval_buttons { height: auto; align-horizontal: center; margin-top: 1; }
     #approval_buttons Button { margin: 0 2; }
+    SessionPicker { align: center middle; }
+    #session_dialog { width: 90%; max-width: 110; height: auto; max-height: 80%; border: thick $primary;
+                      background: $surface; padding: 1 2; }
+    #session_title { margin-bottom: 1; }
     ToolBlock { border: none; background: transparent; padding: 0; margin: 0; }
     ToolBlock CollapsibleTitle { color: $text-muted; }
     """
@@ -120,6 +124,7 @@ class KodaTui(App):
             "/help": ("사용 가능한 명령 목록", self._cmd_help),
             "/compact": ("대화 이력을 요약으로 압축", self._cmd_compact),
             "/clear": ("새 스레드 시작(대화 맥락 초기화)", self._cmd_clear),
+            "/resume": ("저장된 세션 재개: /resume [session-id] (인자 없으면 목록에서 선택)", self._cmd_resume),
             "/memory": ("메모리 내용 보기", self._cmd_memory),
             "/remember": ("메모리에 저장: /remember <내용>", self._cmd_remember),
             "/theme": ("테마 변경: /theme <이름> (인자 없으면 목록)", self._cmd_theme),
@@ -275,6 +280,51 @@ class KodaTui(App):
             self.notify(f"새 스레드 시작 · 세션 {new_id}", timeout=4)
         finally:
             self._busy = False
+
+    async def _cmd_resume(self, arg: str) -> None:
+        # 인자가 있으면 바로, 없으면 목록 modal 에서 고른다. 선택 결과는 콜백으로 받아 세션을 교체하고 이력을 재생한다.
+        if arg:
+            await self._resume_session(arg)
+            return
+        sessions = [s for s in Session.summaries(self.runner._ws.root) if s["id"] != self.runner.session.id]
+        if not sessions:
+            self.notify("재개할 저장된 세션이 없습니다.", timeout=4)
+            return
+
+        def picked(session_id) -> None:
+            if session_id:
+                self.call_later(self._resume_session, session_id)
+
+        self.push_screen(SessionPicker(sessions), picked)
+
+    async def _resume_session(self, session_id: str) -> None:
+        self._busy = True
+        try:
+            try:
+                session = self.runner.resume(session_id)
+            except FileNotFoundError:
+                ids = ", ".join(Session.list_ids(self.runner._ws.root)) or "없음"
+                self.notify(f"세션 없음: {session_id} (목록: {ids})", severity="warning", timeout=6)
+                return
+            conv = self.query_one("#conversation", VerticalScroll)
+            await conv.remove_children()
+            await self._replay_history(session.history)
+            self._activity_off()
+            self._set_status("대기 중")
+            self.notify(f"세션 재개 · {session.id} ({len(session.turns)}턴)", timeout=4)
+        finally:
+            self._busy = False
+
+    async def _replay_history(self, history: list) -> None:
+        """저장된 user/assistant 이력을 대화 스트림에 다시 그린다 — 이어서 대화할 맥락을 화면에도 보여준다."""
+        conv = self.query_one("#conversation", VerticalScroll)
+        for m in history:
+            content = m.get("content") or ""
+            if m.get("role") == "user":
+                await conv.mount(Static(f"» {content}", classes="user-turn", markup=False))
+            else:
+                await conv.mount(Markdown(content, classes="answer"))
+        conv.anchor()
 
     async def _cmd_memory(self, arg: str) -> None:
         self.notify(self.runner.memory.read() or "(비어 있음)", title="메모리", timeout=10)
@@ -561,5 +611,5 @@ def run_tui(args) -> int:
     app.run()
     final = app.runner.session   # /clear 로 세션이 교체됐을 수 있으므로 최종 세션 기준
     if final.history:
-        _err(f"세션 저장됨: {final.id}  (재개: koda tui --resume {final.id})")
+        _err(f"세션 저장됨: {final.id}  (재개: koda 실행 후 /resume {final.id})")
     return 0

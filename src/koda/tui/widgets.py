@@ -9,7 +9,8 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.message import Message
 from textual.screen import ModalScreen
-from textual.widgets import Button, Collapsible, Static, TextArea
+from textual.widgets import Button, Collapsible, OptionList, Static, TextArea
+from textual.widgets.option_list import Option
 
 from .model import DIFF_TOOLS
 
@@ -102,3 +103,35 @@ class ApprovalModal(ModalScreen[bool]):
 
     def action_deny(self) -> None:
         self.dismiss(False)
+
+
+class SessionPicker(ModalScreen[str | None]):
+    """/resume 세션 선택 — 최근 수정순 목록에서 Enter 로 고르고 ESC 로 닫는다(None)."""
+
+    BINDINGS = [("escape", "cancel", "닫기")]
+
+    def __init__(self, sessions: list[dict]) -> None:
+        super().__init__()
+        self._sessions = sessions
+
+    @staticmethod
+    def _label(s: dict) -> Text:
+        import datetime
+        when = datetime.datetime.fromtimestamp(s["updated"]).strftime("%m-%d %H:%M")
+        first = " ".join(s["first_task"].split())[:60] or "(질의 없음)"
+        t = Text()
+        t.append(s["id"], style="bold")
+        t.append(f"  {s['turns']}턴  {when}  ", style="dim")
+        t.append(first)
+        return t
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="session_dialog"):
+            yield Static("재개할 세션을 고르세요 (Enter 선택 · ESC 닫기)", id="session_title", markup=False)
+            yield OptionList(*(Option(self._label(s), id=s["id"]) for s in self._sessions), id="session_list")
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        self.dismiss(event.option.id)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)

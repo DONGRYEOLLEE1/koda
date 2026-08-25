@@ -81,3 +81,14 @@ def test_list_ids(tmp_path):
     Session(tmp_path, "b2").save()
     Session(tmp_path, "a1").save()
     assert Session.list_ids(tmp_path) == ["a1", "b2"]
+
+
+def test_summaries_lists_recent_first_and_skips_broken(tmp_path):
+    a = Session(tmp_path, session_id="aaa"); a.add_turn("첫 질문 A", "답", route="read", verdict=None); a.save()
+    b = Session(tmp_path, session_id="bbb"); b.add_turn("첫 질문 B", "답", route="read", verdict=None); b.save()
+    (tmp_path / ".koda" / "sessions" / "broken.json").write_text("{not json", encoding="utf-8")
+    import os, time
+    os.utime(a.path, (time.time() + 10, time.time() + 10))   # a 를 더 최근으로
+    out = Session.summaries(tmp_path)
+    assert [s["id"] for s in out] == ["aaa", "bbb"]           # 최근 수정순, 깨진 파일 제외
+    assert out[0]["turns"] == 1 and out[0]["first_task"] == "첫 질문 A"

@@ -652,3 +652,45 @@ def test_edit_tool_gets_larger_trim_limit():
     end = posted[-1]
     assert end.name == "edit_file"
     assert len(end.output) > _OUTPUT_LIMIT                 # 편집 상한(6000)이 적용돼 기본 초과 보존
+
+
+# --- /resume: 저장된 세션으로 교체 + 이력 재생 ---
+
+def test_resume_command_replays_history_and_switches_session(tmp_path):
+    saved = Session(tmp_path, session_id="old1")
+    saved.add_turn("이전 질문", "이전 답변", route="read", verdict=None)
+    saved.save()
+
+    async def fake_run_task(task, ws, approver, on_token, on_phase=None, **kw):
+        return _result(final="새 답")
+
+    app = _make_app(tmp_path, fake_run_task)
+
+    async def run():
+        async with app.run_test() as pilot:
+            await _submit(pilot, "/resume old1")
+            assert await _wait(pilot, lambda: app.runner.session.id == "old1")
+            conv = app.query_one("#conversation")
+            texts = [_static_text(w) for w in conv.query(".user-turn")]
+            assert texts == ["» 이전 질문"]                      # 이전 user 턴이 화면에 재생됨
+            assert len(conv.query(".answer")) == 1               # assistant 답변도 재생됨
+            assert "old1" in _static_text(app.query_one("#statusline"))
+            # 이어서 대화하면 재개한 세션에 턴이 쌓인다
+            await _submit(pilot, "이어서")
+            assert await _wait(pilot, lambda: len(app.runner.session.turns) == 2)
+            assert app.runner.session.history[-1]["content"] == "새 답"
+
+    asyncio.run(run())
+
+
+def test_resume_unknown_id_keeps_current_session(tmp_path):
+    app = _make_app(tmp_path, None)
+    cur = app.runner.session.id
+
+    async def run():
+        async with app.run_test() as pilot:
+            await _submit(pilot, "/resume nope")
+            await pilot.pause()
+            assert app.runner.session.id == cur and not app._busy
+
+    asyncio.run(run())

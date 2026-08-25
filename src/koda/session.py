@@ -83,3 +83,21 @@ class Session:
     def list_ids(cls, ws_root: str | Path) -> list[str]:
         d = Path(ws_root).resolve() / KODA_DIR / "sessions"
         return sorted(p.stem for p in d.glob("*.json")) if d.is_dir() else []
+
+    @classmethod
+    def summaries(cls, ws_root: str | Path) -> list[dict]:
+        """세션 선택 목록용 요약 [{id, turns, first_task, updated}] — 최근 수정순. 깨진 파일은 건너뛴다."""
+        d = Path(ws_root).resolve() / KODA_DIR / "sessions"
+        if not d.is_dir():
+            return []
+        out = []
+        for p in d.glob("*.json"):
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            turns = data.get("turns") or []
+            out.append({"id": p.stem, "turns": len(turns),
+                        "first_task": (turns[0].get("task") if turns else "") or "",
+                        "updated": p.stat().st_mtime})
+        return sorted(out, key=lambda s: s["updated"], reverse=True)
