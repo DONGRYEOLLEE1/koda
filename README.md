@@ -32,7 +32,7 @@ koda
 
 ```bash
 export OPENAI_BASE_URL=https://api.openai.com/v1 OPENAI_MODEL_NAME=gpt-4o-mini
-export PRIMARY=local LOCAL_OPENAI_BASE_URL=http://localhost:8080/v1 REASONING_STYLE=qwen
+export PRIMARY=local LOCAL_OPENAI_BASE_URL=http://localhost:8080/v1 REASONING_STYLE=qwen STRUCTURED_METHOD=json_schema   # llama.cpp 우선, API 는 폴백
 ```
 
 **자동화·파이프** — TUI 없이 쓰는 진입점. `--no-mcp` 는 외부 MCP 를 건너뛰어 빠르게 뜬다.
@@ -54,9 +54,9 @@ docker compose up -d
 
 langgraph `StateGraph` 분기: **router → { answer | reader | investigator → 끝 | [plan →] coder → verifier(fail 시 plan 재수립 후 재시도 1회) }**.
 
-- **LLM** — OpenAI 호환 엔드포인트 하나(`init_chat_model`). 기본은 DeepSeek API 이고 `PRIMARY=local` 이면 llama.cpp 를 우선하며 API 는 폴백이 된다(반대 방향도 대칭). reasoning 파라미터는 엔드포인트마다 이름이 달라 `REASONING_STYLE`(`off`·`qwen`·`effort`)로 고르며, 기본값 `off`는 아무것도 보내지 않아 어디에도 거절당하지 않는다 — llama.cpp 로 사고 예산을 쓰려면 `qwen` 으로 켠다.
+- **LLM** — OpenAI 호환 엔드포인트 하나(`init_chat_model`). 기본은 DeepSeek API 이고 `PRIMARY=local` 이면 llama.cpp 를 우선하며 API 는 폴백이 된다(반대 방향도 대칭). reasoning 파라미터는 엔드포인트마다 이름이 달라 `REASONING_STYLE`(`effort`·`off`·`qwen`)로 고른다. 기본값 `effort`는 DeepSeek·gpt-5 계열용이고(DeepSeek 는 안 보내면 thinking 이 켜진 채라 구조화 출력이 깨진다), 파라미터를 모르는 gpt-4o 류는 `off`, llama.cpp 는 `qwen` 으로 사고 예산을 쓴다.
 - **에이전트** — `AgentSpec` 레지스트리 + `create_agent`. answer/reader/investigator/coder/planner + 컨텍스트 격리용 `explore`(위임 탐색). answer 는 워크스페이스 도구를 쥐지 않아 개념·용어 질문에 검색 루프를 돌지 않는다. verifier 는 diff 기반 단일 판정.
-- **구조화 출력** — router `{route, plan_needed}`·verifier `{verdict, reasoning}` 를 `json_schema` → `function_calling` 순으로 시도(`STRUCTURED_METHOD` 로 고정 가능). 전부 실패 시 텍스트 폴백.
+- **구조화 출력** — router `{route, plan_needed}`·verifier `{verdict, reasoning}` 를 `STRUCTURED_METHOD` 방식으로 받는다(기본 `function_calling`, llama.cpp 는 문법 강제 `json_schema`, 빈 값이면 강제력 순 탐색). 실패 시 텍스트 폴백.
 - **미들웨어** — 도구 스텝 상한(루프 폭주 차단) → 승인 게이트 → 출력 트림+redaction → 히스토리 트림(토큰 예산).
 - **프롬프트** — 외부 `prompts/*.md`, 코드 인라인 금지.
 

@@ -39,18 +39,19 @@ class ModelSettings(BaseSettings):
     local_model: str = Field(default="local", alias="LOCAL_MODEL_NAME")
     fallback_enabled: bool = Field(default=True, alias="FALLBACK_ENABLED")
 
-    # reasoning 제어 방식 — 엔드포인트가 실제로 존중하는 파라미터 계열을 고른다. 알 수 없는 필드를
-    # 보내면 정식 OpenAI API 는 400 으로 거절하므로, 기본값은 아무것도 보내지 않는 'off' 다.
-    #   off    : 미전송 (DeepSeek·gpt-4o 등 reasoning 파라미터 미지원 엔드포인트)
+    # reasoning 제어 방식 — 엔드포인트가 실제로 존중하는 파라미터 계열을 고른다. 기본 엔드포인트(DeepSeek)는
+    # 아무것도 안 보내면 thinking 이 켜진 채라 구조화 출력의 강제 tool_choice 를 400 으로 거절한다 — 그래서
+    # 기본값은 effort 다(no_think 경로가 reasoning_effort=none 을 명시해 thinking 을 끈다).
+    #   effort : `reasoning_effort` (DeepSeek·vLLM·OpenAI gpt-5 계열)
+    #   off    : 미전송 — reasoning 파라미터를 모르는 모델(gpt-4o 등)은 이 값이어야 400 이 안 난다
     #   qwen   : llama.cpp `chat_template_kwargs.enable_thinking` + `thinking_budget_tokens`
-    #   effort : `reasoning_effort` (vLLM·OpenAI gpt-5 계열)
-    reasoning_style: str = Field(default="off", alias="REASONING_STYLE")
+    reasoning_style: str = Field(default="effort", alias="REASONING_STYLE")
     # effort 스타일에서 reasoning 을 켤 때 쓸 등급. 끌 때는 항상 "none" 을 보낸다.
     reasoning_effort: str = Field(default="medium", alias="REASONING_EFFORT")
 
-    # 구조화 출력 방식 고정 (json_schema|function_calling). 빈 값이면 강제력 순으로 탐색하는데,
-    # 미지원 방식은 프로세스마다 첫 턴에 400 을 한 번 맞는다. 엔드포인트가 정해져 있으면 지정해 그 왕복을 없앤다.
-    structured_method: str = Field(default="", alias="STRUCTURED_METHOD")
+    # 구조화 출력 방식 (json_schema|function_calling|빈 값=강제력 순 탐색). 기본 엔드포인트(DeepSeek)는 json_schema 를
+    # 400 으로 거절하므로 기본값을 function_calling 으로 맞춘다. llama.cpp 는 문법 강제가 되는 json_schema 를 지정한다.
+    structured_method: str = Field(default="function_calling", alias="STRUCTURED_METHOD")
 
     # 에이전트별 reasoning 예산 (qwen 스타일의 `thinking_budget_tokens`).
     thinking_budget_reader: int = Field(default=1024, alias="THINKING_BUDGET_READER")

@@ -32,6 +32,9 @@ def test_no_config_loads_deepseek_defaults():
     assert s.primary == "openai" and s.openai_api_key == ""
     assert s.openai_base_url == "https://api.deepseek.com"
     assert s.fallback_enabled is True
+    # 기본 엔드포인트와 짝: off 면 DeepSeek thinking 이 켜진 채라 구조화 출력(강제 tool_choice)이 400 난다
+    assert s.reasoning_style == "effort"
+    assert s.structured_method == "function_calling"   # DeepSeek 는 json_schema 를 400 으로 거절한다
 
 
 def test_env_var_overrides_default(monkeypatch):
