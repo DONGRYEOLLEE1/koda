@@ -20,8 +20,8 @@
 ```bash
 git clone https://github.com/DONGRYEOLLEE1/koda && cd koda
 uv tool install ".[tui]"          # 어디서든 `koda` 로 실행
-export OPENAI_API_KEY=sk-...      # 기본 엔드포인트(DeepSeek)의 키 — 설정은 이것뿐이다
-koda                              # TUI 진입 (= koda tui)
+export OPENAI_API_KEY=sk-...
+koda
 ```
 
 - `--yolo` 없이 뜨면 위험 도구(쓰기·삭제·명령·MCP) 전에 승인을 묻고, `koda --yolo` 는 자동 승인한다. 재앙적 명령(`sudo`·`rm -rf /` 류)은 `--yolo` 로도 막힌다.
@@ -31,15 +31,15 @@ koda                              # TUI 진입 (= koda tui)
 **다른 엔드포인트·로컬 모델** — 환경변수로 넘기거나 `CWD/.env` · `~/.config/koda/.env` 에 둔다(환경변수가 파일보다 우선). 전체 항목과 설명은 `.env.example`.
 
 ```bash
-export OPENAI_BASE_URL=https://api.openai.com/v1 OPENAI_MODEL_NAME=gpt-4o-mini            # 다른 OpenAI 호환 API
-export PRIMARY=local LOCAL_OPENAI_BASE_URL=http://localhost:8080/v1 REASONING_STYLE=qwen   # llama.cpp 우선, API 는 폴백
+export OPENAI_BASE_URL=https://api.openai.com/v1 OPENAI_MODEL_NAME=gpt-4o-mini
+export PRIMARY=local LOCAL_OPENAI_BASE_URL=http://localhost:8080/v1 REASONING_STYLE=qwen
 ```
 
 **자동화·파이프** — TUI 없이 쓰는 진입점. `--no-mcp` 는 외부 MCP 를 건너뛰어 빠르게 뜬다.
 
 ```bash
-koda run "calc.py에 두 수를 빼는 sub 함수를 추가해줘" --workspace . --yolo   # 단발 실행, 답변 스트리밍
-koda chat --workspace . --yolo                                            # 줄 단위 REPL, stdin 파이프 가능
+koda run "calc.py에 두 수를 빼는 sub 함수를 추가해줘" --workspace . --yolo
+koda chat --workspace . --yolo
 ```
 
 **개발** — 레포에서.
@@ -47,7 +47,7 @@ koda chat --workspace . --yolo                                            # 줄 
 ```bash
 uv sync && uv tool install -e ".[tui]"   # editable 설치 — 코드 수정이 재설치 없이 반영된다
 uv run pytest --ignore=tests/test_live_llm.py
-docker compose up -d                      # (선택) langfuse → http://localhost:28900, 키는 .env.example 의 LANGFUSE_*
+docker compose up -d
 ```
 
 ## 아키텍처
@@ -81,12 +81,15 @@ langgraph `StateGraph` 분기: **router → { answer | reader | investigator →
 
 ## MCP 확장
 
-외부 MCP 서버를 `mcps/` 폴더의 `*.json`(또는 `*.yaml`)으로 단일화해 일괄 로드하고 answer·reader·investigator·coder·planner 에 주입한다. LLM 이 최신 문서·웹검색이 필요하다고 판단하면 스스로 호출한다.
+외부 MCP 서버를 `*.json`(또는 `*.yaml`) 파일 하나당 하나씩 두면 일괄 로드해 answer·reader·investigator·coder·planner 에 주입한다. LLM 이 최신 문서·웹검색이 필요하다고 판단하면 스스로 호출한다.
+
+- **전역** `~/.config/koda/mcps/` — 모든 워크스페이스에서 잡힌다(exa·context7 같은 범용).
+- **프로젝트** `<workspace>/mcps/` (`--mcps-dir` 로 변경) — 그 프로젝트에만. 같은 서버명이면 전역을 덮어쓴다.
 
 ```jsonc
-// mcps/exa.json — 웹 검색
+// ~/.config/koda/mcps/exa.json — 웹 검색
 { "mcpServers": { "exa": { "url": "https://mcp.exa.ai/mcp" } } }
-// mcps/context7.json — 최신 라이브러리 문서
+// ~/.config/koda/mcps/context7.json — 최신 라이브러리 문서
 { "mcpServers": { "context7": { "url": "https://mcp.context7.com/mcp" } } }
 ```
 

@@ -298,11 +298,11 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
 
 async def run_task(
     task: str, ws: Workspace, approver, on_token,
-    on_phase=None, settings=None, mcps_dir="mcps", history: list | None = None,
+    on_phase=None, settings=None, mcps_dir=None, history: list | None = None,
     mcp_tools: list | None = None, run_id: str | None = None,
     extra_callbacks: list | None = None,
 ) -> dict:
-    """단일 턴 실행. history 는 멀티턴 맥락, mcp_tools 는 세션당 1회 로드해 재사용(캐시 prefix 유지), extra_callbacks 는 config.callbacks 에 추가로 얹는 핸들러(TUI 용)."""
+    """단일 턴 실행. mcps_dir 는 MCP 설정 폴더 목록(None 이면 로드 생략), history 는 멀티턴 맥락, mcp_tools 는 세션당 1회 로드해 재사용(캐시 prefix 유지), extra_callbacks 는 config.callbacks 에 추가로 얹는 핸들러(TUI 용)."""
     settings = settings or load_model_settings()
     model, provider, _reason = build_model(settings)
     set_structured_method(settings.structured_method)  # 방식을 고정하면 탐색 왕복이 사라진다
@@ -310,7 +310,7 @@ async def run_task(
 
     if mcp_tools is None:
         mcp_tools = []
-        if mcps_dir:  # --no-mcp 면 mcps_dir=None → 외부 로드 자체를 생략
+        if mcps_dir:  # --no-mcp 또는 미지정이면 None → 외부 로드 자체를 생략
             try:
                 mcp_tools = await load_mcp_tools(mcps_dir, on_log=lambda m: on_phase(f"mcp:{m}"))
             except Exception as e:

@@ -14,7 +14,7 @@ from textual.theme import Theme
 from textual.widgets import Footer, Markdown, Static
 
 from ..cli import _err
-from ..mcp import load_mcp_tools
+from ..mcp import load_mcp_tools, mcp_dirs
 from ..memory import Memory
 from ..session import Session
 from ..workspace import Workspace
@@ -594,7 +594,7 @@ def run_tui(args) -> int:
     mcp_tools: list = []
     if not args.no_mcp:
         try:
-            mcp_tools = asyncio.run(load_mcp_tools(args.mcps_dir, on_log=lambda m: _err(f"  · {m}")))
+            mcp_tools = asyncio.run(load_mcp_tools(mcp_dirs(ws.root, args.mcps_dir), on_log=lambda m: _err(f"  · {m}")))
         except Exception as e:
             _err(f"  · MCP 로드 실패({type(e).__name__}) — 로컬 도구만 사용")
 
