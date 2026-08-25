@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from ..artifacts import ArtifactStore
 from ..config import load_model_settings
 from ..diffscan import diff_report, snapshot
-from ..llm import _no_think, _thinking, astructured, build_model
+from ..llm import _no_think, _thinking, astructured, build_model, set_structured_method
 from ..mcp import load_mcp_tools
 from ..memory import Memory
 from ..prompts import load_prompt
@@ -300,6 +300,7 @@ async def run_task(
     """단일 턴 실행. history 는 멀티턴 맥락, mcp_tools 는 세션당 1회 로드해 재사용(캐시 prefix 유지), extra_callbacks 는 config.callbacks 에 추가로 얹는 핸들러(TUI 용)."""
     settings = settings or load_model_settings()
     model, provider, _reason = build_model(settings)
+    set_structured_method(settings.structured_method)  # 방식을 고정하면 탐색 왕복이 사라진다
     on_phase = on_phase or (lambda p: None)
 
     if mcp_tools is None:

@@ -11,6 +11,7 @@ from koda.llm import (
     _thinking,
     astructured,
     select_provider,
+    set_structured_method,
     structured,
 )
 
@@ -127,10 +128,12 @@ def _bad_request():
 
 @pytest.fixture(autouse=True)
 def _clear_unsupported():
-    # 전역 캐시라 테스트 간 오염을 막는다
+    # 전역 상태라 테스트 간 오염을 막는다
     _UNSUPPORTED_METHODS.clear()
+    set_structured_method("")
     yield
     _UNSUPPORTED_METHODS.clear()
+    set_structured_method("")
 
 
 def test_structured_falls_back_to_function_calling():
@@ -172,3 +175,23 @@ def test_astructured_shares_the_same_fallback():
     m = _FakeModel(works="function_calling")
     assert asyncio.run(astructured(m, _Schema, [])) is not None
     assert m.attempts == ["json_schema", "function_calling"]
+
+
+def test_structured_method_override_skips_probing():
+    # 방식을 고정하면 미지원 방식을 아예 시도하지 않아 첫 턴의 400 왕복도 사라진다.
+    set_structured_method("function_calling")
+    m = _FakeModel(works="function_calling")
+    assert structured(m, _Schema, []) is not None
+    assert m.attempts == ["function_calling"]      # json_schema 는 시도조차 안 함
+
+
+def test_structured_method_override_empty_restores_probing():
+    set_structured_method("")
+    m = _FakeModel(works="function_calling")
+    structured(m, _Schema, [])
+    assert m.attempts == ["json_schema", "function_calling"]
+
+
+def test_invalid_structured_method_rejected():
+    with pytest.raises(ValueError):
+        _cfg(structured_method="grammar")

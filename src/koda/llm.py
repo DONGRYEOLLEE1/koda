@@ -86,6 +86,15 @@ STRUCTURED_METHODS = ("json_schema", "function_calling")
 # 한 번 겪은 뒤로는 건너뛰어 턴마다 같은 400 왕복을 반복하지 않는다.
 _UNSUPPORTED_METHODS: set[tuple[str, str]] = set()
 
+# STRUCTURED_METHOD 로 고정된 방식. 탐색 자체를 없애 첫 턴의 400 한 번까지 제거한다.
+_METHOD_OVERRIDE: tuple[str, ...] | None = None
+
+
+def set_structured_method(method: str) -> None:
+    """구조화 출력 방식을 고정한다(빈 값이면 자동 탐색). run_task 진입 시 설정에서 1회 반영한다."""
+    global _METHOD_OVERRIDE
+    _METHOD_OVERRIDE = (method,) if method else None
+
 
 def _remember_if_unsupported(model_name: str, method: str, exc: Exception) -> None:
     """400(능력 부재)만 기억한다 — 네트워크·타임아웃 같은 일시 오류를 캐시하면 그 방식이 영구히 죽는다."""
@@ -93,9 +102,10 @@ def _remember_if_unsupported(model_name: str, method: str, exc: Exception) -> No
         _UNSUPPORTED_METHODS.add((model_name, method))
 
 
-async def astructured(model, schema, messages, config=None, methods=STRUCTURED_METHODS):
+async def astructured(model, schema, messages, config=None, methods=None):
     """지원되는 방식으로 구조화 출력을 받는다. 전부 실패하면 None — 호출부가 텍스트 폴백을 쓴다."""
     name = getattr(model, "model_name", "") or ""
+    methods = methods or _METHOD_OVERRIDE or STRUCTURED_METHODS
     for method in methods:
         if (name, method) in _UNSUPPORTED_METHODS:
             continue
@@ -106,9 +116,10 @@ async def astructured(model, schema, messages, config=None, methods=STRUCTURED_M
     return None
 
 
-def structured(model, schema, messages, config=None, methods=STRUCTURED_METHODS):
+def structured(model, schema, messages, config=None, methods=None):
     """astructured 의 동기 버전 (도구 안에서 쓴다)."""
     name = getattr(model, "model_name", "") or ""
+    methods = methods or _METHOD_OVERRIDE or STRUCTURED_METHODS
     for method in methods:
         if (name, method) in _UNSUPPORTED_METHODS:
             continue

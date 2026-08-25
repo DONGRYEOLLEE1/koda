@@ -47,6 +47,10 @@ class ModelSettings(BaseSettings):
     # effort 스타일에서 reasoning 을 켤 때 쓸 등급. 끌 때는 항상 "none" 을 보낸다.
     reasoning_effort: str = Field(default="medium", alias="REASONING_EFFORT")
 
+    # 구조화 출력 방식 고정 (json_schema|function_calling). 빈 값이면 강제력 순으로 탐색하는데,
+    # 미지원 방식은 프로세스마다 첫 턴에 400 을 한 번 맞는다. 엔드포인트가 정해져 있으면 지정해 그 왕복을 없앤다.
+    structured_method: str = Field(default="", alias="STRUCTURED_METHOD")
+
     # 에이전트별 reasoning 예산 (qwen 스타일의 `thinking_budget_tokens`).
     thinking_budget_reader: int = Field(default=1024, alias="THINKING_BUDGET_READER")
     thinking_budget_explore: int = Field(default=512, alias="THINKING_BUDGET_EXPLORE")
@@ -80,6 +84,13 @@ class ModelSettings(BaseSettings):
     def _valid_reasoning_style(cls, v: str) -> str:
         if v not in ("off", "qwen", "effort"):
             raise ValueError("reasoning_style 은 'off', 'qwen', 'effort' 중 하나여야 합니다")
+        return v
+
+    @field_validator("structured_method")
+    @classmethod
+    def _valid_structured_method(cls, v: str) -> str:
+        if v and v not in ("json_schema", "function_calling"):
+            raise ValueError("structured_method 는 'json_schema' 또는 'function_calling' 이어야 합니다(빈 값=자동 탐색)")
         return v
 
 
