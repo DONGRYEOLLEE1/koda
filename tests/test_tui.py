@@ -738,7 +738,7 @@ def test_drag_selection_copies_to_clipboard(tmp_path):
 def test_reasoning_block_mounts_collapsed_before_prose(tmp_path):
     async def fake(task, ws, approver, on_token, on_phase, **kw):
         on_token("본문")
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(0.6)      # 단락이 열린 채로 사고 블록이 도착하는 창을 확보한다
         return _result("본문")
 
     async def go():
@@ -767,3 +767,34 @@ def test_tool_activity_handler_posts_reasoning_on_llm_end():
     h.on_llm_end(SimpleNamespace(generations=[[SimpleNamespace(message=msg)]]), run_id="r1")
     h.on_llm_end(SimpleNamespace(generations=[[SimpleNamespace(message=SimpleNamespace(additional_kwargs={}))]]), run_id="r2")
     assert len(posted) == 1 and isinstance(posted[0], ReasoningEnd) and posted[0].text == "생각 중"
+
+
+def test_reasoning_block_of_next_turn_stays_in_that_turn(tmp_path):
+    # 3턴의 사고 블록이 2턴 단락 앞에 끼어들던 버그: 턴 시작·단락 종료 때 기준점을 비워야 한다.
+    calls = {"n": 0}
+
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            await asyncio.sleep(0.3)   # 2턴: 본문 토큰 전에 사고 블록이 먼저 도착하는 상황을 만든다
+        on_token(f"본문{calls['n']}")
+        return _result(f"본문{calls['n']}")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test(size=(100, 40)) as pilot:
+            await _submit(pilot, "첫 질문")
+            assert await _wait(pilot, _turn_done(app))
+            await _submit(pilot, "둘째 질문")
+            assert await _wait(pilot, lambda: app._busy)
+            app.post_message(ReasoningEnd("llm2", "둘째 턴의 사고"))      # 아직 본문 토큰 없음
+            assert await _wait(pilot, lambda: bool(app.query("ReasoningBlock")))
+            assert await _wait(pilot, _turn_done(app))
+            conv = app.query_one("#conversation")
+            kinds = [type(w).__name__ for w in conv.children]
+            i_q2 = [i for i, w in enumerate(conv.children) if "둘째 질문" in _static_text(w)][0]
+            i_block = kinds.index("ReasoningBlock")
+            assert i_block > i_q2, kinds                      # 둘째 질의 뒤 = 둘째 턴 영역
+            assert kinds[i_block:].count("Markdown") == 1     # 그 뒤에 둘째 턴 본문만 온다
+
+    asyncio.run(go())

@@ -371,6 +371,7 @@ class KodaTui(App):
         self.query_one("#prompt", PromptArea).disabled = True
         self._draft = ""
         self._cur_prose_stream = None
+        self._cur_prose_md = None       # 이전 턴의 단락이 사고 블록 기준점으로 남으면 새 턴의 블록이 지난 턴에 끼어든다
         self._turn_widgets = []
         conv = self.query_one("#conversation", VerticalScroll)
         # 질의 Static 은 _turn_widgets 에 안 넣는다 — retry 시 산문/툴만 폐기하고 질의는 보존.
@@ -430,6 +431,7 @@ class KodaTui(App):
         except asyncio.CancelledError:
             pass  # 스트림 태스크가 기동 전에 취소된 극단 케이스 방어 — 핸들러 전파 시 앱이 죽는다
         self._cur_prose_stream = None
+        self._cur_prose_md = None       # 닫힌 단락은 기준점이 아니다. 다음 LLM 호출의 사고 블록은 그 뒤(다음 단락 앞)에 온다
 
     @on(PhaseEvent)
     async def _on_phase(self, msg: PhaseEvent) -> None:
