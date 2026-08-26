@@ -98,7 +98,7 @@ def _run_background(ws: Workspace, command: str) -> str:
     logf = os.fdopen(fd, "wb")
     try:
         proc = subprocess.Popen(
-            _bwrap_prefix(ws) + ["bash", "-c", command], cwd=str(ws.root),
+            _bwrap_prefix(ws) + ["bash", "-o", "pipefail", "-c", command], cwd=str(ws.root),
             stdin=subprocess.DEVNULL, stdout=logf, stderr=subprocess.STDOUT,
             start_new_session=True, env=_workspace_env(ws),
         )
@@ -134,8 +134,9 @@ def make_shell_tools(ws: Workspace) -> list:
         try:
             if background:
                 return _run_background(ws, command)
+            # pipefail: 프롬프트가 권하는 `pytest … | tail` 꼴에서 exit_code 가 tail 의 0 으로 덮여 실패가 성공으로 보고되는 것을 막는다.
             proc = subprocess.run(
-                _bwrap_prefix(ws) + ["bash", "-c", command], cwd=str(ws.root),
+                _bwrap_prefix(ws) + ["bash", "-o", "pipefail", "-c", command], cwd=str(ws.root),
                 capture_output=True, text=True, timeout=timeout, env=_workspace_env(ws),
             )
         except FileNotFoundError:  # bash/bwrap 자체 부재 — 실행 전체를 죽이지 않게 오류 문자열로

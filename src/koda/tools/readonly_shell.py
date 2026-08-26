@@ -79,7 +79,7 @@ def make_readonly_shell_tools(ws: Workspace) -> list:
             prefix = []
         try:
             proc = subprocess.run(
-                prefix + ["bash", "-c", command], cwd=str(ws.root), capture_output=True, text=True,
+                prefix + ["bash", "-o", "pipefail", "-c", command], cwd=str(ws.root), capture_output=True, text=True,
                 timeout=timeout, env=_readonly_env(ws), stdin=subprocess.DEVNULL,
             )
         except subprocess.TimeoutExpired:

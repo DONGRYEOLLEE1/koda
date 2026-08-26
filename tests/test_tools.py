@@ -306,3 +306,18 @@ def test_bwrap_prefix_shape_when_available(monkeypatch, tmp_path):
     assert "--ro-bind" in prefix                       # 루트 read-only
     ws_idx = prefix.index("--bind")
     assert prefix[ws_idx + 1] == str(tmp_path)          # 워크스페이스만 쓰기 바인드
+
+
+def test_run_command_reports_failure_through_pipe(make_workspace):
+    # `pytest … | tail` 꼴에서 exit_code 가 tail 의 0 으로 덮이면 실패가 성공으로 보고된다 (pipefail).
+    from koda.tools.shell import make_shell_tools
+    run = make_shell_tools(make_workspace())[0]
+    out = run.invoke({"command": "false | tail -1"})
+    assert out.startswith("exit_code=1")
+    assert run.invoke({"command": "true | tail -1"}).startswith("exit_code=0")
+
+
+def test_readonly_command_reports_failure_through_pipe(make_workspace):
+    from koda.tools.readonly_shell import make_readonly_shell_tools
+    run = make_readonly_shell_tools(make_workspace())[0]
+    assert run.invoke({"command": "false | cat"}).startswith("exit_code=1")
