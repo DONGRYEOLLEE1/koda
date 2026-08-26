@@ -14,8 +14,8 @@ from koda.memory import Memory
 from koda.session import Session
 from koda.tui.app import KodaTui
 from koda.tui.model import PhaseEvent, ReasoningEnd, TokenChunk, ToolEnd, ToolStart
-from koda.tui.tool_handler import ToolActivityHandler, tool_title
-from koda.tui.widgets import ApprovalModal, PromptArea, ToolBlock, _args_preview
+from koda.tui.tool_handler import ToolActivityHandler, tool_target, tool_title
+from koda.tui.widgets import ApprovalModal, ExploreStep, ProcessGroup, PromptArea, ReasoningStep, StepLine, _args_preview, first_line
 from koda.workspace import Workspace
 
 
@@ -392,7 +392,7 @@ def test_slash_clear_starts_new_thread(tmp_path):
     asyncio.run(go())
 
 
-# --- Phase 2: 툴 가시화 (제목 템플릿 · 콜백 핸들러 · ToolBlock 렌더) ---
+# --- 과정 가시화 (제목 템플릿 · 콜백 핸들러 · 스텝 줄 렌더) ---
 
 def test_tool_title_templates():
     # 별도 LLM 호출 없이 도구+완성 args → 표시용 제목. 빈 args 는 도구 이름으로 폴백.
@@ -406,18 +406,37 @@ def test_tool_title_templates():
     assert tool_title("some_mcp_tool", {}) == "some_mcp_tool"       # MCP/기타
 
 
-def test_tui_tool_blocks_mount_and_finish(tmp_path):
-    # ToolStart → 대화에 ToolBlock(진행 중 ○) mount, ToolEnd → 같은 블록 finish(✓ + output).
+def test_tool_target_classifies_explore_tools():
+    # 탐색성 도구만 (종류, 대상) 을 주고, 편집·실행·일반 MCP 는 None 이라 병합되지 않는다.
+    assert tool_target("read_file", {"path": "a.py"}) == ("읽음", "a.py")
+    assert tool_target("search_text", {"query": "add"}) == ("검색", '"add"')
+    assert tool_target("run_readonly_command", {"command": "ls -la"}) == ("조사", "ls -la")
+    assert tool_target("query-docs", {}) == ("문서", "query-docs")
+    assert tool_target("web_search_exa", {"query": "koda"}) == ("웹", '"koda"')
+    assert tool_target("edit_file", {"path": "a.py"}) is None
+    assert tool_target("run_command", {"command": "pytest"}) is None
+    assert tool_target("some_mcp_tool", {}) is None
+    posted: list = []
+    ToolActivityHandler(posted.append).on_tool_start({"name": "read_file"}, "", run_id="r", inputs={"path": "x"})
+    assert posted[0].target == ("읽음", "x")
+
+
+def test_tool_step_mounts_in_group_and_finishes(tmp_path):
+    # ToolStart → ProcessGroup 안에 StepLine(진행 -run) mount, ToolEnd → 같은 줄 finish(-ok + 요약 ⎿ + 출력).
     async def go():
         app = _make_app(tmp_path, None)
         async with app.run_test() as pilot:
-            app.post_message(ToolStart("r1", "read_file", "읽기 · calc.py"))
-            assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
-            block = app.query_one(ToolBlock)
-            assert "읽기 · calc.py" in str(block.title) and "○" in str(block.title)
-            app.post_message(ToolEnd("r1", "파일 12줄", ok=True))
-            assert await _wait(pilot, lambda: "✓" in str(app.query_one(ToolBlock).title))
-            assert app._tool_blocks == {}                 # 매칭 후 dict 에서 pop
+            app.post_message(ToolStart("r1", "run_command", "$ pytest -q"))
+            assert await _wait(pilot, lambda: bool(app.query(StepLine)))
+            step = app.query_one(StepLine)
+            assert step.parent.parent is app.query_one(ProcessGroup) and not app.query_one(ProcessGroup).collapsed
+            assert "⏺ $ pytest -q" in step.title.plain and step.has_class("-run") and step.collapsed
+            app.post_message(ToolEnd("r1", "exit_code=0\nstdout:\n3 passed\nstderr:\n", ok=True, name="run_command"))
+            assert await _wait(pilot, lambda: app.query_one(StepLine).has_class("-ok"))
+            assert "⎿ 3 passed" in step.title.plain and "3 passed" in _static_text(step._body)
+            assert first_line("exit_code=0\nstdout:\n..      [100%]\n") == ".. [100%]"   # 공백 정규화
+            assert first_line("exit_code=1\nstdout:\n\nstderr:\nboom") == "exit_code=1 · boom"
+            assert app._tool_steps == {}                  # 매칭 후 dict 에서 pop
     asyncio.run(go())
 
 
@@ -428,24 +447,25 @@ def test_tool_end_unknown_run_id_ignored(tmp_path):
         async with app.run_test() as pilot:
             app.post_message(ToolEnd("no-such-id", "출력", ok=True))
             await pilot.pause()
-            assert not app.query(ToolBlock)               # 유령 블록·크래시 없음
+            assert not app.query(StepLine) and not app.query(ProcessGroup)   # 유령 위젯·크래시 없음
             assert not app._close_requested               # 앱 생존
     asyncio.run(go())
 
 
-def test_orphan_tool_block_finished_on_turn_end(tmp_path):
-    # 턴이 툴 도중 죽어 ToolEnd 가 안 오면(_end_turn) 미완 블록을 '중단됨'으로 마감한다.
+def test_orphan_steps_finished_on_turn_end(tmp_path):
+    # 턴이 툴 도중 죽어 ToolEnd 가 안 오면(_end_turn) 미완 스텝(단독·탐색 병합 모두)을 '중단됨' 실패로 마감한다.
     async def go():
         app = _make_app(tmp_path, None)
         async with app.run_test() as pilot:
             app.post_message(ToolStart("r1", "run_command", "$ pytest"))
-            assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
-            assert "○" in str(app.query_one(ToolBlock).title)   # 진행 중
+            app.post_message(ToolStart("r2", "read_file", "읽기 · a.py", ("읽음", "a.py")))
+            assert await _wait(pilot, lambda: len(app.query(StepLine)) == 2)
+            assert all(st.has_class("-run") for st in app.query(StepLine))
             app._end_turn()                                     # 턴 종료 공통 경로
             await pilot.pause()
-            block = app.query_one(ToolBlock)
-            assert "✗" in str(block.title) and "중단됨" in _static_text(block._body)
-            assert app._tool_blocks == {}
+            for st in app.query(StepLine):
+                assert st.has_class("-fail") and "중단됨" in _static_text(st._body)
+            assert app._tool_steps == {}
     asyncio.run(go())
 
 
@@ -466,35 +486,35 @@ def _conv_types(app):
 
 
 def test_prose_tool_interleave_order(tmp_path):
-    # 산문① → 툴 → 산문② 순으로 이벤트가 오면 대화가 [Markdown, ToolBlock, Markdown] 으로 쌓인다.
+    # 산문① → 툴 → 산문② 순으로 이벤트가 오면 대화가 [Markdown, ProcessGroup, Markdown] 으로 쌓인다.
     async def go():
         app = _make_app(tmp_path, None)
         async with app.run_test() as pilot:
             app.post_message(TokenChunk("산문①"))
             assert await _wait(pilot, lambda: bool(app.query("#conversation Markdown")))
-            app.post_message(ToolStart("r1", "read_file", "읽기 · a.py"))
-            assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
+            app.post_message(ToolStart("r1", "read_file", "읽기 · a.py", ("읽음", "a.py")))
+            assert await _wait(pilot, lambda: bool(app.query(StepLine)))
             app.post_message(ToolEnd("r1", "출력", ok=True))
             app.post_message(TokenChunk("산문②"))
             assert await _wait(pilot, lambda: len(app.query("#conversation Markdown")) == 2)
-            assert _conv_types(app) == ["Markdown", "ToolBlock", "Markdown"]
+            assert _conv_types(app) == ["Markdown", "ProcessGroup", "Markdown"]
             assert app._draft == "산문①산문②"
     asyncio.run(go())
 
 
-def test_retry_discards_segments_and_tool_blocks(tmp_path):
-    # retry 시 이번 시도의 산문 세그먼트·툴 블록·_tool_blocks 매핑을 전부 폐기한다.
+def test_retry_discards_segments_and_groups(tmp_path):
+    # retry 시 이번 시도의 산문 세그먼트·과정 그룹·_tool_steps 매핑을 전부 폐기한다.
     async def go():
         app = _make_app(tmp_path, None)
         async with app.run_test() as pilot:
             app.post_message(TokenChunk("버릴 산문"))
-            app.post_message(ToolStart("r1", "read_file", "읽기"))
-            assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
-            assert app.query("#conversation Markdown") and app._tool_blocks
+            app.post_message(ToolStart("r1", "read_file", "읽기", ("읽음", "a.py")))
+            assert await _wait(pilot, lambda: bool(app.query(StepLine)))
+            assert app.query("#conversation Markdown") and app._tool_steps
             app.post_message(PhaseEvent("retry:length_truncation"))
-            assert await _wait(pilot, lambda: not app.query(ToolBlock))
+            assert await _wait(pilot, lambda: not app.query(ProcessGroup))
             assert not app.query("#conversation Markdown")   # 세그먼트 폐기(unmount)
-            assert app._tool_blocks == {}                    # 매핑 폐기 — stale run_id 방지
+            assert app._tool_steps == {} and app._cur_group is None and app._cur_explore is None
             assert app._draft == ""
     asyncio.run(go())
 
@@ -543,15 +563,15 @@ def test_prompt_enter_submits_multiline(tmp_path):
 
 
 def test_maximize_command_removed_even_with_tool_block(tmp_path):
-    # #21: 어떤 위젯이 포커스돼도 maximize 명령이 없어야 한다. 특히 툴 블록의 제목(CollapsibleTitle)은
+    # #21: 어떤 위젯이 포커스돼도 maximize 명령이 없어야 한다. 특히 스텝 줄의 제목(CollapsibleTitle)은
     # focus 가능·maximize 가능이라, 이 위젯이 포커스된 상태에서도 명령이 제거됨을 확인한다(위젯별
     # ALLOW_MAXIMIZE whack-a-mole 이 아니라 앱 레벨 차단임을 가드).
     async def go():
         app = _make_app(tmp_path, run_task_fn=None)
         async with app.run_test() as pilot:
-            app.post_message(ToolStart("r1", "read_file", "읽기 · a.py"))
-            assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
-            title = app.query_one("CollapsibleTitle")
+            app.post_message(ToolStart("r1", "read_file", "읽기 · a.py", ("읽음", "a.py")))
+            assert await _wait(pilot, lambda: bool(app.query(StepLine)))
+            title = app.query_one(StepLine).query_one("CollapsibleTitle")
             title.focus()
             await pilot.pause()
             assert title.allow_maximize is True   # 전제: 이 위젯은 원래 maximize 가능
@@ -616,24 +636,25 @@ def test_tool_diff_render_branch_and_name(tmp_path):
         app = _make_app(tmp_path, run_task_fn=None)
         async with app.run_test() as pilot:
             app.post_message(ToolStart("r1", "edit_file", "수정 · a.py"))
-            assert await _wait(pilot, lambda: bool(app.query(ToolBlock)))
-            b = app.query(ToolBlock)[0]
-            assert b._tool_name == "edit_file"                 # ToolStart.name → ToolBlock 전파
+            assert await _wait(pilot, lambda: bool(app.query(StepLine)))
+            b = app.query(StepLine)[0]
+            assert b._tool_name == "edit_file"                 # ToolStart.name → StepLine 전파
             app.post_message(ToolEnd("r1", "수정함: a.py (+1/-1)\n@@ -1 +1 @@\n-x = 1\n+x = 10", ok=True, name="edit_file"))
             assert await _wait(pilot, lambda: type(_body_content(b)).__name__ == "Group")
+            assert "⎿ 수정함: a.py (+1/-1)" in b.title.plain
 
             # 비편집 도구: 내용에 @@ 가 있어도 이름으로 차단 → 평문(false positive 방지)
-            app.post_message(ToolStart("r2", "read_file", "읽기"))
-            assert await _wait(pilot, lambda: len(app.query(ToolBlock)) == 2)
-            b2 = app.query(ToolBlock)[1]
-            app.post_message(ToolEnd("r2", "내용\n@@ 이건 diff 아님", ok=True, name="read_file"))
+            app.post_message(ToolStart("r2", "run_command", "$ git diff"))
+            assert await _wait(pilot, lambda: len(app.query(StepLine)) == 2)
+            b2 = app.query(StepLine)[1]
+            app.post_message(ToolEnd("r2", "내용\n@@ 이건 diff 아님", ok=True, name="run_command"))
             await pilot.pause()
             assert isinstance(_body_content(b2), str)
 
             # 편집 도구지만 실패 메시지(비diff) → 평문
             app.post_message(ToolStart("r3", "edit_file", "수정 · b"))
-            assert await _wait(pilot, lambda: len(app.query(ToolBlock)) == 3)
-            b3 = app.query(ToolBlock)[2]
+            assert await _wait(pilot, lambda: len(app.query(StepLine)) == 3)
+            b3 = app.query(StepLine)[2]
             app.post_message(ToolEnd("r3", "실패: old 를 찾지 못했다\n비슷한 줄:", ok=True, name="edit_file"))
             await pilot.pause()
             assert isinstance(_body_content(b3), str)
@@ -735,10 +756,10 @@ def test_drag_selection_copies_to_clipboard(tmp_path):
 
 # --- 사고 블록: LLM 호출 완료 시 접힌 블록을 본문 앞에 ---
 
-def test_reasoning_block_mounts_collapsed_before_prose(tmp_path):
+def test_reasoning_step_lands_in_group_before_open_prose(tmp_path):
     async def fake(task, ws, approver, on_token, on_phase, **kw):
         on_token("본문")
-        await asyncio.sleep(0.6)      # 단락이 열린 채로 사고 블록이 도착하는 창을 확보한다
+        await asyncio.sleep(0.6)      # 단락이 열린 채로 사고가 도착하는 창을 확보한다
         return _result("본문")
 
     async def go():
@@ -747,14 +768,15 @@ def test_reasoning_block_mounts_collapsed_before_prose(tmp_path):
             await _submit(pilot, "질문")
             assert await _wait(pilot, lambda: app._cur_prose_md is not None)   # 산문 세그먼트가 열린 뒤
             app.post_message(ReasoningEnd("llm1", "이 질문은 단순하다. 바로 답한다."))
-            assert await _wait(pilot, lambda: bool(app.query("ReasoningBlock")))   # 메시지 처리 완료까지
+            assert await _wait(pilot, lambda: bool(app.query(ReasoningStep)))   # 메시지 처리 완료까지
             assert await _wait(pilot, _turn_done(app))
-            conv = app.query_one("#conversation")
-            kinds = [type(w).__name__ for w in conv.children]
-            i_block, i_prose = kinds.index("ReasoningBlock"), kinds.index("Markdown")
-            assert i_block < i_prose                                    # 사고 블록이 본문보다 앞
-            block = conv.query_one("ReasoningBlock")
-            assert block.collapsed and "🧠 사고 ·" in str(block.title) and "자" in str(block.title)
+            kinds = _conv_types(app)
+            assert kinds.index("ProcessGroup") < kinds.index("Markdown")        # 사고 그룹이 본문보다 앞
+            step = app.query_one(ReasoningStep)
+            assert step.collapsed and step.title.plain == "∙ 이 질문은 단순하다."   # 첫 문장만, 원문은 본문
+            assert "바로 답한다" in _static_text(step._body)
+            group = app.query_one(ProcessGroup)
+            assert group.collapsed and group.title.startswith("과정 · 사고 1 · ")   # 완료 후 접힘
 
     asyncio.run(go())
 
@@ -769,14 +791,14 @@ def test_tool_activity_handler_posts_reasoning_on_llm_end():
     assert len(posted) == 1 and isinstance(posted[0], ReasoningEnd) and posted[0].text == "생각 중"
 
 
-def test_reasoning_block_of_next_turn_stays_in_that_turn(tmp_path):
+def test_reasoning_step_of_next_turn_stays_in_that_turn(tmp_path):
     # 3턴의 사고 블록이 2턴 단락 앞에 끼어들던 버그: 턴 시작·단락 종료 때 기준점을 비워야 한다.
     calls = {"n": 0}
 
     async def fake(task, ws, approver, on_token, on_phase, **kw):
         calls["n"] += 1
         if calls["n"] == 2:
-            await asyncio.sleep(0.3)   # 2턴: 본문 토큰 전에 사고 블록이 먼저 도착하는 상황을 만든다
+            await asyncio.sleep(0.3)   # 2턴: 본문 토큰 전에 사고가 먼저 도착하는 상황을 만든다
         on_token(f"본문{calls['n']}")
         return _result(f"본문{calls['n']}")
 
@@ -788,13 +810,67 @@ def test_reasoning_block_of_next_turn_stays_in_that_turn(tmp_path):
             await _submit(pilot, "둘째 질문")
             assert await _wait(pilot, lambda: app._busy)
             app.post_message(ReasoningEnd("llm2", "둘째 턴의 사고"))      # 아직 본문 토큰 없음
-            assert await _wait(pilot, lambda: bool(app.query("ReasoningBlock")))
+            assert await _wait(pilot, lambda: bool(app.query(ReasoningStep)))
             assert await _wait(pilot, _turn_done(app))
             conv = app.query_one("#conversation")
-            kinds = [type(w).__name__ for w in conv.children]
+            kinds = _conv_types(app)
             i_q2 = [i for i, w in enumerate(conv.children) if "둘째 질문" in _static_text(w)][0]
-            i_block = kinds.index("ReasoningBlock")
-            assert i_block > i_q2, kinds                      # 둘째 질의 뒤 = 둘째 턴 영역
-            assert kinds[i_block:].count("Markdown") == 1     # 그 뒤에 둘째 턴 본문만 온다
+            i_group = kinds.index("ProcessGroup")
+            assert i_group > i_q2, kinds                      # 둘째 질의 뒤 = 둘째 턴 영역
+            assert kinds[i_group:].count("Markdown") == 1     # 그 뒤에 둘째 턴 본문만 온다
 
     asyncio.run(go())
+
+
+def test_explore_merge_and_split_rules(tmp_path):
+    # 연속 탐색은 한 줄에 누적되고, 편집 도구가 오거나 실패가 섞이면 새 줄이 된다.
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test(size=(120, 40)) as pilot:
+            app.post_message(ToolStart("r1", "read_file", "읽기 · a.py", ("읽음", "a.py")))
+            app.post_message(ToolStart("r2", "read_file", "읽기 · b.py", ("읽음", "b.py")))
+            app.post_message(ToolStart("r3", "search_text", "검색 · add", ("검색", '"add"')))
+            app.post_message(ToolStart("r4", "run_readonly_command", "$ ls -la", ("조사", "ls -la")))
+            assert await _wait(pilot, lambda: app.query(ExploreStep) and app.query_one(ExploreStep).count == 4)
+            ex = app.query_one(ExploreStep)
+            assert ex.title.plain == '⏺ 탐색 · a.py, b.py 읽음 · "add" 검색 · $ ls -la'
+            for rid in ("r1", "r2", "r3", "r4"):
+                app.post_message(ToolEnd(rid, f"{rid} 출력", ok=True))
+            assert await _wait(pilot, lambda: ex.has_class("-ok"))
+            assert "--- 읽음 b.py\nr2 출력" in _static_text(ex._body)
+
+            app.post_message(ToolStart("r5", "edit_file", "수정 · a.py"))          # 편집은 병합을 끊는다
+            app.post_message(ToolStart("r6", "read_file", "읽기 · c.py", ("읽음", "c.py")))
+            assert await _wait(pilot, lambda: len(app.query(ExploreStep)) == 2)
+            steps = list(app.query(StepLine))
+            assert [type(s).__name__ for s in steps] == ["ExploreStep", "StepLine", "ExploreStep"]
+            app.post_message(ToolEnd("r5", "수정함", ok=True, name="edit_file"))
+            app.post_message(ToolEnd("r6", "오류: 없음", ok=False))                 # 실패 → 다음 탐색은 새 줄
+            assert await _wait(pilot, lambda: steps[2].has_class("-fail"))
+            app.post_message(ToolStart("r7", "read_file", "읽기 · d.py", ("읽음", "d.py")))
+            assert await _wait(pilot, lambda: len(app.query(ExploreStep)) == 3)
+            app.post_message(ReasoningEnd("l1", "다음 라운드"))                  # 사고(새 LLM 라운드)도 병합을 끊는다
+            app.post_message(ToolStart("r8", "read_file", "읽기 · e.py", ("읽음", "e.py")))
+            assert await _wait(pilot, lambda: len(app.query(ExploreStep)) == 4)
+            assert [type(s).__name__ for s in app.query(StepLine)][-3:] == ["ExploreStep", "ReasoningStep", "ExploreStep"]
+            assert len(app.query(ProcessGroup)) == 1                          # 그룹은 스텝 구간당 하나
+    asyncio.run(go())
+
+
+def test_thinking_toggle_hides_reasoning_steps(tmp_path):
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test() as pilot:
+            app.post_message(ReasoningEnd("l1", "첫 사고"))
+            assert await _wait(pilot, lambda: bool(app.query(ReasoningStep)))
+            await _submit(pilot, "/thinking hide")
+            assert await _wait(pilot, lambda: not app.query_one(ReasoningStep).display)
+            app.post_message(ReasoningEnd("l2", "둘째 사고"))
+            await pilot.pause()
+            assert len(app.query(ReasoningStep)) == 1                         # 끈 동안은 만들지 않는다
+            await _submit(pilot, "/thinking")                                 # 인자 없으면 토글
+            assert await _wait(pilot, lambda: app.query_one(ReasoningStep).display)
+            assert "/thinking" in app._commands
+    asyncio.run(go())
+
+

@@ -25,10 +25,10 @@ koda                              # TUI 진입 (= koda tui)
 ```
 
 - `--yolo` 없이 뜨면 위험 도구(쓰기·삭제·명령·MCP) 전에 승인을 묻고, `koda --yolo` 는 자동 승인한다. 재앙적 명령(`sudo`·`rm -rf /` 류)은 `--yolo` 로도 막힌다.
-- TUI 슬래시 명령: `/help` 목록 · `/resume` 저장된 세션을 골라 이전 대화를 띄우고 이어서 진행 · `/compact` 이력 압축 · `/clear` 새 스레드 · `/remember <내용>` 영구 메모리 · `/exit`.
+- TUI 슬래시 명령: `/help` 목록 · `/resume` 저장된 세션을 골라 이전 대화를 띄우고 이어서 진행 · `/compact` 이력 압축 · `/clear` 새 스레드 · `/remember <내용>` 영구 메모리 · `/thinking [show|hide]` 사고 줄 표시 전환 · `/exit`.
 - 줄바꿈은 `Ctrl+J`(터미널이 확장 키를 지원하면 `Alt+Enter`·`Shift+Enter` 도 된다), `Ctrl+Q`/`Ctrl+C` 종료.
 - 마우스로 드래그해 놓으면 그 텍스트가 클립보드로 복사된다(OSC 52, tmux 는 `set-clipboard on` 필요). 선택이 남아 있으면 `Ctrl+C` 는 종료가 아니라 복사다.
-- 모델이 사고 내용(`reasoning_content`)을 따로 주면(vLLM·DeepSeek) 답변 앞에 접힌 `🧠 사고 · N자` 블록으로 보인다. 스트리밍하지 않고 호출이 끝난 뒤 한 번에 싣는다.
+- 답변 전 과정(사고·툴 호출)은 흐린 한 줄 스텝으로 `과정` 그룹 안에 쌓인다. 연속된 읽기·검색·조사는 `⏺ 탐색 · a.py, b.py 읽음 · "add" 검색` 한 줄로 합쳐지고, 모델이 사고 내용(`reasoning_content`)을 따로 주면(vLLM·DeepSeek) `∙ 첫 문장` 으로 보인다. 턴이 끝나면 그룹이 `▸ 과정 · 사고 N · 탐색 N · 편집 N · Ns` 로 접히며, 클릭하면 다시 펼쳐 각 스텝의 출력 전체를 볼 수 있다(접힌 상태에서는 드래그 선택이 되지 않는다).
 
 **모델 전환·로컬 모델** — 모델명으로 provider 를 유추해 base_url·reasoning·구조화 출력 방식을 맞추므로 `MODEL` 과 키만 바꾸면 된다. 회사별 환경변수 블록과 주의사항은 [`providers/`](providers/README.md) 에 있다. 환경변수로 넘기거나 `CWD/.env` · `~/.config/koda/.env` 에 둔다(환경변수가 파일보다 우선). 전체 항목은 `.env.example`.
 

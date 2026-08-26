@@ -32,7 +32,7 @@ from .model import (
     TurnFailed,
 )
 from .runner import APPROVAL_TIMEOUT_S, TuiTurnRunner
-from .widgets import ApprovalModal, PromptArea, ReasoningBlock, SessionPicker, ToolBlock
+from .widgets import ApprovalModal, ExploreStep, ProcessGroup, PromptArea, ReasoningStep, SessionPicker, StepLine
 
 _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"  # rich 'dots' 프레임 — toad/Claude Code 계열 표준 스피너
 
@@ -92,11 +92,14 @@ class KodaTui(App):
     #session_dialog { width: 90%; max-width: 110; height: auto; max-height: 80%; border: thick $primary;
                       background: $surface; padding: 1 2; }
     #session_title { margin-bottom: 1; }
-    ToolBlock { border: none; background: transparent; padding: 0; margin: 0; }
-    ToolBlock CollapsibleTitle { color: $text-muted; }
-    ReasoningBlock { border: none; background: transparent; padding: 0; margin: 0; }
-    ReasoningBlock CollapsibleTitle { color: $text-muted; }
-    ReasoningBlock Static { color: $text-muted; }
+    ProcessGroup, StepLine { border: none; background: transparent; padding: 0; margin: 0; }
+    ProcessGroup CollapsibleTitle, StepLine CollapsibleTitle { color: $text-muted; padding: 0; }
+    ProcessGroup > Contents { padding: 0 0 0 2; }
+    StepLine > Contents { padding: 0 0 0 2; }
+    StepLine Static { color: $text-muted; }
+    StepLine.-run CollapsibleTitle { color: $text-disabled; }
+    StepLine.-fail CollapsibleTitle { color: $error; }
+    ReasoningStep CollapsibleTitle { text-style: italic; }
     """
 
     def __init__(self, ws, session, memory, mcp_tools: list, auto_yes: bool,
@@ -114,8 +117,13 @@ class KodaTui(App):
         self._draft = ""         # 현재 턴 스트림 누적 — retry 리셋·finalize 폴백 판단용
         # 세그먼트 스트림: 산문을 툴 블록과 시간순 교차되도록 여러 Markdown 세그먼트로 쪼갠다.
         self._cur_prose_stream = None
-        self._cur_prose_md = None        # 현재 산문 세그먼트 위젯. 사고 블록을 그 앞에 끼워 넣는 기준
+        self._cur_prose_md = None        # 현재 산문 세그먼트 위젯. 열려 있는 동안 도착한 사고는 그 앞 그룹으로 간다
         self._turn_widgets: list = []   # 이번 턴 mount 위젯(질의 Static 제외) — retry 폐기용
+        # 과정 그룹: 연속 스텝(사고·툴) 구간 하나가 ProcessGroup 하나. 본문 토큰이 오면 구간이 끊긴다.
+        self._cur_group: ProcessGroup | None = None
+        self._prose_group: ProcessGroup | None = None   # 현재 산문 세그먼트 바로 앞의 그룹
+        self._cur_explore: ExploreStep | None = None    # 살아 있는 탐색 병합 줄
+        self._thinking_visible = True
         # 활동바 상태 (모두 UI thread 전용)
         self._turn_t0 = 0.0
         self._spin_i = 0
@@ -123,7 +131,7 @@ class KodaTui(App):
         self._activity_label = ""    # 현재 단계 라벨
         self._activity_detail = ""   # 현재 실행 중인 도구명
         self._turn_tools: Counter = Counter()    # 턴 전체 툴 tally(활동바 롤업)
-        self._tool_blocks: dict = {}  # run_id → ToolBlock (ToolStart↔ToolEnd 매칭)
+        self._tool_steps: dict = {}  # run_id → StepLine (ToolStart↔ToolEnd 매칭)
         # 슬래시 커맨드 레지스트리 — /help 목록·placeholder 의 단일 출처.
         self._commands: dict[str, tuple[str, object]] = {
             "/help": ("사용 가능한 명령 목록", self._cmd_help),
@@ -133,6 +141,7 @@ class KodaTui(App):
             "/memory": ("메모리 내용 보기", self._cmd_memory),
             "/remember": ("메모리에 저장: /remember [semantic|episodic|procedural] <내용>", self._cmd_remember),
             "/theme": ("테마 변경: /theme <이름> (인자 없으면 목록)", self._cmd_theme),
+            "/thinking": ("사고 줄 표시 전환: /thinking [show|hide]", self._cmd_thinking),
             "/exit": ("저장 후 종료", self._cmd_exit),
             "/quit": ("저장 후 종료", self._cmd_exit),
         }
@@ -355,6 +364,16 @@ class KodaTui(App):
         self.theme = arg
         self.notify(f"테마: {arg}", timeout=3)
 
+    async def _cmd_thinking(self, arg: str) -> None:
+        # 세션 내(프로세스) 설정. 이미 그려진 사고 줄도 같이 숨기거나 되살린다.
+        if arg not in ("", "show", "hide"):
+            self.notify("사용법: /thinking [show|hide]", severity="warning", timeout=4)
+            return
+        self._thinking_visible = (arg == "show") if arg else not self._thinking_visible
+        for step in self.query(ReasoningStep):
+            step.display = self._thinking_visible
+        self.notify(f"사고 표시: {'켬' if self._thinking_visible else '끔'}", timeout=3)
+
     async def _cmd_exit(self, arg: str) -> None:
         self._begin_close()
 
@@ -371,7 +390,8 @@ class KodaTui(App):
         self.query_one("#prompt", PromptArea).disabled = True
         self._draft = ""
         self._cur_prose_stream = None
-        self._cur_prose_md = None       # 이전 턴의 단락이 사고 블록 기준점으로 남으면 새 턴의 블록이 지난 턴에 끼어든다
+        self._cur_prose_md = None       # 이전 턴의 단락이 기준점으로 남으면 새 턴의 사고가 지난 턴에 끼어든다
+        self._cur_group = self._prose_group = self._cur_explore = None
         self._turn_widgets = []
         conv = self.query_one("#conversation", VerticalScroll)
         # 질의 Static 은 _turn_widgets 에 안 넣는다 — retry 시 산문/툴만 폐기하고 질의는 보존.
@@ -387,11 +407,11 @@ class KodaTui(App):
         self._busy = False
         # 산문 세그먼트 스트림은 _on_turn_done/_on_turn_failed 가 _close_prose 로 이미 닫았다(여긴 방어).
         self._cur_prose_stream = None
-        # 턴 종료 시 미완 툴 블록 정리 — worker 가 툴 도중 죽으면(ToolEnd 미도착) 스피너가 영구히
+        # 턴 종료 시 미완 스텝 정리. worker 가 툴 도중 죽으면(ToolEnd 미도착) 진행 상태가 영구히
         # 남는다. 성공 턴은 이미 비어 no-op.
-        for block in self._tool_blocks.values():
-            block.finish("(중단됨)", ok=False)
-        self._tool_blocks = {}
+        for run_id, step in self._tool_steps.items():
+            self._finish_step(step, run_id, "(중단됨)", ok=False)
+        self._tool_steps = {}
         self._activity_off()
         self._set_status(status)
         if isinstance(self.screen, ApprovalModal):
@@ -420,6 +440,9 @@ class KodaTui(App):
         self._turn_widgets.append(md)
         self._cur_prose_md = md
         self._cur_prose_stream = Markdown.get_stream(md)
+        # 본문이 시작되면 스텝 구간이 끊긴다. 이 단락 도중 도착하는 사고는 단락 앞 그룹(_prose_group)에 들어간다.
+        self._prose_group = self._cur_group
+        self._cur_group = self._cur_explore = None
         conv.anchor()
 
     async def _close_prose(self) -> None:
@@ -431,7 +454,7 @@ class KodaTui(App):
         except asyncio.CancelledError:
             pass  # 스트림 태스크가 기동 전에 취소된 극단 케이스 방어 — 핸들러 전파 시 앱이 죽는다
         self._cur_prose_stream = None
-        self._cur_prose_md = None       # 닫힌 단락은 기준점이 아니다. 다음 LLM 호출의 사고 블록은 그 뒤(다음 단락 앞)에 온다
+        self._cur_prose_md = self._prose_group = None   # 닫힌 단락은 기준점이 아니다. 다음 사고는 그 뒤의 새 그룹에 온다
 
     @on(PhaseEvent)
     async def _on_phase(self, msg: PhaseEvent) -> None:
@@ -465,7 +488,7 @@ class KodaTui(App):
         self._activity_label = phase
 
     async def _reset_turn(self) -> None:
-        """retry: 이번 시도의 산문 세그먼트·툴 블록·매핑을 전부 폐기하고 재시작한다(질의 Static 보존). _tool_blocks 를 안 비우면 뒤늦은 ToolEnd 가 stale run_id 로 제거된 위젯에 매칭된다."""
+        """retry: 이번 시도의 산문 세그먼트·과정 그룹·매핑을 전부 폐기하고 재시작한다(질의 Static 보존). _tool_steps 를 안 비우면 뒤늦은 ToolEnd 가 stale run_id 로 제거된 위젯에 매칭된다."""
         await self._close_prose()
         for w in self._turn_widgets:
             try:
@@ -473,7 +496,8 @@ class KodaTui(App):
             except Exception:
                 pass  # 이미 제거됐거나 mount 전인 위젯 — 폐기 목적이므로 무시
         self._turn_widgets = []
-        self._tool_blocks = {}
+        self._tool_steps = {}
+        self._cur_group = self._prose_group = self._cur_explore = None
         self._draft = ""
 
     @on(TurnDone)
@@ -481,6 +505,9 @@ class KodaTui(App):
         result = msg.result
         final = (result.get("final") or "").strip()
         await self._close_prose()
+        for w in self._turn_widgets:
+            if isinstance(w, ProcessGroup):
+                w.summarize()
         # 스트림 전면 유실일 때만 정본을 산문 세그먼트로 폴백 mount — 스트림된 세그먼트가 있으면
         # 통째 교체 시 멀티툴 턴의 중간 산문이 소실되므로 그대로 둔다.
         if final and not self._draft.strip():
@@ -533,37 +560,70 @@ class KodaTui(App):
         self._end_turn()
         self.notify(msg.note, title="문맥 압축", timeout=5)
 
-    # --- 툴 가시화 (ToolActivityHandler 콜백 → 대화 블록) ---
+    # --- 과정 가시화 (ToolActivityHandler 콜백 → 그룹 안의 스텝 줄) ---
+
+    async def _group(self) -> ProcessGroup:
+        """현재 스텝 구간의 그룹. 없으면 산문을 닫고 대화 끝에 새로 만든다."""
+        if self._cur_group is None or not self._cur_group.is_attached:
+            await self._close_prose()
+            self._cur_group = await self._mount_group()
+        return self._cur_group
+
+    async def _mount_group(self, before=None) -> ProcessGroup:
+        conv = self.query_one("#conversation", VerticalScroll)
+        group = ProcessGroup()
+        await conv.mount(group, before=before)
+        self._turn_widgets.append(group)   # retry 폐기 대상(스텝은 그룹과 함께 제거된다)
+        conv.anchor()
+        return group
 
     @on(ToolStart)
     async def _on_tool_start(self, msg: ToolStart) -> None:
         # 툴 진입 → 현재 산문 세그먼트를 닫아 다음 토큰이 새 세그먼트를 열게 한다(시간순 인터리브).
-        await self._close_prose()
-        block = ToolBlock(msg.title, msg.name)
-        self._tool_blocks[msg.run_id] = block
-        self._turn_widgets.append(block)   # retry 폐기 대상
-        conv = self.query_one("#conversation", VerticalScroll)
-        await conv.mount(block)
-        conv.anchor()
+        group = await self._group()
+        if msg.target is None:
+            self._cur_explore = None      # 편집·실행 도구는 탐색 병합을 끊는다
+            step = StepLine(msg.title, msg.name)
+            await group.add(step)
+        else:
+            if self._cur_explore is None or not self._cur_explore.is_attached or self._cur_explore.full:
+                self._cur_explore = ExploreStep()
+                await group.add(self._cur_explore)
+            self._cur_explore.add(msg.run_id, *msg.target)
+            step = self._cur_explore
+        self._tool_steps[msg.run_id] = step
+        self.query_one("#conversation", VerticalScroll).anchor()
 
     @on(ReasoningEnd)
     async def _on_reasoning_end(self, msg: ReasoningEnd) -> None:
-        # 사고는 그 호출의 본문보다 먼저 일어났으므로, 이미 흐르고 있는 산문 세그먼트가 있으면 그 앞에 끼운다.
-        block = ReasoningBlock(msg.text)
-        conv = self.query_one("#conversation", VerticalScroll)
-        anchor = self._cur_prose_md if self._cur_prose_md is not None and self._cur_prose_md.is_attached else None
-        if anchor is not None:
-            await conv.mount(block, before=anchor)
+        # 사고는 그 호출의 본문보다 먼저 일어났으므로, 산문 세그먼트가 흐르는 중이면 그 앞 그룹에 넣는다.
+        self._cur_explore = None      # 새 LLM 라운드. 다음 탐색이 이전 라운드의 줄에 섞이면 순서가 뒤틀린다
+        if not self._thinking_visible:
+            return
+        if self._cur_prose_md is not None and self._cur_prose_md.is_attached:
+            if self._prose_group is None or not self._prose_group.is_attached:
+                self._prose_group = await self._mount_group(before=self._cur_prose_md)
+            group = self._prose_group
         else:
-            await conv.mount(block)
-        self._turn_widgets.append(block)
-        conv.anchor()
+            group = await self._group()
+        await group.add(ReasoningStep(msg.text))
+        self.query_one("#conversation", VerticalScroll).anchor()
 
     @on(ToolEnd)
     async def _on_tool_end(self, msg: ToolEnd) -> None:
-        block = self._tool_blocks.pop(msg.run_id, None)
-        if block is not None:
-            block.finish(msg.output, msg.ok)
+        step = self._tool_steps.pop(msg.run_id, None)
+        if step is None:
+            return
+        self._finish_step(step, msg.run_id, msg.output, msg.ok)
+        if not msg.ok:
+            self._cur_explore = None      # 실패가 섞이면 다음 탐색은 새 줄
+
+    @staticmethod
+    def _finish_step(step, run_id: str, output: str, ok: bool) -> None:
+        if isinstance(step, ExploreStep):
+            step.finish_one(run_id, output, ok)
+        else:
+            step.finish(output, ok)
 
     @on(ApprovalRequest)
     def _on_approval(self, msg: ApprovalRequest) -> None:

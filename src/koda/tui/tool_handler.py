@@ -57,6 +57,35 @@ def tool_title(name: str, args: dict) -> str:
     return short  # MCP·기타 도구는 이름 그대로
 
 
+# 연속으로 오면 한 줄로 병합하는 탐색성 도구. 편집·실행 도구가 오면 병합이 끊긴다.
+_EXPLORE_KINDS = {"read_file": "읽음", "list_files": "목록", "search_text": "검색", "run_readonly_command": "조사", "explore": "위임"}
+_DOCS_MCP = {"query-docs", "resolve-library-id"}
+_WEB_MCP = re.compile(r"web_search|crawl|scrape")
+
+
+def tool_target(name: str, args: dict) -> tuple[str, str] | None:
+    """탐색성 도구면 (종류, 짧은 대상)을 돌려준다. 병합 줄의 제목 재료이며, 그 외 도구는 None."""
+    args = args if isinstance(args, dict) else {}
+    kind = _EXPLORE_KINDS.get(name)
+    if kind == "읽음":
+        return kind, str(args.get("path") or "?")
+    if kind == "목록":
+        return kind, str(args.get("path") or ".")
+    if kind == "검색":
+        return kind, f'"{args.get("query") or ""}"'
+    if kind == "조사":
+        argv = args.get("argv")
+        cmd = args.get("command") or (" ".join(map(str, argv)) if isinstance(argv, list) else "")
+        return kind, str(cmd)[:40]
+    if kind == "위임":
+        return kind, str(args.get("question") or args.get("task") or "")[:30]
+    if name in _DOCS_MCP:
+        return "문서", name
+    if _WEB_MCP.search(name):
+        return "웹", f'"{args.get("query") or ""}"'
+    return None
+
+
 class ToolActivityHandler(BaseCallbackHandler):
     """툴 실행을 관측해 TUI 로 post 한다. run_id 로 start↔end 를 매칭하며, post 는 thread-safe 하다."""
 
@@ -68,7 +97,7 @@ class ToolActivityHandler(BaseCallbackHandler):
         name = (serialized or {}).get("name") or "tool"
         self._names[str(run_id)] = name
         args = inputs if isinstance(inputs, dict) else {}
-        self._post(ToolStart(str(run_id), name, tool_title(name, args)))
+        self._post(ToolStart(str(run_id), name, tool_title(name, args), tool_target(name, args)))
 
     def on_tool_end(self, output, *, run_id=None, **kwargs) -> None:
         name = self._names.pop(str(run_id), "")

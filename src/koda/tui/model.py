@@ -69,12 +69,13 @@ class CompactDone(Message):
 
 
 class ToolStart(Message):
-    """툴 실행 시작 (langchain on_tool_start). run_id 로 ToolEnd 와 매칭하며, raw args 는 싣지 않는 표시 전용 채널이다."""
+    """툴 실행 시작 (langchain on_tool_start). run_id 로 ToolEnd 와 매칭하며, raw args 는 싣지 않는 표시 전용 채널이다. target 은 탐색성 도구일 때 (종류, 대상) 이고 그 외는 None."""
 
-    def __init__(self, run_id: str, name: str, title: str) -> None:
+    def __init__(self, run_id: str, name: str, title: str, target: tuple[str, str] | None = None) -> None:
         self.run_id = run_id
         self.name = name
         self.title = title
+        self.target = target
         super().__init__()
 
 
