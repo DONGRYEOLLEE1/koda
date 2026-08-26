@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Callable
+from zoneinfo import ZoneInfo
 
 from langchain.agents import create_agent
 
@@ -27,8 +29,8 @@ class AgentSpec:
     response_format: type | None = None
     max_steps: int = 25  # 이 에이전트 1회 실행당 도구 호출 하드 캡 (도구 루프 폭주 방지)
 
-    def build(self, model, ws, approver, extra_tools=(), memory_text: str = "", store=None,
-              skills=(), context_budget: int = 64000, mcp_auto_approve=()):
+    def system_prompt(self, memory_text: str = "", skills=(), context_budget: int = 64000) -> str:
+        """시스템 프롬프트 조립. 캐시 prefix 순서: 정적(프롬프트·예산·스킬) → 메모리 → 날짜(매일 바뀜)."""
         system = load_prompt(self.name)
         # 컨텍스트 예산 소프트 가이드 — 하드 집행은 StepBudget·HistoryTrim 이 하고, 이 문구는 모델 유도용이다.
         system += (
@@ -45,6 +47,16 @@ class AgentSpec:
             )
         if memory_text:  # 영구 메모리는 스킬 뒤 고정 위치 (더 동적 → prefix 뒤쪽)
             system += "\n\n## 프로젝트 메모리 (이 워크스페이스에 대해 기억된 사실)\n" + memory_text
+        # 오늘 날짜(KST)를 맨 뒤에 둔다 — 없으면 웹검색으로 최신 자료를 받아도 '최근'·'올해'를 학습 시점 기준으로 해석한다.
+        # 시각(분)까지 넣으면 호출마다 prefix 가 바뀌어 프롬프트 캐시가 깨지므로 날짜만 넣는다.
+        now = datetime.now(ZoneInfo("Asia/Seoul"))
+        system += (f"\n\n## 현재 날짜\n\n오늘은 {now:%Y-%m-%d} ({'월화수목금토일'[now.weekday()]}요일, KST) 이다. "
+                   f"날짜·기간·최신 여부는 네 학습 시점이 아니라 이 날짜를 기준으로 판단한다.")
+        return system
+
+    def build(self, model, ws, approver, extra_tools=(), memory_text: str = "", store=None,
+              skills=(), context_budget: int = 64000, mcp_auto_approve=()):
+        system = self.system_prompt(memory_text, skills, context_budget)
         tools = self.toolset(ws) + list(extra_tools)
         if store is not None:  # 절단된 도구 출력의 원문 재조회 경로
             tools += make_artifact_tools(store)
