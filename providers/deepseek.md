@@ -39,9 +39,9 @@ koda
 
 ## 문제 해결
 
-| 증상 | 원인 → 조치 |
-|---|---|
-| `The supported API model names are deepseek-v4-pro, deepseek-v4-flash, …` | 다른 provider 의 모델명이 `MODEL` 에 남아 있음 → `MODEL` 수정 |
-| `Authentication Fails, Your api key … is invalid` | 다른 provider 의 키가 들어감 → `DEEPSEEK_API_KEY` 확인, `OPENAI_BASE_URL` 이 남아 있으면 `unset` |
-| 라우팅이 항상 `inspect`, trace 에 `tool_choice` 400 | `REASONING_STYLE=off` → 지운다 |
-| `This response_format type is unavailable now` | `STRUCTURED_METHOD=json_schema` 잔재 → 지운다 |
+| 증상                                                                         | 원인 → 조치                                                                                           |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `The supported API model names are deepseek-v4-pro, deepseek-v4-flash, …` | 다른 provider 의 모델명이`MODEL` 에 남아 있음 → `MODEL` 수정                                      |
+| `Authentication Fails, Your api key … is invalid`                         | 다른 provider 의 키가 들어감 →`DEEPSEEK_API_KEY` 확인, `OPENAI_BASE_URL` 이 남아 있으면 `unset` |
+| 라우팅이 항상`inspect`, trace 에 `tool_choice` 400                       | `REASONING_STYLE=off` → 지운다                                                                      |
+| `This response_format type is unavailable now`                             | `STRUCTURED_METHOD=json_schema` 잔재 → 지운다                                                       |

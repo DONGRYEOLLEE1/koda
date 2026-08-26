@@ -42,8 +42,8 @@ koda
 
 ## 문제 해결
 
-| 증상 | 원인 → 조치 |
-|---|---|
-| `401 Authentication Fails … api key is invalid` (DeepSeek 문구) | `OPENAI_BASE_URL` 이 DeepSeek 로 남아 있음 → `unset OPENAI_BASE_URL` |
-| `400 Function tools with reasoning_effort are not supported` | Chat Completions 로 나감 → `OPENAI_USE_RESPONSES_API=false` 가 잡혀 있는지 확인해 지운다 |
-| `400 Unsupported parameter: reasoning_effort` | reasoning 을 모르는 모델 → `REASONING_STYLE=off` |
+| 증상                                                               | 원인 → 조치                                                                               |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `401 Authentication Fails … api key is invalid` (DeepSeek 문구) | `OPENAI_BASE_URL` 이 DeepSeek 로 남아 있음 → `unset OPENAI_BASE_URL`                  |
+| `400 Function tools with reasoning_effort are not supported`     | Chat Completions 로 나감 →`OPENAI_USE_RESPONSES_API=false` 가 잡혀 있는지 확인해 지운다 |
+| `400 Unsupported parameter: reasoning_effort`                    | reasoning 을 모르는 모델 →`REASONING_STYLE=off`                                         |
