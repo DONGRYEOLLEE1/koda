@@ -7,6 +7,7 @@
 | [deepseek.md](deepseek.md) | DeepSeek (기본 provider) | `DEEPSEEK_API_KEY` |
 | [openai.md](openai.md) | OpenAI `gpt-*` · `o*` | `OPENAI_API_KEY` + `MODEL` |
 | [llama.cpp.md](llama.cpp.md) | 로컬 `llama-server` | `PRIMARY=local` + 서버 주소·모델 |
+| [inner-vllm.md](inner-vllm.md) | 사내 vLLM 서버 (LiteLLM 게이트웨이, 포트 4000) | `PRIMARY=local` + 주소·`qwen3.8-27b`·Virtual Key |
 | [openai-compatible.md](openai-compatible.md) | vLLM · 프록시 · 자체 호스팅 | `MODEL` + `OPENAI_BASE_URL` + 키 |
 
 Anthropic 은 OpenAI 호환 API 가 아니라 아직 지원하지 않는다(별도 어댑터 필요).
