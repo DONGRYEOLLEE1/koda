@@ -67,6 +67,13 @@ class ToolBlock(Collapsible):
             self._body.update(output or "(출력 없음)")
 
 
+class ReasoningBlock(Collapsible):
+    """LLM 호출 하나의 사고 내용. 접힘이 기본이고 제목에 분량만 보인다 — 툴 블록과 같은 결로 대화 스트림에 섞인다."""
+
+    def __init__(self, text: str) -> None:
+        super().__init__(Static(text, markup=False), title=f"🧠 사고 · {len(text)}자", collapsed=True)
+
+
 def _args_preview(tool: str, args: object) -> str:
     """args 요약 — 길이 제한 + secret 성 키 redaction, raw dump 금지."""
     if tool == "run_command" and isinstance(args, dict):

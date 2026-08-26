@@ -28,6 +28,7 @@ koda                              # TUI 진입 (= koda tui)
 - TUI 슬래시 명령: `/help` 목록 · `/resume` 저장된 세션을 골라 이전 대화를 띄우고 이어서 진행 · `/compact` 이력 압축 · `/clear` 새 스레드 · `/remember <내용>` 영구 메모리 · `/exit`.
 - 줄바꿈은 `Ctrl+J`(터미널이 확장 키를 지원하면 `Alt+Enter`·`Shift+Enter` 도 된다), `Ctrl+Q`/`Ctrl+C` 종료.
 - 마우스로 드래그해 놓으면 그 텍스트가 클립보드로 복사된다(OSC 52, tmux 는 `set-clipboard on` 필요). 선택이 남아 있으면 `Ctrl+C` 는 종료가 아니라 복사다.
+- 모델이 사고 내용(`reasoning_content`)을 따로 주면(vLLM·DeepSeek) 답변 앞에 접힌 `🧠 사고 · N자` 블록으로 보인다. 스트리밍하지 않고 호출이 끝난 뒤 한 번에 싣는다.
 
 **모델 전환·로컬 모델** — 모델명으로 provider 를 유추해 base_url·reasoning·구조화 출력 방식을 맞추므로 `MODEL` 과 키만 바꾸면 된다. 회사별 환경변수 블록과 주의사항은 [`providers/`](providers/README.md) 에 있다. 환경변수로 넘기거나 `CWD/.env` · `~/.config/koda/.env` 에 둔다(환경변수가 파일보다 우선). 전체 항목은 `.env.example`.
 

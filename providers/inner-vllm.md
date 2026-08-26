@@ -51,7 +51,7 @@ curl -s -H "Authorization: Bearer $LOCAL_API_KEY" $LOCAL_OPENAI_BASE_URL/models
 
 - 파라미터 계열은 기본값 그대로 쓴다(`REASONING_STYLE=effort`, `STRUCTURED_METHOD=function_calling`). 실측(`qwen3.8-27b`)으로 `qwen` 스타일, `json_schema`, 도구 + reasoning 도 모두 동작한다.
 - **`REASONING_EFFORT` 는 `low`·`medium`·`xhigh` 만 받는다.** `high` 를 주면 reasoning 을 켜는 경로(answer·reader)만 `400 Unexpected reasoning effort high` 로 실패한다. koda 기본값은 `medium` 이지만, 다른 provider 에서 쓰던 값이 셸에 남아 있으면 위 블록처럼 명시한다.
-- reasoning 을 걷어낸 자리에 빈 줄 두 개가 남아 답변이 `\n\n` 으로 시작한다. 동작에는 영향이 없다.
+- 서버가 본문과 따로 주는 사고 내용(`reasoning_content`)은 TUI 에서 답변 앞에 접힌 `🧠 사고 · N자` 블록으로 보인다. 쉬운 질문은 사고가 200자 안팎이라 빨리 끝나고, 어려운 문제는 xhigh 에서 8천 자를 넘기도 한다(실측).
 - `PRIMARY=local` 이라 헬스체크(`GET /models`, 키 포함)가 통과해야 이 서버로 간다. 통과하지 못하면 DeepSeek·OpenAI 키가 있을 때 그쪽으로 조용히 폴백하니, 어느 모델로 답했는지는 TUI statusline 이나 langfuse trace 의 `provider` 로 확인한다.
 
 ## 문제 해결

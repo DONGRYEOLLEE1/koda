@@ -233,3 +233,16 @@ def test_health_sends_api_key_for_authenticated_gateways(monkeypatch):
     assert _health("http://gw:4000/v1", "vk-secret") is True
     assert seen["url"] == "http://gw:4000/v1/models" and seen["headers"].get("Authorization") == "Bearer vk-secret"
     assert _health("http://gw:4000/v1", "") is True and "Authorization" not in seen["headers"]
+
+
+def test_reasoning_content_is_kept_from_stream_chunks_and_responses():
+    # ChatOpenAI 는 서드파티 reasoning_content 를 버린다 — 서브클래스가 additional_kwargs 에 남겨야 화면에 보인다.
+    from langchain_core.messages import AIMessageChunk
+    from koda.llm import ReasoningChatOpenAI
+    m = ReasoningChatOpenAI(model="m", base_url="http://h:1/v1", api_key="k")
+    chunk = {"choices": [{"delta": {"role": "assistant", "content": "", "reasoning_content": "먼저 "}, "finish_reason": None, "index": 0}]}
+    g = m._convert_chunk_to_generation_chunk(chunk, AIMessageChunk, None)
+    assert g.message.additional_kwargs["reasoning_content"] == "먼저 "
+    g2 = m._convert_chunk_to_generation_chunk({"choices": [{"delta": {"content": "답", "reasoning_content": "생각"}, "index": 0}]}, AIMessageChunk, None)
+    merged = g.message + g2.message
+    assert merged.additional_kwargs["reasoning_content"] == "먼저 생각"   # 청크 병합 시 이어 붙는다

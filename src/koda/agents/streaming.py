@@ -96,6 +96,7 @@ async def astream_agent(agent, messages: list, on_token, config=None, on_event=N
                 on_event(f"think:{think_chunks}")
                 last_think = now
     answer, finish, usage = _final_ai(final_state, start=len(messages))
+    answer = answer.lstrip("\n")  # reasoning 을 서버가 걷어낸 자리에 빈 줄이 남는다(vLLM)
     streamed_text = "".join(streamed)
     if answer.strip() and not streamed_text:
         # 스트림 청크가 유실돼도(중첩 스트림 결함) 정본 답변을 화면에 보여준다.

@@ -4,9 +4,10 @@ import re
 
 from langchain_core.callbacks import BaseCallbackHandler
 
-from .model import DIFF_TOOLS, ToolEnd, ToolStart
+from .model import DIFF_TOOLS, ReasoningEnd, ToolEnd, ToolStart
 
 _OUTPUT_LIMIT = 2000  # 툴 output 표시 상한 (긴 파일 내용·셸 출력 절단)
+_REASONING_LIMIT = 6000  # 사고 내용 표시 상한 — 어려운 문제는 8k 자를 넘기도 한다
 _EDIT_OUTPUT_LIMIT = 6000  # 편집 도구 diff 는 길 수 있어 별도(더 큰) 상한 — 기본 상한이 diff 를 반토막 내는 것 방지.
 
 # 자격증명 대입으로 보이는 줄의 값만 가려 시크릿이 스크롤백에 평문으로 남지 않게 한다. 선택적 diff 마커([+\-])를 허용해 diff 의 +/- 접두 라인도 마스킹한다.
@@ -73,6 +74,15 @@ class ToolActivityHandler(BaseCallbackHandler):
         name = self._names.pop(str(run_id), "")
         limit = _EDIT_OUTPUT_LIMIT if name in DIFF_TOOLS else _OUTPUT_LIMIT
         self._post(ToolEnd(str(run_id), _trim(_redact(_to_text(output)), limit), ok=True, name=name))
+
+    def on_llm_end(self, response, *, run_id=None, **kwargs) -> None:
+        # 스트리밍이어도 여기엔 청크가 합쳐진 메시지가 온다 — reasoning_content 는 서버가 본문과 따로 주는 사고 내용.
+        for gens in getattr(response, "generations", None) or []:
+            for g in gens:
+                msg = getattr(g, "message", None)
+                text = (getattr(msg, "additional_kwargs", None) or {}).get("reasoning_content")
+                if text and text.strip():
+                    self._post(ReasoningEnd(str(run_id), _trim(_redact(text.strip()), _REASONING_LIMIT)))
 
     def on_tool_error(self, error, *, run_id=None, **kwargs) -> None:
         name = self._names.pop(str(run_id), "")

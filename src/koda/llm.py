@@ -1,9 +1,36 @@
 from __future__ import annotations
 
 import httpx
-from langchain.chat_models import init_chat_model
+from langchain_core.messages import AIMessageChunk
+from langchain_openai import ChatOpenAI
 
 from .config import ModelSettings
+
+
+class ReasoningChatOpenAI(ChatOpenAI):
+    """ChatOpenAI 는 OpenAI 공식 스펙만 다뤄 서드파티(vLLM·DeepSeek)가 주는 `reasoning_content` 를 버린다. 그 필드를 additional_kwargs 에 남겨 화면에 보일 수 있게 한다."""
+
+    def _create_chat_result(self, response, generation_info=None):
+        result = super()._create_chat_result(response, generation_info)
+        msg = getattr(response, "choices", None) and response.choices[0].message
+        rc = getattr(msg, "reasoning_content", None) or (getattr(msg, "model_extra", None) or {}).get("reasoning_content")
+        if rc and result.generations:
+            result.generations[0].message.additional_kwargs["reasoning_content"] = rc
+        return result
+
+    def _convert_chunk_to_generation_chunk(self, chunk, default_chunk_class, base_generation_info):
+        gen = super()._convert_chunk_to_generation_chunk(chunk, default_chunk_class, base_generation_info)
+        choices = chunk.get("choices") or []
+        if gen is not None and choices and isinstance(gen.message, AIMessageChunk):
+            rc = (choices[0].get("delta") or {}).get("reasoning_content")
+            if rc:  # 청크가 합쳐질 때 additional_kwargs 의 문자열은 이어 붙는다
+                gen.message.additional_kwargs["reasoning_content"] = rc
+        return gen
+
+
+def _chat(model: str, base_url: str, api_key: str, **kw) -> ReasoningChatOpenAI:
+    """모든 엔드포인트가 OpenAI 호환이라 이 한 클래스로 만든다."""
+    return ReasoningChatOpenAI(model=model, base_url=base_url, api_key=api_key or "nothing", stream_usage=True, **kw)
 
 
 def _health(base_url: str, api_key: str = "", timeout: float = 3.0) -> bool:
@@ -38,16 +65,11 @@ def build_model(settings: ModelSettings):
         base, key, model = settings.openai_base_url, settings.openai_api_key, settings.openai_model
     else:
         base, key, model = settings.local_base_url, settings.local_api_key, settings.local_model
-    chat = init_chat_model(
-        model,
-        model_provider="openai",
-        base_url=base,
-        api_key=key or "nothing",
+    chat = _chat(
+        model, base, key,
         temperature=0,
         # 폭주 차단용 넉넉한 상한 — 짧은 캡은 정상 추론까지 잘라 빈 판정을 냈으므로 반드시 넉넉하게 유지한다.
         max_tokens=4096,
-        # 스트리밍 생성도 토큰 사용량을 보고하게 한다 — 없으면 astream 호출의 usage 가 langfuse 에 과소집계된다.
-        stream_usage=True,
         use_responses_api=settings.use_responses_api if provider == "openai" else False,
     )
     return chat, provider, reason
@@ -74,14 +96,10 @@ def _derive(model, settings: ModelSettings, enabled: bool, budget: int = 0):
     api_key = model.openai_api_key
     if hasattr(api_key, "get_secret_value"):
         api_key = api_key.get_secret_value()
-    return init_chat_model(
-        model.model_name,
-        model_provider="openai",
-        base_url=model.openai_api_base,
-        api_key=api_key or "nothing",
+    return _chat(
+        model.model_name, model.openai_api_base, api_key,
         temperature=model.temperature,
         max_tokens=model.max_tokens,
-        stream_usage=True,
         use_responses_api=bool(getattr(model, "use_responses_api", False)),
         **params,
     )

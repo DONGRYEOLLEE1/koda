@@ -38,7 +38,7 @@ koda
 
 - 요청은 **Responses API** 로 나간다. Chat Completions 는 도구와 `reasoning_effort` 를 함께 보내면 `400 Function tools with reasoning_effort are not supported` 로 거절하는데, koda 의 reader·coder 는 둘 다 쓴다.
 - 구조화 출력은 `json_schema` 다. reasoning 이 켜져 있어도 동작한다.
-- 응답의 reasoning 블록은 화면에 표시하지 않는다(text 블록만 본문).
+- Responses API 의 reasoning 은 요약을 따로 요청하지 않으면 내용이 오지 않아 TUI 사고 블록에 보이지 않는다(text 블록만 본문).
 
 ## 문제 해결
 

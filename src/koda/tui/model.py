@@ -87,3 +87,12 @@ class ToolEnd(Message):
         self.ok = ok
         self.name = name
         super().__init__()
+
+
+class ReasoningEnd(Message):
+    """LLM 호출 하나가 끝났을 때의 사고 내용(reasoning_content). 스트리밍하지 않고 완료 후 한 번에 싣는다."""
+
+    def __init__(self, run_id: str, text: str) -> None:
+        self.run_id = run_id
+        self.text = text
+        super().__init__()

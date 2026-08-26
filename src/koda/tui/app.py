@@ -22,6 +22,7 @@ from .model import (
     ApprovalRequest,
     CompactDone,
     PhaseEvent,
+    ReasoningEnd,
     SessionClosed,
     TokenChunk,
     ToolEnd,
@@ -30,7 +31,7 @@ from .model import (
     TurnFailed,
 )
 from .runner import APPROVAL_TIMEOUT_S, TuiTurnRunner
-from .widgets import ApprovalModal, PromptArea, SessionPicker, ToolBlock
+from .widgets import ApprovalModal, PromptArea, ReasoningBlock, SessionPicker, ToolBlock
 
 _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"  # rich 'dots' 프레임 — toad/Claude Code 계열 표준 스피너
 
@@ -92,6 +93,9 @@ class KodaTui(App):
     #session_title { margin-bottom: 1; }
     ToolBlock { border: none; background: transparent; padding: 0; margin: 0; }
     ToolBlock CollapsibleTitle { color: $text-muted; }
+    ReasoningBlock { border: none; background: transparent; padding: 0; margin: 0; }
+    ReasoningBlock CollapsibleTitle { color: $text-muted; }
+    ReasoningBlock Static { color: $text-muted; }
     """
 
     def __init__(self, ws, session, memory, mcp_tools: list, auto_yes: bool,
@@ -109,6 +113,7 @@ class KodaTui(App):
         self._draft = ""         # 현재 턴 스트림 누적 — retry 리셋·finalize 폴백 판단용
         # 세그먼트 스트림: 산문을 툴 블록과 시간순 교차되도록 여러 Markdown 세그먼트로 쪼갠다.
         self._cur_prose_stream = None
+        self._cur_prose_md = None        # 현재 산문 세그먼트 위젯 — 사고 블록을 그 앞에 끼워 넣는 기준
         self._turn_widgets: list = []   # 이번 턴 mount 위젯(질의 Static 제외) — retry 폐기용
         # 활동바 상태 (모두 UI thread 전용)
         self._turn_t0 = 0.0
@@ -406,6 +411,7 @@ class KodaTui(App):
         md = Markdown("", classes="answer")
         await conv.mount(md)
         self._turn_widgets.append(md)
+        self._cur_prose_md = md
         self._cur_prose_stream = Markdown.get_stream(md)
         conv.anchor()
 
@@ -530,6 +536,19 @@ class KodaTui(App):
         self._turn_widgets.append(block)   # retry 폐기 대상
         conv = self.query_one("#conversation", VerticalScroll)
         await conv.mount(block)
+        conv.anchor()
+
+    @on(ReasoningEnd)
+    async def _on_reasoning_end(self, msg: ReasoningEnd) -> None:
+        # 사고는 그 호출의 본문보다 먼저 일어났으므로, 이미 흐르고 있는 산문 세그먼트가 있으면 그 앞에 끼운다.
+        block = ReasoningBlock(msg.text)
+        conv = self.query_one("#conversation", VerticalScroll)
+        anchor = self._cur_prose_md if self._cur_prose_md is not None and self._cur_prose_md.is_attached else None
+        if anchor is not None:
+            await conv.mount(block, before=anchor)
+        else:
+            await conv.mount(block)
+        self._turn_widgets.append(block)
         conv.anchor()
 
     @on(ToolEnd)

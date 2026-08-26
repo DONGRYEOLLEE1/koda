@@ -13,7 +13,7 @@ import koda.tui.runner as runner_mod
 from koda.memory import Memory
 from koda.session import Session
 from koda.tui.app import KodaTui
-from koda.tui.model import PhaseEvent, TokenChunk, ToolEnd, ToolStart
+from koda.tui.model import PhaseEvent, ReasoningEnd, TokenChunk, ToolEnd, ToolStart
 from koda.tui.tool_handler import ToolActivityHandler, tool_title
 from koda.tui.widgets import ApprovalModal, PromptArea, ToolBlock, _args_preview
 from koda.workspace import Workspace
@@ -725,3 +725,39 @@ def test_drag_selection_copies_to_clipboard(tmp_path):
             await pilot.pause()
             assert len(copied) == n + 1 and not app._close_requested
     asyncio.run(go())
+
+
+# --- 사고 블록: LLM 호출 완료 시 접힌 블록을 본문 앞에 ---
+
+def test_reasoning_block_mounts_collapsed_before_prose(tmp_path):
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_token("본문")
+        await asyncio.sleep(0.05)
+        return _result("본문")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test(size=(100, 30)) as pilot:
+            await _submit(pilot, "질문")
+            assert await _wait(pilot, lambda: app._cur_prose_md is not None)   # 산문 세그먼트가 열린 뒤
+            app.post_message(ReasoningEnd("llm1", "이 질문은 단순하다. 바로 답한다."))
+            assert await _wait(pilot, lambda: bool(app.query("ReasoningBlock")))   # 메시지 처리 완료까지
+            assert await _wait(pilot, _turn_done(app))
+            conv = app.query_one("#conversation")
+            kinds = [type(w).__name__ for w in conv.children]
+            i_block, i_prose = kinds.index("ReasoningBlock"), kinds.index("Markdown")
+            assert i_block < i_prose                                    # 사고 블록이 본문보다 앞
+            block = conv.query_one("ReasoningBlock")
+            assert block.collapsed and "🧠 사고 ·" in str(block.title) and "자" in str(block.title)
+
+    asyncio.run(go())
+
+
+def test_tool_activity_handler_posts_reasoning_on_llm_end():
+    from types import SimpleNamespace
+    posted = []
+    h = ToolActivityHandler(posted.append)
+    msg = SimpleNamespace(additional_kwargs={"reasoning_content": "  생각 중  "})
+    h.on_llm_end(SimpleNamespace(generations=[[SimpleNamespace(message=msg)]]), run_id="r1")
+    h.on_llm_end(SimpleNamespace(generations=[[SimpleNamespace(message=SimpleNamespace(additional_kwargs={}))]]), run_id="r2")
+    assert len(posted) == 1 and isinstance(posted[0], ReasoningEnd) and posted[0].text == "생각 중"
