@@ -6,10 +6,11 @@ from langchain.chat_models import init_chat_model
 from .config import ModelSettings
 
 
-def _health(base_url: str, timeout: float = 3.0) -> bool:
-    """로컬 엔드포인트가 실제로 200 을 주는지 확인한다(404/500 은 unhealthy)."""
+def _health(base_url: str, api_key: str = "", timeout: float = 3.0) -> bool:
+    """로컬 엔드포인트가 실제로 200 을 주는지 확인한다(404/500 은 unhealthy). 인증이 있는 게이트웨이(LiteLLM 등)는 키 없이 401 이라 키를 실어 보낸다."""
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     try:
-        resp = httpx.get(base_url.rstrip("/") + "/models", timeout=timeout)
+        resp = httpx.get(base_url.rstrip("/") + "/models", headers=headers, timeout=timeout)
         return resp.status_code == 200
     except Exception:
         return False
@@ -20,10 +21,10 @@ def select_provider(settings: ModelSettings, health=_health) -> tuple[str, str]:
     if settings.primary == "openai":
         if settings.openai_api_key:
             return "openai", "openai key present"
-        if settings.fallback_enabled and health(settings.local_base_url):
+        if settings.fallback_enabled and health(settings.local_base_url, settings.local_api_key):
             return "local", "no openai key -> local fallback"
         return "openai", "no openai key, no local fallback"
-    if health(settings.local_base_url):
+    if health(settings.local_base_url, settings.local_api_key):
         return "local", "local healthy"
     if settings.fallback_enabled and settings.openai_api_key:
         return "openai", "local unavailable -> openai fallback"

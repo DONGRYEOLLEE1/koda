@@ -8,7 +8,7 @@ from koda.llm import _health, build_model
 
 def _live_or_skip():
     settings = load_model_settings()
-    if not _health(settings.local_base_url, timeout=2.0):
+    if not _health(settings.local_base_url, settings.local_api_key, timeout=2.0):
         pytest.skip(f"로컬 엔드포인트 미가용: {settings.local_base_url}")
     return settings
 

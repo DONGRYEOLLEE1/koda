@@ -28,29 +28,29 @@ def _cfg(**kw):
 
 
 def test_provider_local_healthy():
-    assert select_provider(_cfg(), health=lambda u: True)[0] == "local"
+    assert select_provider(_cfg(), health=lambda u, k: True)[0] == "local"
 
 
 def test_provider_falls_back_when_local_down():
-    assert select_provider(_cfg(openai_api_key="sk-test"), health=lambda u: False)[0] == "openai"
+    assert select_provider(_cfg(openai_api_key="sk-test"), health=lambda u, k: False)[0] == "openai"
 
 
 def test_provider_no_fallback_without_key():
-    assert select_provider(_cfg(openai_api_key=""), health=lambda u: False)[0] == "local"
+    assert select_provider(_cfg(openai_api_key=""), health=lambda u, k: False)[0] == "local"
 
 
 def test_provider_openai_primary_uses_key_without_health_check():
     # 기본 구성(primary=openai): 키가 있으면 로컬 헬스체크 없이 바로 openai
     called = []
     p, _ = select_provider(_cfg(primary="openai", openai_api_key="sk-test"),
-                           health=lambda u: called.append(u) or True)
+                           health=lambda u, k: called.append(u) or True)
     assert p == "openai" and not called
 
 
 def test_provider_openai_primary_falls_back_to_local_without_key():
-    assert select_provider(_cfg(primary="openai", openai_api_key=""), health=lambda u: True)[0] == "local"
+    assert select_provider(_cfg(primary="openai", openai_api_key=""), health=lambda u, k: True)[0] == "local"
     # 로컬도 죽어 있으면 openai 로 남는다 — preflight 가 키 안내를 낸다
-    assert select_provider(_cfg(primary="openai", openai_api_key=""), health=lambda u: False)[0] == "openai"
+    assert select_provider(_cfg(primary="openai", openai_api_key=""), health=lambda u, k: False)[0] == "openai"
 
 
 def _base_model():
@@ -217,3 +217,19 @@ def test_derive_carries_responses_api_flag():
                            api_key="k", temperature=0, max_tokens=4096, use_responses_api=True)
     m = _no_think(base, _cfg(reasoning_style="effort"))
     assert m.use_responses_api is True and m.reasoning_effort == "none"
+
+
+def test_health_sends_api_key_for_authenticated_gateways(monkeypatch):
+    # LiteLLM 같은 게이트웨이는 키 없이 /models 를 두드리면 401 이라 "로컬 죽음"으로 오판해 폴백해 버린다.
+    import httpx
+    from koda.llm import _health
+    seen = {}
+    class _R:
+        status_code = 200
+    def fake_get(url, headers=None, timeout=None):
+        seen["url"], seen["headers"] = url, headers or {}
+        return _R()
+    monkeypatch.setattr(httpx, "get", fake_get)
+    assert _health("http://gw:4000/v1", "vk-secret") is True
+    assert seen["url"] == "http://gw:4000/v1/models" and seen["headers"].get("Authorization") == "Bearer vk-secret"
+    assert _health("http://gw:4000/v1", "") is True and "Authorization" not in seen["headers"]

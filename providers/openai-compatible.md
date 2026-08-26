@@ -35,6 +35,7 @@ koda
 |---|---|---|
 | vLLM (reasoning 모델) | `effort` | `json_schema` (guided decoding) 또는 `function_calling` |
 | vLLM (일반 모델) · 대부분의 프록시 | `off` | `function_calling` |
+| LiteLLM 게이트웨이 → vLLM Qwen3 계열 (실측 `qwen3.8-27b`) | 기본값 그대로 (`effort`, `qwen` 도 됨). 단 `REASONING_EFFORT` 는 `low`·`medium`·`xhigh` 만 받고 `high` 는 400 | 기본값 그대로 (`json_schema`·`function_calling` 둘 다 됨, 도구+reasoning 도 됨) |
 | llama.cpp | [llama.cpp.md](llama.cpp.md) 를 따른다 | |
 
 `STRUCTURED_METHOD=auto` 는 `json_schema` → `function_calling` 순으로 탐색하되, 미지원 방식에서 프로세스마다 400 을 한 번 맞는다.
