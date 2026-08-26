@@ -113,7 +113,7 @@ class KodaTui(App):
         self._draft = ""         # 현재 턴 스트림 누적 — retry 리셋·finalize 폴백 판단용
         # 세그먼트 스트림: 산문을 툴 블록과 시간순 교차되도록 여러 Markdown 세그먼트로 쪼갠다.
         self._cur_prose_stream = None
-        self._cur_prose_md = None        # 현재 산문 세그먼트 위젯 — 사고 블록을 그 앞에 끼워 넣는 기준
+        self._cur_prose_md = None        # 현재 산문 세그먼트 위젯. 사고 블록을 그 앞에 끼워 넣는 기준
         self._turn_widgets: list = []   # 이번 턴 mount 위젯(질의 Static 제외) — retry 폐기용
         # 활동바 상태 (모두 UI thread 전용)
         self._turn_t0 = 0.0

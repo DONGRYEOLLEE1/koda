@@ -236,7 +236,7 @@ def test_health_sends_api_key_for_authenticated_gateways(monkeypatch):
 
 
 def test_reasoning_content_is_kept_from_stream_chunks_and_responses():
-    # ChatOpenAI 는 서드파티 reasoning_content 를 버린다 — 서브클래스가 additional_kwargs 에 남겨야 화면에 보인다.
+    # ChatOpenAI 는 서드파티 reasoning_content 를 버린다. 서브클래스가 additional_kwargs 에 남겨야 화면에 보인다.
     from langchain_core.messages import AIMessageChunk
     from koda.llm import ReasoningChatOpenAI
     m = ReasoningChatOpenAI(model="m", base_url="http://h:1/v1", api_key="k")
