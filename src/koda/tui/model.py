@@ -96,3 +96,12 @@ class ReasoningEnd(Message):
         self.run_id = run_id
         self.text = text
         super().__init__()
+
+
+class MemorySaved(Message):
+    """턴 완료 후 메모리 판정으로 항목이 저장됨 (유형, 항목)."""
+
+    def __init__(self, kind: str, note: str) -> None:
+        self.kind = kind
+        self.note = note
+        super().__init__()

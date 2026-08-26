@@ -46,7 +46,7 @@ class AgentSpec:
                 f"- {s.name}: {s.description}" for s in skills
             )
         if memory_text:  # 영구 메모리는 스킬 뒤 고정 위치 (더 동적 → prefix 뒤쪽)
-            system += "\n\n## 프로젝트 메모리 (이 워크스페이스에 대해 기억된 사실)\n" + memory_text
+            system += "\n\n## 메모리 (이 워크스페이스에 대해 기억된 사실·경험·규칙)\n" + memory_text
         # 오늘 날짜(KST)를 맨 뒤에 둔다 — 없으면 웹검색으로 최신 자료를 받아도 '최근'·'올해'를 학습 시점 기준으로 해석한다.
         # 시각(분)까지 넣으면 호출마다 prefix 가 바뀌어 프롬프트 캐시가 깨지므로 날짜만 넣는다.
         now = datetime.now(ZoneInfo("Asia/Seoul"))

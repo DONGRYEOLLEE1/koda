@@ -9,9 +9,9 @@ import warnings
 # with_structured_output 의 Pydantic v2 직렬화 과정에서 나오는 경고는 무해하므로 억제한다.
 warnings.filterwarnings("ignore", message="Pydantic serializer warnings")
 
-from .agents import compact_memory, extract_memories, run_task, summarize_history
+from .agents import remember_from_turn, run_task, summarize_history
 from .config import load_model_settings
-from .memory import Memory
+from .memory import Memory, parse_remember
 from .mcp import load_mcp_tools, mcp_dirs
 from .session import Session
 from .workspace import Workspace
@@ -257,7 +257,7 @@ def _cmd_chat(args) -> int:
 
     interactive = sys.stdin.isatty()
     if interactive:
-        _err("명령: /remember <내용> /memory /exit  (Ctrl-D 종료)")
+        _err("명령: /remember [semantic|episodic|procedural] <내용> /memory /exit  (Ctrl-D 종료)")
 
     while True:
         if interactive:
@@ -272,9 +272,9 @@ def _cmd_chat(args) -> int:
         if line in ("/exit", "/quit"):
             break
         if line.startswith("/remember"):
-            note = line[len("/remember"):].strip()
-            saved = memory.remember(note)
-            _err("기억함." if saved else "이미 기억하고 있거나 내용이 비어 있음.")
+            kind, note = parse_remember(line[len("/remember"):])
+            saved = memory.remember(note, kind)
+            _err(f"기억함({kind})." if saved else "이미 기억하고 있거나 내용이 비어 있음.")
             continue
         if line == "/memory":
             _err(memory.read() or "(비어 있음)")
@@ -299,6 +299,12 @@ def _cmd_chat(args) -> int:
             _err(f"(빈 응답 — 재시도 권장. 사유: {result.get('empty_reason') or 'unknown'})")
             continue
         session.add_turn(line, result["final"], result["route"], verdict)
+        # 메모리는 세션 종료가 아니라 턴마다 판정해 저장한다 (저장할 게 없으면 조용히 지나간다)
+        try:
+            for kind, note in asyncio.run(remember_from_turn(memory, line, result["final"])):
+                _err(f"  + 기억({kind}): {note[:60]}")
+        except Exception as e:
+            _err(f"  메모리 판정 생략({type(e).__name__})")
 
         old = session.old_messages() if session.needs_compaction else []
         if old:  # 임계 초과 + 자를 오래된 턴이 있을 때만 (압축 = 캐시 prefix 재구성 1회)
@@ -307,24 +313,8 @@ def _cmd_chat(args) -> int:
             session.apply_compaction(summary)  # 빈 요약·빈 대상은 내부 no-op
         session.save()
 
-    # 세션 종료: 영구 기억할 사실을 LLM 이 판단해 저장 (패턴 4)
     if session.history:
         session.save()
-        try:
-            _err("[메모리 갱신 중…]")
-            for note in asyncio.run(extract_memories(session.history)):
-                note = note.removeprefix("- ").strip()
-                if len(note) > 200:  # 형식 위반(장문)은 영구 저장하지 않는다 — 오염 방지
-                    continue
-                if memory.remember(note):
-                    _err(f"  + 기억함: {note[:60]}")
-            if memory.needs_compaction:  # 상한 초과 시 LLM 통합 요약으로 교체
-                _err("[메모리 압축 중…]")
-                compacted = asyncio.run(compact_memory(memory.read()))
-                if compacted:
-                    memory.replace(compacted)
-        except Exception as e:
-            _err(f"  메모리 추출 생략({type(e).__name__})")
         _err(f"세션 저장됨: {session.id}  (재개: koda chat --resume {session.id})")
     return 0
 

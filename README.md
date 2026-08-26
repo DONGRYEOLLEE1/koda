@@ -117,13 +117,18 @@ langgraph `StateGraph` 분기: **router → { answer | reader | investigator →
 
 ```
 <workspace>/.koda/
-  ├─ memory.md            # 영구 메모리 — /remember + 세션 종료 시 LLM 자동 추출, 새 세션에 주입
-  └─ sessions/<id>.json   # 세션(히스토리) — TUI 에서 /resume 으로 목록 선택·재개
+  ├─ memory/
+  │    ├─ semantic.md      # 사실: 사용자·프로젝트에 대한 지속적 사실·선호
+  │    ├─ episodic.md      # 경험: 실제로 한 일과 결과 (날짜 포함), 다음 작업의 참고 사례
+  │    └─ procedural.md    # 규칙: 사용자가 앞으로 지키라고 한 지시·작업 방식
+  └─ sessions/<id>.json   # 세션(히스토리). TUI 에서 /resume 으로 목록 선택·재개
 ```
 
-- 세션이 히스토리를 유지·영속해 "방금 만든 파일에 …" 같은 지시어를 해소한다.
-- 히스토리가 임계(≈12k tok)를 넘으면 오래된 턴을 LLM 요약으로 치환한다(최근 4턴 원본 유지, user/assistant 쌍 경계 보존).
-- 안정 prefix(system + 메모리 + 도구 고정) + append-only 히스토리 구조로 llama.cpp 프롬프트 캐시를 극대화한다.
+- 메모리는 langchain 의 구분(semantic·episodic·procedural)을 따르며, **턴이 끝날 때마다** 판정자 LLM 이 사용자 질의와 답변을 보고 저장할 것이 있는지 유형별로 고른다. 대부분의 턴은 아무것도 저장하지 않고, 저장되면 화면에 `기억(유형): …` 으로 알린다. 세션 종료 시 일괄 추출은 하지 않는다.
+- `/remember [semantic|episodic|procedural] <내용>` 으로 직접 넣을 수 있다(유형 생략 시 semantic). 유형별 상한(3,000자)을 넘으면 그 유형만 LLM 이 통합 요약한다.
+- 세 유형은 모든 에이전트의 시스템 프롬프트에 소제목별로 주입된다. 규칙(procedural)은 지시로, 경험(episodic)은 비슷한 작업의 참고 사례로 쓰인다.
+- 세션이 히스토리를 유지·영속해 "방금 만든 파일에 …" 같은 지시어를 해소한다. 히스토리가 임계(≈12k tok)를 넘으면 오래된 턴을 LLM 요약으로 치환한다(최근 4턴 원본 유지).
+- 안정 prefix(system + 메모리 + 도구 고정) + append-only 히스토리 구조로 프롬프트 캐시를 극대화한다.
 
 ## 추적 (langfuse)
 

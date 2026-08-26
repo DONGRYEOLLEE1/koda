@@ -168,9 +168,9 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
                               memory_text=memory_text, skills=skills)
 
     async def answer(state: _State, config):
-        # 워크스페이스 무관 일반 질의 — 파일 도구·explore·메모리·스킬 없이 외부 참조(MCP)만 쥔다.
-        # 지식으로 답할 질문에 도구 스키마·검색 지시를 실어 보내면 불필요한 검색 루프가 생긴다.
-        return await _respond("answer", "answer", list(mcp_tools), state, config)
+        # 워크스페이스 무관 일반 질의. 파일 도구·explore·스킬 없이 외부 참조(MCP)만 쥔다(도구 스키마·검색 지시가
+        # 있으면 지식으로 답할 질문에도 검색 루프가 생긴다). 메모리는 준다: 사용자 자신에 대한 질문이 이 경로로 온다.
+        return await _respond("answer", "answer", list(mcp_tools), state, config, memory_text=memory_text)
 
     async def plan(state: _State, config):
         # 독립 plan 노드 — 읽기 전용 도구로 탐색하며 체크리스트를 on_token 으로 스트리밍한다.

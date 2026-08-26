@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 import threading
 
-from ..agents import compact_memory, extract_memories, run_task, summarize_history
+from ..agents import remember_from_turn, run_task, summarize_history
 from ..cli import _auto_approver, _run_with_heartbeat
 from ..session import Session
 from .model import (
     ApprovalRequest,
     CompactDone,
+    MemorySaved,
     PhaseEvent,
     SessionClosed,
     TokenChunk,
@@ -79,6 +80,11 @@ class TuiTurnRunner:
             if not result.get("empty_final"):
                 # 빈 final 은 히스토리·세션에 저장하지 않는다 — chat 과 동일한 오염 방지.
                 self.session.add_turn(task, result["final"], result["route"], result.get("verdict"))
+                try:  # 메모리는 턴마다 판정해 저장한다. 판정 실패가 턴을 실패시키지는 않는다.
+                    for kind, note in asyncio.run(remember_from_turn(self.memory, task, result["final"])):
+                        post(MemorySaved(kind, note))
+                except Exception as e:
+                    post(PhaseEvent(f"메모리 판정 생략({type(e).__name__})"))
                 old = self.session.old_messages() if self.session.needs_compaction else []
                 if old:
                     post(PhaseEvent("문맥 압축 중…"))
@@ -132,7 +138,7 @@ class TuiTurnRunner:
             post(CompactDone(f"압축 실패({type(e).__name__}): {e}"))
 
     def close_session(self) -> None:
-        """/exit·Ctrl+Q: 세션 저장 + 영구 메모리 추출 — chat 종료 흐름과 동등."""
+        """/exit·Ctrl+Q: 세션 저장. 메모리는 턴마다 이미 반영됐으므로 여기서는 하지 않는다."""
         post = self._app.post_message
         saved = bool(self.session.history)
         if saved:
@@ -142,19 +148,4 @@ class TuiTurnRunner:
                 # 저장 실패로 SessionClosed 가 누락되면 앱이 종료 못 한다 — 항상 post 로 이어간다
                 post(PhaseEvent(f"세션 저장 실패({type(e).__name__})"))
                 saved = False
-            try:
-                post(PhaseEvent("메모리 갱신 중…"))
-                for note in asyncio.run(extract_memories(self.session.history)):
-                    note = note.removeprefix("- ").strip()
-                    if len(note) > 200:  # 형식 위반(장문)은 영구 저장하지 않는다
-                        continue
-                    if self.memory.remember(note):
-                        post(PhaseEvent(f"+ 기억함: {note[:60]}"))
-                if self.memory.needs_compaction:
-                    post(PhaseEvent("메모리 압축 중…"))
-                    compacted = asyncio.run(compact_memory(self.memory.read()))
-                    if compacted:
-                        self.memory.replace(compacted)
-            except Exception as e:
-                post(PhaseEvent(f"메모리 추출 생략({type(e).__name__})"))
         post(SessionClosed(self.session.id, saved))

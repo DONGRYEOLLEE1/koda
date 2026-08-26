@@ -15,12 +15,13 @@ from textual.widgets import Footer, Markdown, Static
 
 from ..cli import _err
 from ..mcp import load_mcp_tools, mcp_dirs
-from ..memory import Memory
+from ..memory import Memory, parse_remember
 from ..session import Session
 from ..workspace import Workspace
 from .model import (
     ApprovalRequest,
     CompactDone,
+    MemorySaved,
     PhaseEvent,
     ReasoningEnd,
     SessionClosed,
@@ -130,7 +131,7 @@ class KodaTui(App):
             "/clear": ("새 스레드 시작(대화 맥락 초기화)", self._cmd_clear),
             "/resume": ("저장된 세션 재개: /resume [session-id] (인자 없으면 목록에서 선택)", self._cmd_resume),
             "/memory": ("메모리 내용 보기", self._cmd_memory),
-            "/remember": ("메모리에 저장: /remember <내용>", self._cmd_remember),
+            "/remember": ("메모리에 저장: /remember [semantic|episodic|procedural] <내용>", self._cmd_remember),
             "/theme": ("테마 변경: /theme <이름> (인자 없으면 목록)", self._cmd_theme),
             "/exit": ("저장 후 종료", self._cmd_exit),
             "/quit": ("저장 후 종료", self._cmd_exit),
@@ -334,8 +335,13 @@ class KodaTui(App):
         self.notify(self.runner.memory.read() or "(비어 있음)", title="메모리", timeout=10)
 
     async def _cmd_remember(self, arg: str) -> None:
-        saved = self.runner.memory.remember(arg)
-        self.notify("기억함." if saved else "이미 기억하고 있거나 내용이 비어 있음.", timeout=3)
+        kind, note = parse_remember(arg)
+        saved = self.runner.memory.remember(note, kind)
+        self.notify(f"기억함({kind})." if saved else "이미 기억하고 있거나 내용이 비어 있음.", timeout=3)
+
+    @on(MemorySaved)
+    def _on_memory_saved(self, msg: MemorySaved) -> None:
+        self.notify(f"기억({msg.kind}): {msg.note[:60]}", title="메모리", timeout=4)
 
     async def _cmd_theme(self, arg: str) -> None:
         # 내장 테마 + koda-dark 중 선택 (opencode/codex /theme 관례).

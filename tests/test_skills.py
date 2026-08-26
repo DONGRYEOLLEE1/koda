@@ -81,7 +81,7 @@ def test_build_injects_skill_list_and_orders_before_memory(monkeypatch):
     assert "frontend-design: 뚜렷한 시각 디자인 지침" in sys        # L1 목록 주입
     assert "사용 가능한 스킬" in sys                                # skills_intro 헤더
     # 캐시 prefix 순서: 정적 skills 가 동적 memory 보다 앞
-    assert sys.index("사용 가능한 스킬") < sys.index("프로젝트 메모리")
+    assert sys.index("사용 가능한 스킬") < sys.index("## 메모리")
     assert "skill" in captured["tool_names"]                        # skill 도구 주입
 
 

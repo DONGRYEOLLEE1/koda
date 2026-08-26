@@ -63,6 +63,14 @@ def _turn_done(app):
     return lambda: not app._busy and bool(app.query(".turn-footer"))
 
 
+@pytest.fixture(autouse=True)
+def _no_memory_llm(monkeypatch):
+    # 턴마다 도는 메모리 판정은 LLM 호출이라 기본으로 막는다. 필요한 테스트만 다시 패치한다.
+    async def nothing(memory, task, answer, settings=None):
+        return []
+    monkeypatch.setattr(runner_mod, "remember_from_turn", nothing)
+
+
 # --- AC 4: 앱이 뜨고 입력을 받을 수 있다 (headless) ---
 
 def test_boot_widgets_exist(tmp_path):
@@ -266,28 +274,31 @@ def test_turn_failed_recovers(tmp_path):
     asyncio.run(go())
 
 
-# --- Phase 3: /exit → 세션 저장 + 메모리 추출 (chat 종료 흐름 동등) ---
+# --- 턴 완료마다 메모리 판정 → 저장 알림. /exit 는 세션 저장만 ---
 
-def test_close_session_extracts_memory(tmp_path, monkeypatch):
+def test_turn_stores_judged_memory_and_exit_saves_session(tmp_path, monkeypatch):
     async def fake(task, ws, approver, on_token, on_phase, **kw):
         return _result(final="답변")
 
-    async def fake_extract(history):
-        return ["- 로컬 모델은 Qwen 이다"]
+    async def fake_remember(memory, task, answer, settings=None):
+        memory.remember("함수명은 snake_case", "procedural")
+        return [("procedural", "함수명은 snake_case")]
 
-    monkeypatch.setattr(runner_mod, "extract_memories", fake_extract)
+    monkeypatch.setattr(runner_mod, "remember_from_turn", fake_remember)
 
     async def go():
         session = Session(tmp_path)
         app = _make_app(tmp_path, fake, session=session)
         async with app.run_test() as pilot:
-            await _submit(pilot, "질문")
+            await _submit(pilot, "앞으로 함수명은 snake_case 로 써")
             assert await _wait(pilot, _turn_done(app))
+            assert Memory(tmp_path).items("procedural") == ["함수명은 snake_case"]   # 턴 직후 저장
+            await _submit(pilot, "/remember episodic 오늘 calc.py 를 고쳤다")
+            await pilot.pause()
+            assert Memory(tmp_path).items("episodic") == ["오늘 calc.py 를 고쳤다"]   # 유형 지정 수동 저장
             await _submit(pilot, "/exit")
             assert await _wait(pilot, lambda: app.return_value is not None)
-        assert app.return_value is True  # saved
-        assert "로컬 모델은 Qwen 이다" in Memory(tmp_path).read()
-        assert session.path.exists()
+        assert app.return_value is True and session.path.exists()
     asyncio.run(go())
 
 
@@ -573,11 +584,6 @@ def test_ctrl_c_graceful_quit(tmp_path, monkeypatch):
     # Ctrl+C 는 입력창(TextArea) focus 상태에서도 copy 대신 Ctrl+Q 와 동일한 정상 종료(세션 저장)를 시작한다.
     async def fake(task, ws, approver, on_token, on_phase, **kw):
         return _result(final="답변")
-
-    async def fake_extract(history):
-        return []
-
-    monkeypatch.setattr(runner_mod, "extract_memories", fake_extract)
 
     async def go():
         session = Session(tmp_path)
