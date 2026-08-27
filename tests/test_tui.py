@@ -954,3 +954,38 @@ def test_mcp_connects_in_background_and_panel_toggles(tmp_path, monkeypatch):
             await pilot.press("escape")
             assert await _wait(pilot, lambda: type(app.screen).__name__ != "McpScreen")
     asyncio.run(go())
+
+
+def test_at_path_picker_completes_and_does_not_submit(tmp_path):
+    # @ 뒤 입력에 맞는 파일·폴더 후보가 입력창 위에 뜨고, Tab/Enter 는 제출 대신 경로를 채운다. Esc 는 닫는다.
+    (tmp_path / "mcps").mkdir()
+    (tmp_path / "mcps" / "exa.json").write_text("{}")
+    (tmp_path / "README.md").write_text("x")
+    submitted = []
+
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        submitted.append(task)
+        return _result("ok")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test(size=(100, 30)) as pilot:
+            inp = app.query_one("#prompt", PromptArea)
+            picker = app.query_one("#path_picker")
+            inp.focus()
+            await pilot.press(*"보고서 @mc")
+            assert await _wait(pilot, lambda: picker.display)
+            assert [str(o.id) for o in picker._options][:2] == ["mcps/", "mcps/exa.json"]
+            await pilot.press("enter")                                   # 폴더 선택: @mcps/ 로 채우고 목록은 하위로 이어짐
+            assert await _wait(pilot, lambda: inp.text == "보고서 @mcps/")
+            assert submitted == [] and picker.display
+            await pilot.press("tab")                                     # 파일 선택: 공백까지 붙이고 목록 닫힘
+            assert await _wait(pilot, lambda: inp.text == "보고서 @mcps/exa.json ")
+            assert not picker.display and not inp.picker_open
+            await pilot.press(*"@RE")
+            assert await _wait(pilot, lambda: picker.display)
+            await pilot.press("escape")
+            assert await _wait(pilot, lambda: not picker.display)
+            await pilot.press("enter")                                   # 목록이 닫힌 뒤 Enter 는 제출
+            assert await _wait(pilot, lambda: submitted == ["보고서 @mcps/exa.json @RE"])
+    asyncio.run(go())

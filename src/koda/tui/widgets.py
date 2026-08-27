@@ -28,6 +28,8 @@ class PromptArea(TextArea):
 
     _NEWLINE_KEYS = ("alt+enter", "shift+enter", "ctrl+j")
 
+    _PICKER_KEYS = ("up", "down", "tab", "enter", "escape")
+
     class Submitted(Message):
         """Enter 제출. value 는 개행 포함 원문."""
 
@@ -35,7 +37,37 @@ class PromptArea(TextArea):
             self.value = value
             super().__init__()
 
+    class AtNav(Message):
+        """@경로 후보 목록이 열려 있을 때의 이동·선택·닫기 키."""
+
+        def __init__(self, key: str) -> None:
+            self.key = key
+            super().__init__()
+
+    picker_open = False   # 앱이 후보 목록을 띄우는 동안 True. 이때 방향키·Tab·Enter·Esc 는 목록으로 간다
+
+    def at_token(self) -> tuple[str, tuple[int, int]] | None:
+        """커서 앞의 `@질의`. (질의, @ 위치) 를 돌려주고 없으면 None. `@` 는 줄 처음이나 공백 뒤에만 인정한다."""
+        row, col = self.cursor_location
+        line = self.document.get_line(row)[:col]
+        i = line.rfind("@")
+        if i < 0 or (i > 0 and not line[i - 1].isspace()):
+            return None
+        query = line[i + 1:]
+        if any(c.isspace() for c in query):
+            return None
+        return query, (row, i)
+
+    def complete_at(self, start: tuple[int, int], path: str) -> None:
+        """`@` 부터 커서까지를 `@path` 로 바꾼다. 파일이면 뒤에 공백을 붙이고, 폴더면 그대로 두어 하위로 이어 입력한다."""
+        self.replace("@" + path + ("" if path.endswith("/") else " "), start, self.cursor_location)
+
     async def _on_key(self, event) -> None:
+        if self.picker_open and event.key in self._PICKER_KEYS:
+            event.stop()
+            event.prevent_default()
+            self.post_message(self.AtNav(event.key))
+            return
         # Enter 는 TextArea 기본 동작(개행 삽입) 대신 제출로 가로챈다. 줄바꿈은 _NEWLINE_KEYS.
         if event.key == "enter":
             event.stop()

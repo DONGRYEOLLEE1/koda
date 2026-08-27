@@ -13,13 +13,15 @@ from textual.containers import VerticalScroll
 from textual.events import MouseDown
 from textual.screen import Screen
 from textual.theme import Theme
-from textual.widgets import Footer, Markdown, Static
+from textual.widgets import Footer, Markdown, OptionList, Static, TextArea
+from textual.widgets.option_list import Option
 
 from ..cli import _err
 from ..mcp import connect_mcp, connect_server, disconnect_server, mcp_dirs
 from ..memory import Memory, parse_remember
 from ..session import Session
 from ..workspace import Workspace
+from .paths import index_paths, match_paths
 from .model import (
     ApprovalRequest,
     CompactDone,
@@ -102,6 +104,7 @@ class KodaTui(App):
     CSS = """
     #conversation { width: 1fr; height: 1fr; padding: 0 1; }
     #prompt { height: auto; max-height: 10; }
+    #path_picker { height: auto; max-height: 7; border: none; background: $panel; padding: 0 1; }
     #activity { height: 1; padding: 0 1; }
     #statusline { height: 1; background: $panel; color: $text-muted; padding: 0 1; }
     .user-turn { color: $accent; text-style: bold; margin: 1 0 0 0; }
@@ -146,6 +149,9 @@ class KodaTui(App):
         self._mcp: list = []
         self._mcp_connecting = bool(mcp_dirs)
         self._status = "대기 중"
+        self._path_index: list[str] = []      # @경로 후보용 워크스페이스 색인 (3초마다 갱신)
+        self._path_index_at = 0.0
+        self._at_dismissed: str | None = None  # Esc 로 닫은 토큰. 같은 토큰이면 다시 띄우지 않는다
         self._busy = False
         # 이름 주의: _closing 은 textual MessagePump 내부 플래그라 덮어쓰면 post_message 가
         # 조용히 드롭된다 — 쓰지 말 것.
@@ -189,6 +195,7 @@ class KodaTui(App):
         yield VerticalScroll(id="conversation")
         yield Static("", id="activity", markup=False)
         yield Static(self._statusline_text(), id="statusline", markup=False)
+        yield OptionList(id="path_picker")
         yield PromptArea(id="prompt", tab_behavior="focus",
                          placeholder="요청 입력…  (Alt+Enter·Ctrl+J 줄바꿈 · /help 명령 · Ctrl+Q 종료)")
         yield Footer()
@@ -200,6 +207,7 @@ class KodaTui(App):
         self.register_theme(KODA_DARK)
         self.theme = "koda-dark"
         self.query_one("#activity", Static).display = False
+        self.query_one("#path_picker", OptionList).display = False
         self._activity_timer = self.set_interval(0.125, self._tick_activity, pause=True)
         self.query_one("#prompt", PromptArea).focus()
         if self._mcp_dirs:
@@ -354,6 +362,44 @@ class KodaTui(App):
 
     def _spin(self) -> str:
         return _SPINNER[self._spin_i]
+
+    # --- @경로 자동완성: 커서 앞 @토큰에 맞는 파일·폴더 후보를 입력창 위에 띄운다 ---
+
+    def _paths(self) -> list[str]:
+        if time.monotonic() - self._path_index_at > 3:
+            self._path_index = index_paths(self.runner._ws)
+            self._path_index_at = time.monotonic()
+        return self._path_index
+
+    @on(TextArea.Changed, "#prompt")
+    @on(TextArea.SelectionChanged, "#prompt")
+    def _refresh_picker(self, event=None) -> None:
+        prompt = self.query_one("#prompt", PromptArea)
+        picker = self.query_one("#path_picker", OptionList)
+        token = prompt.at_token()
+        matches = match_paths(token[0], self._paths()) if token and token[0] != self._at_dismissed else []
+        if not matches:
+            picker.display = prompt.picker_open = False
+            return
+        self._at_dismissed = None
+        picker.clear_options()
+        picker.add_options([Option(p, id=p) for p in matches])
+        picker.highlighted = 0
+        picker.display = prompt.picker_open = True
+
+    @on(PromptArea.AtNav)
+    def _on_at_nav(self, msg: PromptArea.AtNav) -> None:
+        prompt = self.query_one("#prompt", PromptArea)
+        picker = self.query_one("#path_picker", OptionList)
+        if msg.key == "up":
+            picker.action_cursor_up()
+        elif msg.key == "down":
+            picker.action_cursor_down()
+        elif msg.key == "escape":
+            self._at_dismissed = (prompt.at_token() or ("",))[0]
+            picker.display = prompt.picker_open = False
+        elif picker.highlighted is not None and (token := prompt.at_token()):
+            prompt.complete_at(token[1], str(picker.get_option_at_index(picker.highlighted).id))
 
     # --- 입력/명령 ---
 
