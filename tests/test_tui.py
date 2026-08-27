@@ -15,7 +15,16 @@ from koda.session import Session
 from koda.tui.app import KodaTui
 from koda.tui.model import PhaseEvent, ReasoningEnd, TokenChunk, ToolEnd, ToolStart
 from koda.tui.tool_handler import ToolActivityHandler, tool_target, tool_title
-from koda.tui.widgets import ApprovalModal, ExploreStep, ProcessGroup, PromptArea, ReasoningStep, StepLine, _args_preview, first_line
+from koda.tui.widgets import (
+    ApprovalModal,
+    ExploreStep,
+    ProcessGroup,
+    PromptArea,
+    ReasoningStep,
+    StepLine,
+    _args_preview,
+    first_line,
+)
 from koda.workspace import Workspace
 
 
@@ -30,9 +39,11 @@ def _result(final="완료", **kw):
 def _make_app(tmp_path, run_task_fn, auto_yes=False, approval_timeout=600.0,
               session=None, mcp_tools=None):
     session = session or Session(tmp_path)
-    return KodaTui(Workspace(tmp_path), session, Memory(tmp_path),
-                           mcp_tools if mcp_tools is not None else [], auto_yes=auto_yes,
-                           run_task_fn=run_task_fn, approval_timeout=approval_timeout)
+    app = KodaTui(Workspace(tmp_path), session, Memory(tmp_path), None, auto_yes=auto_yes,
+                  run_task_fn=run_task_fn, approval_timeout=approval_timeout)
+    if mcp_tools is not None:
+        app.runner.mcp_tools = mcp_tools
+    return app
 
 
 async def _wait(pilot, cond, timeout=10.0):
@@ -671,7 +682,7 @@ def test_redaction_masks_diff_prefixed_secrets():
 
 def test_edit_tool_gets_larger_trim_limit():
     # 편집 도구는 별도(더 큰) trim 상한 — diff 가 기본 2000자에서 반토막 나지 않는다
-    from koda.tui.tool_handler import ToolActivityHandler, _OUTPUT_LIMIT
+    from koda.tui.tool_handler import _OUTPUT_LIMIT, ToolActivityHandler
     posted = []
     h = ToolActivityHandler(posted.append)
     h.on_tool_start({"name": "edit_file"}, "", run_id="r1", inputs={})
@@ -896,4 +907,35 @@ def test_click_on_detached_paragraph_does_not_crash(tmp_path):
                                                        shift=False, meta=False, ctrl=False, screen_x=x, screen_y=y))
             await pilot.pause()
             assert app.screen._select_state is None and not app._exit    # 크래시 없음
+    asyncio.run(go())
+
+
+def test_mcp_connects_in_background_and_panel_toggles(tmp_path, monkeypatch):
+    # 시작 시 stderr 로그 없이 백그라운드로 붙고, 상태줄에 도구 수가 뜨며, /mcp 화면에서 d 로 끄면 다음 턴의 도구 목록에서 빠진다.
+    from types import SimpleNamespace
+
+    import koda.tui.app as A
+    from koda.mcp import McpServer
+
+    async def fake_connect(dirs, timeout=20.0):
+        return [McpServer("ctx", "프로젝트", {"url": "http://c", "transport": "streamable_http"},
+                          tools=[SimpleNamespace(name="query-docs", description="문서 조회")]),
+                McpServer("bad", "전역", {"url": "http://b", "transport": "streamable_http"}, error="TimeoutError: 20s")]
+
+    monkeypatch.setattr(A, "connect_mcp", fake_connect)
+
+    async def go():
+        app = KodaTui(Workspace(tmp_path), Session(tmp_path), Memory(tmp_path), [tmp_path / "mcps"], auto_yes=True)
+        async with app.run_test(size=(110, 35)) as pilot:
+            assert await _wait(pilot, lambda: not app._mcp_connecting)
+            assert len(app.runner.mcp_tools) == 1
+            assert "mcp 1 (실패 1)" in _static_text(app.query_one("#statusline"))
+            await _submit(pilot, "/mcp")
+            assert await _wait(pilot, lambda: type(app.screen).__name__ == "McpScreen")
+            assert "query-docs" in _static_text(app.screen.query_one("#mcp_detail"))   # 강조된 첫 서버의 도구
+            await pilot.press("d")                                                        # ctx 끄기
+            await pilot.pause()
+            assert app.runner.mcp_tools == [] and "mcp 0" in _static_text(app.query_one("#statusline"))
+            await pilot.press("escape")
+            assert await _wait(pilot, lambda: type(app.screen).__name__ != "McpScreen")
     asyncio.run(go())

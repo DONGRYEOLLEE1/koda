@@ -106,3 +106,11 @@ class MemorySaved(Message):
         self.kind = kind
         self.note = note
         super().__init__()
+
+
+class McpLoaded(Message):
+    """MCP 서버 연결(또는 재연결)이 끝남. servers 는 연결 결과가 채워진 McpServer 목록."""
+
+    def __init__(self, servers: list) -> None:
+        self.servers = servers
+        super().__init__()

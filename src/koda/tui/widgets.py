@@ -237,6 +237,100 @@ class ApprovalModal(ModalScreen[bool]):
         self.dismiss(False)
 
 
+_STATUS = {"connecting": ("⋯", "dim", "연결 중"), "ok": ("✔", "green", "연결됨"),
+           "fail": ("✘", "red", "실패"), "off": ("⊘", "dim", "꺼짐")}
+
+
+def _server_state(server, connecting: bool) -> str:
+    if not server.enabled:
+        return "off"
+    if connecting:
+        return "connecting"
+    return "fail" if server.error else "ok"
+
+
+class McpScreen(ModalScreen[None]):
+    """/mcp 서버 관리 화면. 서버 목록에서 r 재연결 · d 켜기/끄기 · ESC 닫기. 강조된 서버의 도구가 아래에 보인다."""
+
+    BINDINGS = [("escape", "close", "닫기"), ("r", "reconnect", "재연결"), ("d", "toggle", "켜기/끄기")]
+
+    def __init__(self, servers: list, dirs: list, connecting: bool, on_toggle, on_reconnect) -> None:
+        super().__init__()
+        self._servers = servers
+        self._dirs = dirs
+        self._connecting = connecting
+        self._on_toggle = on_toggle
+        self._on_reconnect = on_reconnect
+
+    def _row(self, s) -> Text:
+        glyph, style, label = _STATUS[_server_state(s, self._connecting)]
+        t = Text()
+        t.append(f"{glyph} ", style=f"bold {style}")
+        t.append(f"{s.name:<14}", style="bold")
+        t.append(f" {label:<4} ", style=style)
+        t.append(f" {s.source} · {s.transport} ", style="dim")
+        t.append(f" 도구 {len(s.tools)}" if not s.error else f" {s.error[:50]}", style="dim" if not s.error else "red")
+        return t
+
+    def _detail(self, s) -> str:
+        lines = [f"{s.target}"]
+        if s.error:
+            lines.append(f"오류: {s.error}")
+        for t in s.tools:
+            desc = (t.description or "").strip().splitlines()[0][:70] if getattr(t, "description", "") else ""
+            lines.append(f"  · {t.name}" + (f"  {desc}" if desc else ""))
+        return "\n".join(lines) or "(도구 없음)"
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="mcp_dialog"):
+            yield Static("MCP 서버  (r 재연결 · d 켜기/끄기 · ESC 닫기)", id="mcp_title", markup=False)
+            if self._servers:
+                yield OptionList(*(Option(self._row(s), id=s.name) for s in self._servers), id="mcp_list")
+                yield Static("", id="mcp_detail", markup=False)
+            else:
+                yield Static("설정된 서버가 없습니다. 아래 폴더에 *.json 으로 mcpServers 를 두면 다음 실행 때 연결합니다.", id="mcp_detail", markup=False)
+            yield Static("설정: " + " · ".join(str(d) for d in self._dirs), id="mcp_dirs", markup=False)
+
+    def on_mount(self) -> None:
+        if self._servers:
+            self.query_one("#mcp_list", OptionList).highlighted = 0
+
+    def _current(self):
+        lst = self.query_one("#mcp_list", OptionList)
+        return self._servers[lst.highlighted] if lst.highlighted is not None else None
+
+    def refresh_servers(self, connecting: bool = False) -> None:
+        """연결 결과·토글이 바뀌었을 때 행과 상세를 다시 그린다."""
+        self._connecting = connecting
+        if not self._servers:
+            return
+        lst = self.query_one("#mcp_list", OptionList)
+        keep = lst.highlighted
+        lst.clear_options()
+        lst.add_options([Option(self._row(s), id=s.name) for s in self._servers])
+        lst.highlighted = keep
+        self._show_detail()
+
+    def _show_detail(self) -> None:
+        s = self._current()
+        self.query_one("#mcp_detail", Static).update(self._detail(s) if s else "")
+
+    def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
+        self._show_detail()
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+    def action_toggle(self) -> None:
+        if (s := self._current()) is not None:
+            self._on_toggle(s)
+            self.refresh_servers(self._connecting)
+
+    def action_reconnect(self) -> None:
+        if (s := self._current()) is not None:
+            self._on_reconnect(s)
+
+
 class SessionPicker(ModalScreen[str | None]):
     """/resume 세션 선택 — 최근 수정순 목록에서 Enter 로 고르고 ESC 로 닫는다(None)."""
 

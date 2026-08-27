@@ -16,13 +16,14 @@ from textual.theme import Theme
 from textual.widgets import Footer, Markdown, Static
 
 from ..cli import _err
-from ..mcp import load_mcp_tools, mcp_dirs
+from ..mcp import connect_mcp, connect_server, mcp_dirs
 from ..memory import Memory, parse_remember
 from ..session import Session
 from ..workspace import Workspace
 from .model import (
     ApprovalRequest,
     CompactDone,
+    McpLoaded,
     MemorySaved,
     PhaseEvent,
     ReasoningEnd,
@@ -34,7 +35,16 @@ from .model import (
     TurnFailed,
 )
 from .runner import APPROVAL_TIMEOUT_S, TuiTurnRunner
-from .widgets import ApprovalModal, ExploreStep, ProcessGroup, PromptArea, ReasoningStep, SessionPicker, StepLine
+from .widgets import (
+    ApprovalModal,
+    ExploreStep,
+    McpScreen,
+    ProcessGroup,
+    PromptArea,
+    ReasoningStep,
+    SessionPicker,
+    StepLine,
+)
 
 _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"  # rich 'dots' 프레임 — toad/Claude Code 계열 표준 스피너
 
@@ -106,6 +116,13 @@ class KodaTui(App):
     #session_dialog { width: 90%; max-width: 110; height: auto; max-height: 80%; border: thick $primary;
                       background: $surface; padding: 1 2; }
     #session_title { margin-bottom: 1; }
+    McpScreen { align: center middle; }
+    #mcp_dialog { width: 90%; max-width: 110; height: auto; max-height: 80%; border: thick $primary;
+                  background: $surface; padding: 1 2; }
+    #mcp_title { margin-bottom: 1; }
+    #mcp_list { height: auto; max-height: 10; }
+    #mcp_detail { color: $text-muted; margin-top: 1; height: auto; max-height: 14; }
+    #mcp_dirs { color: $text-muted; margin-top: 1; }
     ProcessGroup, StepLine { border: none; background: transparent; padding: 0; margin: 0; }
     ProcessGroup CollapsibleTitle, StepLine CollapsibleTitle { color: $text-muted; padding: 0; }
     ProcessGroup > Contents { padding: 0 0 0 2; }
@@ -116,14 +133,19 @@ class KodaTui(App):
     ReasoningStep CollapsibleTitle { text-style: italic; }
     """
 
-    def __init__(self, ws, session, memory, mcp_tools: list, auto_yes: bool,
+    def __init__(self, ws, session, memory, mcp_dirs: list | None, auto_yes: bool,
                  run_task_fn=None, approval_timeout: float = APPROVAL_TIMEOUT_S,
                  model_name: str = ""):
         super().__init__()
-        self.runner = TuiTurnRunner(self, ws, session, memory, mcp_tools, auto_yes,
+        self.runner = TuiTurnRunner(self, ws, session, memory, [], auto_yes,
                                     run_task_fn=run_task_fn, approval_timeout=approval_timeout)
         self._model_name = model_name
         self._mode = "auto" if auto_yes else "manual"  # 승인 모드 뱃지(statusline)
+        # MCP 는 화면이 뜬 뒤 백그라운드로 붙는다(None 이면 --no-mcp). 결과는 /mcp 화면과 상태줄에 보인다.
+        self._mcp_dirs = mcp_dirs
+        self._mcp: list = []
+        self._mcp_connecting = bool(mcp_dirs)
+        self._status = "대기 중"
         self._busy = False
         # 이름 주의: _closing 은 textual MessagePump 내부 플래그라 덮어쓰면 post_message 가
         # 조용히 드롭된다 — 쓰지 말 것.
@@ -152,6 +174,7 @@ class KodaTui(App):
             "/compact": ("대화 이력을 요약으로 압축", self._cmd_compact),
             "/clear": ("새 스레드 시작(대화 맥락 초기화)", self._cmd_clear),
             "/resume": ("저장된 세션 재개: /resume [session-id] (인자 없으면 목록에서 선택)", self._cmd_resume),
+            "/mcp": ("MCP 서버 상태·도구 보기, 재연결·끄기", self._cmd_mcp),
             "/memory": ("메모리 내용 보기", self._cmd_memory),
             "/remember": ("메모리에 저장: /remember [semantic|episodic|procedural] <내용>", self._cmd_remember),
             "/theme": ("테마 변경: /theme <이름> (인자 없으면 목록)", self._cmd_theme),
@@ -179,6 +202,8 @@ class KodaTui(App):
         self.query_one("#activity", Static).display = False
         self._activity_timer = self.set_interval(0.125, self._tick_activity, pause=True)
         self.query_one("#prompt", PromptArea).focus()
+        if self._mcp_dirs:
+            self.run_worker(partial(self._connect_all_mcp, self._mcp_dirs), thread=True, group="mcp")
 
     def get_system_commands(self, screen):
         # maximize 는 한 위젯으로 화면을 덮어 대화·입력·상태줄을 가린다 — koda 는 이 넷이 한 화면에
@@ -198,11 +223,62 @@ class KodaTui(App):
             parts.append(self._model_name)
         parts.append(f"{len(s.turns)}턴")
         parts.append(self._mode)
+        if self._mcp_dirs:
+            parts.append(self._mcp_text())
         parts.append(status)
         return " · ".join(parts)
 
+    def _mcp_text(self) -> str:
+        if self._mcp_connecting:
+            return "mcp 연결 중"
+        failed = sum(1 for s in self._mcp if s.error and s.enabled)
+        return f"mcp {len(self.runner.mcp_tools)}" + (f" (실패 {failed})" if failed else "")
+
     def _set_status(self, status: str) -> None:
+        self._status = status
         self.query_one("#statusline", Static).update(self._statusline_text(status))
+
+    # --- MCP: 백그라운드 연결 · /mcp 화면 ---
+
+    def _connect_all_mcp(self, dirs) -> None:
+        try:
+            servers = asyncio.run(connect_mcp(dirs))
+        except Exception as e:  # 어댑터 미설치 등. 로컬 도구만으로 계속한다
+            self.call_from_thread(self.notify, f"MCP 사용 불가: {e}", severity="warning", timeout=6)
+            servers = []
+        self.post_message(McpLoaded(servers))
+
+    def _reconnect_mcp(self, server) -> None:
+        asyncio.run(connect_server(server))
+        self.post_message(McpLoaded(self._mcp))
+
+    @on(McpLoaded)
+    def _on_mcp_loaded(self, msg: McpLoaded) -> None:
+        self._mcp = msg.servers
+        self._mcp_connecting = False
+        self._apply_mcp()
+        failed = [s.name for s in self._mcp if s.error and s.enabled]
+        if failed:
+            self.notify(f"MCP 연결 실패: {', '.join(failed)} (/mcp 로 확인)", severity="warning", timeout=6)
+        if isinstance(self.screen, McpScreen):
+            self.screen.refresh_servers(connecting=False)
+
+    def _apply_mcp(self) -> None:
+        """켜져 있고 연결된 서버의 도구만 다음 턴부터 쓴다."""
+        self.runner.mcp_tools = [t for s in self._mcp for t in s.active_tools]
+        self._set_status(self._status)
+
+    async def _cmd_mcp(self, arg: str) -> None:
+        def toggle(server) -> None:
+            server.enabled = not server.enabled
+            self._apply_mcp()
+
+        def reconnect(server) -> None:
+            server.enabled = True
+            self.notify(f"MCP '{server.name}' 재연결 중…", timeout=3)
+            self.run_worker(partial(self._reconnect_mcp, server), thread=True, group="mcp")
+
+        self.push_screen(McpScreen(self._mcp, list(self._mcp_dirs or []), self._mcp_connecting, toggle, reconnect))
 
     def _theme_color(self, name: str) -> str:
         """테마 색상 hex 조회. 라이트/다크 자동 적응."""
@@ -598,17 +674,20 @@ class KodaTui(App):
     async def _on_tool_start(self, msg: ToolStart) -> None:
         # 툴 진입 → 현재 산문 세그먼트를 닫아 다음 토큰이 새 세그먼트를 열게 한다(시간순 인터리브).
         group = await self._group()
+        # mount(await) 전에 매핑에 넣는다. 그 사이 턴이 끝나면 _end_turn 의 미완 스텝 정리가 이 스텝을 놓친다.
         if msg.target is None:
             self._cur_explore = None      # 편집·실행 도구는 탐색 병합을 끊는다
             step = StepLine(msg.title, msg.name)
+            self._tool_steps[msg.run_id] = step
             await group.add(step)
         else:
-            if self._cur_explore is None or not self._cur_explore.is_attached or self._cur_explore.full:
+            fresh = self._cur_explore is None or not self._cur_explore.is_attached or self._cur_explore.full
+            if fresh:
                 self._cur_explore = ExploreStep()
-                await group.add(self._cur_explore)
             self._cur_explore.add(msg.run_id, *msg.target)
-            step = self._cur_explore
-        self._tool_steps[msg.run_id] = step
+            self._tool_steps[msg.run_id] = self._cur_explore
+            if fresh:
+                await group.add(self._cur_explore)
         self.query_one("#conversation", VerticalScroll).anchor()
 
     @on(ReasoningEnd)
@@ -712,13 +791,8 @@ def run_tui(args) -> int:
     else:
         session = Session(ws.root)
 
-    # MCP 는 세션당 1회 로드 (앱 시작 전 — 툴 목록 안정 = 프롬프트 캐시 prefix 안정, AC 10)
-    mcp_tools: list = []
-    if not args.no_mcp:
-        try:
-            mcp_tools = asyncio.run(load_mcp_tools(mcp_dirs(ws.root, args.mcps_dir), on_log=lambda m: _err(f"  · {m}")))
-        except Exception as e:
-            _err(f"  · MCP 로드 실패({type(e).__name__}) — 로컬 도구만 사용")
+    # MCP 는 화면이 뜬 뒤 백그라운드로 세션당 1회 붙는다(로그는 stderr 가 아니라 /mcp 화면·상태줄).
+    dirs = None if args.no_mcp else mcp_dirs(ws.root, args.mcps_dir)
 
     # statusline 에 표시할 활성 모델명 — PRIMARY 가 아니라 실제로 선택된 provider 기준. primary 가 죽어
     # 폴백으로 뜬 경우 PRIMARY 기준 표시는 호출되지 않는 모델을 보여 준다.
@@ -732,7 +806,7 @@ def run_tui(args) -> int:
     except Exception:
         pass
 
-    app = KodaTui(ws, session, memory, mcp_tools, auto_yes=args.yolo, model_name=model_name)
+    app = KodaTui(ws, session, memory, dirs, auto_yes=args.yolo, model_name=model_name)
     app.run()
     final = app.runner.session   # /clear 로 세션이 교체됐을 수 있으므로 최종 세션 기준
     if final.history:
