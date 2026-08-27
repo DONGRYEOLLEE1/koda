@@ -117,6 +117,10 @@ class _Host:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._lock = threading.Lock()
         self.servers: list[McpServer] = []
+        self._locks: dict[str, asyncio.Lock] = {}   # 서버별 연결·해제 직렬화 (host 루프에서만 만든다)
+
+    def lock(self, server: McpServer) -> asyncio.Lock:
+        return self._locks.setdefault(server.name, asyncio.Lock())
 
     @property
     def loop(self) -> asyncio.AbstractEventLoop:
@@ -136,7 +140,7 @@ class _Host:
             return
         for s in list(self.servers):
             try:
-                asyncio.run_coroutine_threadsafe(_close(s), self._loop).result(timeout=5)
+                asyncio.run_coroutine_threadsafe(_close(s, force=True), self._loop).result(timeout=5)
             except Exception:
                 pass
 
@@ -169,26 +173,36 @@ async def _serve(server: McpServer, ready: asyncio.Future, stop: asyncio.Event, 
             ready.set_exception(e if isinstance(e, Exception) else RuntimeError(type(e).__name__))
 
 
-async def _open(server: McpServer, timeout: float) -> list:
-    await _close(server)
-    loop = asyncio.get_running_loop()
-    ready, stop = loop.create_future(), asyncio.Event()
-    task = loop.create_task(_serve(server, ready, stop, timeout))
-    try:
-        tools = await asyncio.wait_for(asyncio.shield(ready), timeout)
-    except BaseException:
-        stop.set()
-        task.cancel()
-        raise
-    server._stop, server._task = stop, task
-    if server not in _host.servers:
-        _host.servers.append(server)
-    return tools
+async def _open(server: McpServer, timeout: float) -> None:
+    """세션을 (다시) 열고 server.tools 를 채운다. 같은 서버의 열기·닫기는 락으로 순서를 지킨다."""
+    async with _host.lock(server):
+        await _close_unlocked(server)
+        loop = asyncio.get_running_loop()
+        ready, stop = loop.create_future(), asyncio.Event()
+        task = loop.create_task(_serve(server, ready, stop, timeout))
+        try:
+            server.tools = await asyncio.wait_for(asyncio.shield(ready), timeout)
+        except BaseException:
+            stop.set()
+            task.cancel()
+            raise
+        server._stop, server._task = stop, task
+        if server not in _host.servers:
+            _host.servers.append(server)
 
 
-async def _close(server: McpServer) -> None:
+async def _close(server: McpServer, force: bool = False) -> None:
+    """해제. 락을 기다리는 사이 사용자가 다시 켰으면(enabled) 닫지 않는다. 열기·닫기 워커가 겹쳐 들어와도 마지막 의도가 남는다."""
+    async with _host.lock(server):
+        if server.enabled and not force:
+            return
+        await _close_unlocked(server)
+
+
+async def _close_unlocked(server: McpServer) -> None:
     stop, task = server._stop, server._task
     server._stop = server._task = None
+    server.tools = []
     if stop is not None:
         stop.set()
     if task is not None:
@@ -200,6 +214,13 @@ async def _close(server: McpServer) -> None:
         _host.servers.remove(server)
 
 
+def _describe(e: BaseException) -> str:
+    """ExceptionGroup(anyio TaskGroup)은 안쪽 원인으로 풀어 보인다."""
+    while isinstance(e, BaseExceptionGroup) and e.exceptions:
+        e = e.exceptions[0]
+    return f"{type(e).__name__}: {e}"[:200]
+
+
 async def connect_server(server: McpServer, timeout: float = 20.0) -> McpServer:
     """서버 하나에 붙어 세션을 열어 두고 도구 목록을 받는다. 실패는 error 에 남기고 예외를 내지 않는다."""
     try:
@@ -207,17 +228,16 @@ async def connect_server(server: McpServer, timeout: float = 20.0) -> McpServer:
     except ImportError as e:
         raise RuntimeError("MCP 도구를 쓰려면 `uv add langchain-mcp-adapters` 가 필요합니다.") from e
     try:
-        server.tools = await _host.run(_open(server, timeout))
+        await _host.run(_open(server, timeout))
         server.error = ""
     except Exception as e:  # 서버 하나가 죽어도 나머지는 계속
-        server.tools, server.error = [], f"{type(e).__name__}: {e}"[:200]
+        server.error = _describe(e)
     return server
 
 
 async def disconnect_server(server: McpServer) -> McpServer:
     """세션을 닫는다(stdio 면 서버 프로세스도 끝난다). /mcp 에서 끌 때 쓴다."""
     await _host.run(_close(server))
-    server.tools = []
     return server
 
 

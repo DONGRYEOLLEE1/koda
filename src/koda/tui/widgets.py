@@ -261,6 +261,7 @@ class McpScreen(ModalScreen[None]):
         self._connecting = connecting
         self._on_toggle = on_toggle
         self._on_reconnect = on_reconnect
+        self._selected = servers[0].name if servers else None   # 강조 서버. 목록을 다시 그려도 이름으로 유지한다
 
     def _row(self, s) -> Text:
         glyph, style, label = _STATUS[_server_state(s, self._connecting)]
@@ -296,8 +297,7 @@ class McpScreen(ModalScreen[None]):
             self.query_one("#mcp_list", OptionList).highlighted = 0
 
     def _current(self):
-        lst = self.query_one("#mcp_list", OptionList)
-        return self._servers[lst.highlighted] if lst.highlighted is not None else None
+        return next((s for s in self._servers if s.name == self._selected), None)
 
     def refresh_servers(self, connecting: bool = False) -> None:
         """연결 결과·토글이 바뀌었을 때 행과 상세를 다시 그린다."""
@@ -305,10 +305,10 @@ class McpScreen(ModalScreen[None]):
         if not self._servers:
             return
         lst = self.query_one("#mcp_list", OptionList)
-        keep = lst.highlighted
         lst.clear_options()
         lst.add_options([Option(self._row(s), id=s.name) for s in self._servers])
-        lst.highlighted = keep
+        names = [s.name for s in self._servers]
+        lst.highlighted = names.index(self._selected) if self._selected in names else 0
         self._show_detail()
 
     def _show_detail(self) -> None:
@@ -316,6 +316,7 @@ class McpScreen(ModalScreen[None]):
         self.query_one("#mcp_detail", Static).update(self._detail(s) if s else "")
 
     def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
+        self._selected = event.option.id
         self._show_detail()
 
     def action_close(self) -> None:

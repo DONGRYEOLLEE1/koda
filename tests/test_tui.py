@@ -924,6 +924,17 @@ def test_mcp_connects_in_background_and_panel_toggles(tmp_path, monkeypatch):
 
     monkeypatch.setattr(A, "connect_mcp", fake_connect)
 
+    async def fake_connect_server(server, timeout=20.0):
+        server.tools, server.error = [SimpleNamespace(name="query-docs", description="문서 조회")], ""
+        return server
+
+    async def fake_disconnect(server):
+        server.tools = []
+        return server
+
+    monkeypatch.setattr(A, "connect_server", fake_connect_server)
+    monkeypatch.setattr(A, "disconnect_server", fake_disconnect)
+
     async def go():
         app = KodaTui(Workspace(tmp_path), Session(tmp_path), Memory(tmp_path), [tmp_path / "mcps"], auto_yes=True)
         async with app.run_test(size=(110, 35)) as pilot:
@@ -936,6 +947,10 @@ def test_mcp_connects_in_background_and_panel_toggles(tmp_path, monkeypatch):
             await pilot.press("d")                                                        # ctx 끄기
             await pilot.pause()
             assert app.runner.mcp_tools == [] and "mcp 0" in _static_text(app.query_one("#statusline"))
+            assert await _wait(pilot, lambda: not app.workers)                            # 해제 워커 완료(목록 다시 그림)
+            await pilot.press("d")                                                        # 다시 켜기 → 재연결
+            assert await _wait(pilot, lambda: len(app.runner.mcp_tools) == 1)
+            assert "mcp 1 (실패 1)" in _static_text(app.query_one("#statusline"))
             await pilot.press("escape")
             assert await _wait(pilot, lambda: type(app.screen).__name__ != "McpScreen")
     asyncio.run(go())

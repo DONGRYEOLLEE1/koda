@@ -84,7 +84,7 @@ def _fake_adapters(monkeypatch, log: list):
         @asynccontextmanager
         async def session(self, name):
             if name == "bad":
-                raise ConnectionError("refused")
+                raise ExceptionGroup("unhandled errors in a TaskGroup", [ConnectionError("refused")])
             log.append(("enter", name, asyncio.current_task()))
             try:
                 yield types.SimpleNamespace(name=name)
@@ -112,14 +112,14 @@ def test_connect_mcp_isolates_failures_and_active_tools(tmp_path, monkeypatch):
     servers = asyncio.run(M.connect_mcp(tmp_path))
     by = {s.name: s for s in servers}
     assert [t.name for t in by["ok"].tools] == ["ok_echo"] and not by["ok"].error
-    assert by["bad"].tools == [] and by["bad"].error.startswith("ConnectionError")   # 하나가 죽어도 나머지는 산다
+    assert by["bad"].tools == [] and by["bad"].error.startswith("ConnectionError")   # 하나가 죽어도 나머지는 산다. ExceptionGroup 은 원인으로 풀어 보인다
     by["ok"].enabled = False
     assert by["ok"].active_tools == [] and by["bad"].active_tools == []              # 꺼진 서버·실패 서버는 도구 0
     asyncio.run(M.disconnect_server(by["ok"]))
     logs = []
     assert [t.name for t in asyncio.run(M.load_mcp_tools(tmp_path, on_log=logs.append))] == ["ok_echo"]
     assert any("실패" in m for m in logs)
-    asyncio.run(M.disconnect_server(M._host.servers[0])) if M._host.servers else None
+    M.close_mcp()
 
 
 def test_session_persists_across_turn_loops_and_closes_in_same_task(tmp_path, monkeypatch):
@@ -138,6 +138,40 @@ def test_session_persists_across_turn_loops_and_closes_in_same_task(tmp_path, mo
     calls = [e for e in log if e[0] == "call"]
     assert len(calls) == 2 and all(e[2] is M._host.loop for e in calls)          # 세션 루프에서 실행
     assert len([e for e in log if e[0] == "enter"]) == 1                          # 호출마다 세션을 새로 열지 않는다
+    server.enabled = False                                   # 해제는 꺼진 서버에만 적용된다(켜져 있으면 의도 우선)
     asyncio.run(M.disconnect_server(server))
     enter, exit_ = [e for e in log if e[0] == "enter"][0], [e for e in log if e[0] == "exit"][0]
     assert enter[2] is exit_[2] and server.tools == [] and server not in M._host.servers   # 같은 태스크에서 닫힘
+
+
+def test_toggle_workers_overlapping_end_in_last_intent(tmp_path, monkeypatch):
+    # /mcp 의 d 를 연달아 누르면 해제·재연결 워커가 겹친다. 어느 쪽이 host 루프에 먼저 닿든 마지막 의도(enabled)로 끝난다.
+    import asyncio
+
+    import koda.mcp as M
+    (tmp_path / "s.json").write_text(json.dumps({"mcpServers": {"pw": {"command": "x"}}}))
+    log: list = []
+    _fake_adapters(monkeypatch, log)
+    [server] = asyncio.run(M.connect_mcp(tmp_path))
+
+    async def off_then_on():                       # 끄기 → 켜기, 재연결이 먼저 실행돼도 켜진 채로 끝난다
+        server.enabled = False
+        d = asyncio.create_task(M.disconnect_server(server))
+        server.enabled = True
+        c = asyncio.create_task(M.connect_server(server))
+        await asyncio.gather(c, d)
+
+    asyncio.run(off_then_on())
+    assert [t.name for t in server.tools] == ["pw_echo"] and server in M._host.servers
+    assert len([e for e in log if e[0] == "enter"]) - len([e for e in log if e[0] == "exit"]) == 1   # 살아 있는 세션은 하나
+
+    async def on_then_off():                       # 켜기 → 끄기 순서면 끊긴 채로 끝난다
+        server.enabled = True
+        c = asyncio.create_task(M.connect_server(server))
+        server.enabled = False
+        d = asyncio.create_task(M.disconnect_server(server))
+        await asyncio.gather(c, d)
+
+    asyncio.run(on_then_off())
+    assert server.tools == [] and server not in M._host.servers
+    assert len([e for e in log if e[0] == "enter"]) == len([e for e in log if e[0] == "exit"])
