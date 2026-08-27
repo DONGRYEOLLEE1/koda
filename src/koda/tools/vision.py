@@ -19,7 +19,7 @@ _MM_PROJ_ERROR = (
     "오류: 추론 서버가 비전(mmproj)을 지원하지 않는다. llama.cpp 서버를 mmproj 와 함께 "
     "재기동해야 한다. 이미지 분석 없이 진행하라."
 )
-_VISION_SUPPORT_CACHE: dict[str, bool] = {}
+_VISION_SUPPORT_CACHE: dict[str, bool | None] = {}
 
 
 class VisionAnalysis(BaseModel):
@@ -31,17 +31,16 @@ class VisionAnalysis(BaseModel):
     uncertain: list[str] = Field(default_factory=list, description="불확실하거나 추측이 필요한 부분")
 
 
-def _vision_supported(props_url: str) -> bool:
-    """llama.cpp /props 의 vision 지원 여부를 프로세스 내 캐시로 확인한다."""
+def _vision_supported(props_url: str) -> bool | None:
+    """llama.cpp /props 가 답하면 vision 지원 여부(True/False), llama.cpp 가 아니면(404·연결 실패·modalities 없음) None. 프로세스 내 캐시."""
     if props_url not in _VISION_SUPPORT_CACHE:
         try:
             resp = httpx.get(props_url, timeout=3)
             resp.raise_for_status()
-            data = resp.json()
-            modalities = data.get("modalities", {})
-            _VISION_SUPPORT_CACHE[props_url] = modalities.get("vision") is True
+            modalities = resp.json().get("modalities")
+            _VISION_SUPPORT_CACHE[props_url] = modalities.get("vision") is True if isinstance(modalities, dict) else None
         except Exception:
-            _VISION_SUPPORT_CACHE[props_url] = False
+            _VISION_SUPPORT_CACHE[props_url] = None
     return _VISION_SUPPORT_CACHE[props_url]
 
 
@@ -94,7 +93,7 @@ def make_vision_tools(ws: Workspace, model, props_url: str) -> list:
         if size > MAX_IMAGE_BYTES:
             return f"오류: 이미지 파일이 너무 크다({size} bytes). 최대 {MAX_IMAGE_BYTES} bytes."
 
-        if not _vision_supported(props_url):
+        if _vision_supported(props_url) is False:   # llama.cpp 가 mmproj 없이 떠 있을 때만. 다른 서버는 요청해 보고 판단한다
             return _MM_PROJ_ERROR
 
         try:
@@ -112,6 +111,6 @@ def make_vision_tools(ws: Workspace, model, props_url: str) -> list:
                 return "오류: 이미지 분석 중 서버 오류가 발생했다. 텍스트 정보로만 진행하라."
             return raw
         except Exception as e:
-            return f"오류: 이미지 분석 실패({type(e).__name__}): 텍스트 정보로만 진행하라."
+            return f"오류: 이미지 분석 실패({type(e).__name__}). 이 모델이나 엔드포인트가 이미지 입력을 지원하지 않을 수 있다. 텍스트 정보로만 진행하라."
 
     return [analyze_image]

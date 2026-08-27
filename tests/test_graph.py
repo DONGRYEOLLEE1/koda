@@ -473,3 +473,22 @@ def test_run_task_names_trace_by_session_title_and_records_raw_io(monkeypatch, t
     assert r2["title"] == "세션 제목" and calls == ["첫 질의"]            # 이후 턴은 제목 호출 없음
     assert tracer.turns == [{"name": "세션 제목", "task": "첫 질의", "answer": "완료"},
                             {"name": "세션 제목", "task": "둘째 질의", "answer": "완료"}]
+
+
+def test_run_task_probes_vision_on_active_provider(monkeypatch, tmp_path):
+    """비전 지원 탐색은 LOCAL 이 아니라 실제로 선택된 provider 의 base_url 을 본다."""
+    seen = []
+
+    class _FakeGraph:
+        async def ainvoke(self, state, config=None):
+            return {"answer": "완료", "route": "read"}
+
+    monkeypatch.setattr(G, "_build_graph", lambda *a, **k: _FakeGraph())
+    monkeypatch.setattr(G, "build_model", lambda s: (object(), "openai", None))
+    monkeypatch.setattr(G, "_no_think", lambda m, s: m)
+    monkeypatch.setattr(G, "_thinking", lambda m, s, b: m)
+    monkeypatch.setattr(G, "make_vision_tools", lambda ws, model, props_url: seen.append(props_url) or [])
+    monkeypatch.setattr(G, "get_tracer", lambda: _NoTracer())
+    asyncio.run(G.run_task("q", Workspace(tmp_path), lambda n, a: True, lambda t: None,
+                           settings=_dummy_settings(), mcps_dir=None, trace_name="t"))
+    assert seen == ["http://localhost:8/props"]          # openai_base_url 기준(local 은 :9)

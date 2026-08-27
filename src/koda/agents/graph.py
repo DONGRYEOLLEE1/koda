@@ -327,8 +327,9 @@ async def run_task(
     skills = load_skills(ws.root)  # 워크스페이스 스킬 (없으면 빈 리스트)
     artifact_ns = run_id or uuid4().hex[:8]
     store = ArtifactStore(ws.root, artifact_ns)  # 절단 원문 보존
-    # vision 도구: 서버가 mmproj 미탑재면 도구가 복구 가능한 에러 문자열을 반환한다
-    props_url = settings.local_base_url.rstrip("/").removesuffix("/v1") + "/props"
+    # vision 도구: 실제로 선택된 provider 의 서버를 본다. llama.cpp 가 mmproj 없이 떠 있으면 도구가 복구 가능한 에러 문자열을 반환한다
+    base_url = settings.local_base_url if provider == "local" else settings.openai_base_url
+    props_url = base_url.rstrip("/").removesuffix("/v1") + "/props"
     extra_tools = [*mcp_tools, *make_vision_tools(ws, fast_model, props_url)]
     tracer = get_tracer()
     graph = _build_graph(reader_model, fast_model, ws, approver, on_token, on_phase, extra_tools,

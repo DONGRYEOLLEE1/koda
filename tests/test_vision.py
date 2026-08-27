@@ -68,3 +68,25 @@ def test_probe_false_cached_returns_mmproj_guidance(monkeypatch, tmp_path):
     assert "오류" in first and "mmproj" in first
     assert second == first
     assert calls == 1
+
+
+def test_probe_none_on_non_llamacpp_server_attempts_analysis(monkeypatch, tmp_path):
+    # LiteLLM·vLLM·OpenAI 처럼 /props 가 없는 서버면 llama.cpp 안내 대신 실제 요청으로 판단한다.
+    vision._VISION_SUPPORT_CACHE.clear()
+
+    def fake_get(url, timeout):
+        raise vision.httpx.HTTPError("404")
+
+    monkeypatch.setattr(vision.httpx, "get", fake_get)
+    monkeypatch.setattr(vision, "structured", lambda model, schema, messages: schema(summary="화면 캡처", details=["로고"]))
+    (tmp_path / "shot.png").write_bytes(b"png")
+    out = _tool(Workspace(tmp_path), "http://gateway.test/props").invoke({"path": "shot.png"})
+    assert "mmproj" not in out and "화면 캡처" in out
+
+    # 요청이 실패하면 llama.cpp 를 지목하지 않는 일반 오류로 돌아온다
+    def boom(model, schema, messages):
+        raise RuntimeError("image input not supported")
+
+    monkeypatch.setattr(vision, "structured", boom)
+    out = _tool(Workspace(tmp_path), "http://gateway.test/props").invoke({"path": "shot.png"})
+    assert "오류" in out and "llama.cpp" not in out and "RuntimeError" in out
