@@ -874,3 +874,26 @@ def test_thinking_toggle_hides_reasoning_steps(tmp_path):
     asyncio.run(go())
 
 
+
+
+def test_click_on_detached_paragraph_does_not_crash(tmp_path):
+    # 스트리밍 재렌더로 떼어진 문단이 컴포지터 맵에 남은 채 클릭되면 textual 선택 코드가 parent=None 으로 죽는다. koda 화면은 그 클릭을 버린다.
+    from textual import events
+
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test(size=(100, 30)) as pilot:
+            app.post_message(TokenChunk("## 제목\n\n첫 문단입니다.\n\n둘째 문단입니다.\n"))
+            assert await _wait(pilot, lambda: len(app.query("MarkdownParagraph")) >= 2)
+            await pilot.pause()
+            para = app.query("MarkdownParagraph")[-1]
+            region = app.screen.find_widget(para).region
+            x, y = region.x + 2, region.y
+            await para.remove()
+            hit, _ = app.screen.get_widget_and_offset_at(x, y)
+            assert hit is para and not hit.is_attached                  # 전제: 맵이 아직 옛 문단을 가리킨다
+            app.screen._forward_event(events.MouseDown(None, x=x, y=y, delta_x=0, delta_y=0, button=1,
+                                                       shift=False, meta=False, ctrl=False, screen_x=x, screen_y=y))
+            await pilot.pause()
+            assert app.screen._select_state is None and not app._exit    # 크래시 없음
+    asyncio.run(go())

@@ -10,6 +10,8 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import VerticalScroll
+from textual.events import MouseDown
+from textual.screen import Screen
 from textual.theme import Theme
 from textual.widgets import Footer, Markdown, Static
 
@@ -64,6 +66,18 @@ KODA_DARK = Theme(
     panel="#2a2d3e",
     dark=True,
 )
+
+
+class KodaScreen(Screen):
+    """기본 화면. 스트리밍 재렌더로 이미 떼어진 문단을 클릭하면 textual 8.2 의 선택 시작 코드가 parent=None 으로 죽으므로(컴포지터 맵이 한 프레임 늦다) 그 클릭만 버린다."""
+
+    def _forward_event(self, event) -> None:
+        if isinstance(event, MouseDown) and not self.app.mouse_captured:
+            widget, _ = self.get_widget_and_offset_at(event.x, event.y)
+            if widget is not None and not widget.is_attached:
+                self._select_state = None
+                return
+        super()._forward_event(event)
 
 
 class KodaTui(App):
@@ -155,6 +169,9 @@ class KodaTui(App):
         yield PromptArea(id="prompt", tab_behavior="focus",
                          placeholder="요청 입력…  (Alt+Enter·Ctrl+J 줄바꿈 · /help 명령 · Ctrl+Q 종료)")
         yield Footer()
+
+    def get_default_screen(self) -> Screen:
+        return KodaScreen(id="_default")
 
     def on_mount(self) -> None:
         self.register_theme(KODA_DARK)
