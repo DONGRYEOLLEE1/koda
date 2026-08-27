@@ -313,7 +313,7 @@ async def run_task(
         mcp_tools = []
         if mcps_dir:  # --no-mcp 또는 미지정이면 None → 외부 로드 자체를 생략
             try:
-                mcp_tools = await load_mcp_tools(mcps_dir, on_log=lambda m: on_phase(f"mcp:{m}"))
+                mcp_tools = await load_mcp_tools(mcps_dir, on_log=lambda m: on_phase(f"mcp:{m}"), cwd=ws.root)
             except Exception as e:
                 on_phase(f"mcp:로드 실패 {type(e).__name__}")
 

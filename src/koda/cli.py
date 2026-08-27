@@ -12,7 +12,7 @@ warnings.filterwarnings("ignore", message="Pydantic serializer warnings")
 from .agents import remember_from_turn, run_task, summarize_history
 from .config import load_model_settings
 from .memory import Memory, parse_remember
-from .mcp import load_mcp_tools, mcp_dirs
+from .mcp import close_mcp, load_mcp_tools, mcp_dirs
 from .session import Session
 from .workspace import Workspace
 
@@ -251,7 +251,7 @@ def _cmd_chat(args) -> int:
     mcp_tools: list = []
     if not args.no_mcp:
         try:
-            mcp_tools = asyncio.run(load_mcp_tools(mcp_dirs(ws.root, args.mcps_dir), on_log=lambda m: _err(f"  · {m}")))
+            mcp_tools = asyncio.run(load_mcp_tools(mcp_dirs(ws.root, args.mcps_dir), on_log=lambda m: _err(f"  · {m}"), cwd=ws.root))
         except Exception as e:
             _err(f"  · MCP 로드 실패({type(e).__name__}) — 로컬 도구만 사용")
 
@@ -367,4 +367,7 @@ def main(argv=None) -> int:
     pt.set_defaults(func=_cmd_tui)
 
     args = p.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    finally:
+        close_mcp()   # 실행기 스레드가 살아 있을 때 세션(stdio 서버 프로세스)을 닫는다

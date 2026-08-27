@@ -16,7 +16,7 @@ from textual.theme import Theme
 from textual.widgets import Footer, Markdown, Static
 
 from ..cli import _err
-from ..mcp import connect_mcp, connect_server, mcp_dirs
+from ..mcp import connect_mcp, connect_server, disconnect_server, mcp_dirs
 from ..memory import Memory, parse_remember
 from ..session import Session
 from ..workspace import Workspace
@@ -242,7 +242,7 @@ class KodaTui(App):
 
     def _connect_all_mcp(self, dirs) -> None:
         try:
-            servers = asyncio.run(connect_mcp(dirs))
+            servers = asyncio.run(connect_mcp(dirs, cwd=self.runner._ws.root))
         except Exception as e:  # 어댑터 미설치 등. 로컬 도구만으로 계속한다
             self.call_from_thread(self.notify, f"MCP 사용 불가: {e}", severity="warning", timeout=6)
             servers = []
@@ -250,6 +250,10 @@ class KodaTui(App):
 
     def _reconnect_mcp(self, server) -> None:
         asyncio.run(connect_server(server))
+        self.post_message(McpLoaded(self._mcp))
+
+    def _disconnect_mcp(self, server) -> None:
+        asyncio.run(disconnect_server(server))
         self.post_message(McpLoaded(self._mcp))
 
     @on(McpLoaded)
@@ -269,14 +273,19 @@ class KodaTui(App):
         self._set_status(self._status)
 
     async def _cmd_mcp(self, arg: str) -> None:
-        def toggle(server) -> None:
-            server.enabled = not server.enabled
-            self._apply_mcp()
-
         def reconnect(server) -> None:
             server.enabled = True
             self.notify(f"MCP '{server.name}' 재연결 중…", timeout=3)
             self.run_worker(partial(self._reconnect_mcp, server), thread=True, group="mcp")
+
+        def toggle(server) -> None:
+            # 끄면 세션(stdio 면 서버 프로세스)까지 닫고, 켜면 다시 연다. 도구 목록은 즉시 반영된다.
+            if server.enabled:
+                server.enabled = False
+                self._apply_mcp()
+                self.run_worker(partial(self._disconnect_mcp, server), thread=True, group="mcp")
+            else:
+                reconnect(server)
 
         self.push_screen(McpScreen(self._mcp, list(self._mcp_dirs or []), self._mcp_connecting, toggle, reconnect))
 

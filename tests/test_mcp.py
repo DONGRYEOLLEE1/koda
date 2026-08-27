@@ -63,6 +63,43 @@ def test_mcp_servers_label_source_and_project_wins(tmp_path, monkeypatch):
     servers = {s.name: s for s in M.mcp_servers([g, proj])}
     assert servers["ctx"].source == "프로젝트" and servers["ctx"].target == "http://p/ctx"     # 같은 이름은 프로젝트가 이긴다
     assert servers["only_g"].source == "전역" and servers["only_g"].transport == "stdio" and servers["only_g"].target == "x --y"
+    assert "cwd" not in servers["only_g"].conn
+    with_cwd = {s.name: s for s in M.mcp_servers([g, proj], cwd=tmp_path / "ws")}
+    assert with_cwd["only_g"].conn["cwd"] == str(tmp_path / "ws") and "cwd" not in with_cwd["ctx"].conn   # stdio 만, http 는 무관
+
+
+def _fake_adapters(monkeypatch, log: list):
+    """세션 기반 가짜 어댑터. 세션이 열린 태스크와 닫힌 태스크, 도구 코루틴이 돈 루프를 기록한다."""
+    import asyncio
+    import sys
+    import types
+    from contextlib import asynccontextmanager
+
+    from langchain_core.tools import StructuredTool
+
+    class _Client:
+        def __init__(self, conns):
+            self._name = next(iter(conns))
+
+        @asynccontextmanager
+        async def session(self, name):
+            if name == "bad":
+                raise ConnectionError("refused")
+            log.append(("enter", name, asyncio.current_task()))
+            try:
+                yield types.SimpleNamespace(name=name)
+            finally:
+                log.append(("exit", name, asyncio.current_task()))
+
+    async def load_mcp_tools(session, server_name=None):
+        async def echo(text: str) -> str:
+            log.append(("call", server_name, asyncio.get_running_loop()))
+            return f"{server_name}:{text}"
+        return [StructuredTool.from_function(coroutine=echo, name=f"{server_name}_echo", description="echo")]
+
+    monkeypatch.setitem(sys.modules, "langchain_mcp_adapters", types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "langchain_mcp_adapters.client", types.SimpleNamespace(MultiServerMCPClient=_Client))
+    monkeypatch.setitem(sys.modules, "langchain_mcp_adapters.tools", types.SimpleNamespace(load_mcp_tools=load_mcp_tools))
 
 
 def test_connect_mcp_isolates_failures_and_active_tools(tmp_path, monkeypatch):
@@ -70,25 +107,37 @@ def test_connect_mcp_isolates_failures_and_active_tools(tmp_path, monkeypatch):
 
     import koda.mcp as M
     (tmp_path / "s.json").write_text(json.dumps({"mcpServers": {"ok": {"url": "http://ok"}, "bad": {"url": "http://bad"}}}))
-
-    class _Client:
-        def __init__(self, conns):
-            self._name = next(iter(conns))
-
-        async def get_tools(self):
-            if self._name == "bad":
-                raise ConnectionError("refused")
-            return ["t1", "t2"]
-
-    import types
-    fake_mod = types.SimpleNamespace(MultiServerMCPClient=_Client)
-    monkeypatch.setitem(__import__("sys").modules, "langchain_mcp_adapters.client", fake_mod)
+    log: list = []
+    _fake_adapters(monkeypatch, log)
     servers = asyncio.run(M.connect_mcp(tmp_path))
     by = {s.name: s for s in servers}
-    assert by["ok"].tools == ["t1", "t2"] and not by["ok"].error
+    assert [t.name for t in by["ok"].tools] == ["ok_echo"] and not by["ok"].error
     assert by["bad"].tools == [] and by["bad"].error.startswith("ConnectionError")   # 하나가 죽어도 나머지는 산다
     by["ok"].enabled = False
     assert by["ok"].active_tools == [] and by["bad"].active_tools == []              # 꺼진 서버·실패 서버는 도구 0
+    asyncio.run(M.disconnect_server(by["ok"]))
     logs = []
-    assert asyncio.run(M.load_mcp_tools(tmp_path, on_log=logs.append)) == ["t1", "t2"]
+    assert [t.name for t in asyncio.run(M.load_mcp_tools(tmp_path, on_log=logs.append))] == ["ok_echo"]
     assert any("실패" in m for m in logs)
+    asyncio.run(M.disconnect_server(M._host.servers[0])) if M._host.servers else None
+
+
+def test_session_persists_across_turn_loops_and_closes_in_same_task(tmp_path, monkeypatch):
+    # 세션은 host 루프의 한 태스크가 열고 같은 태스크가 닫는다. 도구 호출은 어느 턴 루프에서 와도 그 세션(host 루프)에서 실행된다.
+    import asyncio
+
+    import koda.mcp as M
+    (tmp_path / "s.json").write_text(json.dumps({"mcpServers": {"pw": {"command": "x"}}}))
+    log: list = []
+    _fake_adapters(monkeypatch, log)
+    [server] = asyncio.run(M.connect_mcp(tmp_path))
+    tool = server.tools[0]
+    r1 = asyncio.run(tool.ainvoke({"text": "a"}))          # 턴 1 (새 루프)
+    r2 = asyncio.run(tool.ainvoke({"text": "b"}))          # 턴 2 (또 새 루프)
+    assert (r1, r2) == ("pw:a", "pw:b")
+    calls = [e for e in log if e[0] == "call"]
+    assert len(calls) == 2 and all(e[2] is M._host.loop for e in calls)          # 세션 루프에서 실행
+    assert len([e for e in log if e[0] == "enter"]) == 1                          # 호출마다 세션을 새로 열지 않는다
+    asyncio.run(M.disconnect_server(server))
+    enter, exit_ = [e for e in log if e[0] == "enter"][0], [e for e in log if e[0] == "exit"][0]
+    assert enter[2] is exit_[2] and server.tools == [] and server not in M._host.servers   # 같은 태스크에서 닫힘

@@ -917,7 +917,7 @@ def test_mcp_connects_in_background_and_panel_toggles(tmp_path, monkeypatch):
     import koda.tui.app as A
     from koda.mcp import McpServer
 
-    async def fake_connect(dirs, timeout=20.0):
+    async def fake_connect(dirs, timeout=20.0, cwd=None):
         return [McpServer("ctx", "프로젝트", {"url": "http://c", "transport": "streamable_http"},
                           tools=[SimpleNamespace(name="query-docs", description="문서 조회")]),
                 McpServer("bad", "전역", {"url": "http://b", "transport": "streamable_http"}, error="TimeoutError: 20s")]
