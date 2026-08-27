@@ -20,6 +20,7 @@ from ..skills import load_skills
 from ..tracing import get_tracer
 from ..workspace import Workspace
 from ..tools.vision import make_vision_tools
+from .recall import make_title
 from .specs import AGENTS
 from .streaming import _to_text, astream_agent, resummarize
 from .verify import _judge
@@ -300,9 +301,9 @@ async def run_task(
     task: str, ws: Workspace, approver, on_token,
     on_phase=None, settings=None, mcps_dir=None, history: list | None = None,
     mcp_tools: list | None = None, run_id: str | None = None,
-    extra_callbacks: list | None = None,
+    extra_callbacks: list | None = None, trace_name: str = "",
 ) -> dict:
-    """단일 턴 실행. mcps_dir 는 MCP 설정 폴더 목록(None 이면 로드 생략), history 는 멀티턴 맥락, mcp_tools 는 세션당 1회 로드해 재사용(캐시 prefix 유지), extra_callbacks 는 config.callbacks 에 추가로 얹는 핸들러(TUI 용)."""
+    """단일 턴 실행. mcps_dir 는 MCP 설정 폴더 목록(None 이면 로드 생략), history 는 멀티턴 맥락, mcp_tools 는 세션당 1회 로드해 재사용(캐시 prefix 유지), extra_callbacks 는 config.callbacks 에 추가로 얹는 핸들러(TUI 용), trace_name 은 세션 제목(비어 있으면 이 질의로 새로 짓는다)."""
     settings = settings or load_model_settings()
     model, provider, _reason = build_model(settings)
     set_structured_method(settings.structured_method)  # 방식을 고정하면 탐색 왕복이 사라진다
@@ -334,15 +335,20 @@ async def run_task(
                          memory_text, store=store, explore_model=explore_model, skills=skills,
                          context_budget=settings.context_budget_tokens,
                          mcp_auto_approve=settings.mcp_auto_approve_set)
-    # CallbackHandler 가 이 graph 실행을 하나의 langfuse trace 로 자동 기록한다. artifact_ns 를
-    # metadata 에 실어 langfuse ↔ .koda/artifacts 상호참조를 유지한다.
+    # trace 하나 = 턴 하나. 이름은 세션 제목(첫 턴에만 LLM 으로 짓고 이후 턴은 넘겨받는다), 입력·출력은
+    # 질의와 답변 원문이며 graph 실행은 그 아래 자식으로 매달린다. artifact_ns 를 metadata 에 실어
+    # langfuse ↔ .koda/artifacts 상호참조를 유지한다.
+    title = trace_name or await make_title(task, settings)
     config = {"callbacks": [*tracer.callbacks, *(extra_callbacks or [])], "run_name": task[:60],
               "metadata": {"provider": provider, "artifact_ns": artifact_ns}}
-    final = await graph.ainvoke({"task": task, "history": history or []}, config=config)
+    with tracer.turn(title, task) as turn:
+        final = await graph.ainvoke({"task": task, "history": history or []}, config=config)
+        answer = final.get("answer", "")
+        turn.done(answer)
     tracer.flush()
-    answer = final.get("answer", "")
     return {
         "final": answer,
+        "title": title,
         "route": final.get("route"),
         "verdict": final.get("verdict"),
         "verify_detail": final.get("verify_detail", ""),

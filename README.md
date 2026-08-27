@@ -132,4 +132,4 @@ langgraph `StateGraph` 분기: **router → { answer | reader | investigator →
 
 ## 추적 (langfuse)
 
-로컬 파일로 저장하지 않고 langfuse(`http://localhost:28900`)에 기록한다. 실행 1건 = 1 trace 이며, 각 에이전트의 툴 호출 IO와 모델 호출별 토큰(input/output/total)이 관측으로 남아 재구성·비용 분석이 가능하다.
+로컬 파일로 저장하지 않고 langfuse(`http://localhost:28900`)에 기록한다. 턴 1건 = 1 trace 이며, trace 이름은 세션 제목(첫 턴의 질의로 LLM 이 15자 안팎으로 짓고 그 세션의 이후 턴은 그대로 쓴다), 입력과 출력은 질의와 최종 답변의 원문이다. 각 에이전트의 툴 호출 IO와 모델 호출별 토큰(input/output/total)이 그 아래 관측으로 남아 재구성·비용 분석이 가능하다.

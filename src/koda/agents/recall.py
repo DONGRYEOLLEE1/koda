@@ -26,6 +26,23 @@ async def summarize_history(history: list, settings=None) -> str:
     return _to_text(resp.content).strip()
 
 
+_TITLE_LIMIT = 30
+
+
+async def make_title(task: str, settings=None) -> str:
+    """세션 제목(15자 안팎)을 첫 질의에서 만든다. LLM 이 실패하면 질의 앞부분으로 대신한다."""
+    fallback = " ".join(task.split())[:15]
+    try:
+        settings = settings or load_model_settings()
+        model, _provider, _ = build_model(settings)
+        m = _no_think(model, settings)
+        resp = await m.ainvoke([SystemMessage(load_prompt("session_title")), HumanMessage(task)])
+        title = " ".join(_to_text(resp.content).split()).strip("\"'“”「」 ")
+    except Exception:
+        return fallback
+    return title[:_TITLE_LIMIT] or fallback
+
+
 async def compact_memory(memory_text: str, settings=None) -> str:
     """상한 초과한 영구 메모리를 LLM 통합 요약으로 압축 (내용 판단은 LLM 몫)."""
     settings = settings or load_model_settings()

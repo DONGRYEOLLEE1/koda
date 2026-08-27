@@ -70,6 +70,7 @@ class TuiTurnRunner:
                     run_id=self.session.id,  # artifact 를 세션 단위로 이어 쓴다
                     # 툴 가시화: langfuse 와 동일한 config.callbacks 채널로만 관측(실행 로직 무변경).
                     extra_callbacks=[ToolActivityHandler(post)],
+                    trace_name=self.session.title,  # 첫 턴은 비어 있어 run_task 가 제목을 짓는다
                 ),
                 lambda p: post(PhaseEvent(p)),
             ))
@@ -77,6 +78,7 @@ class TuiTurnRunner:
             post(TurnFailed(f"{type(e).__name__}: {e}"))
             return
         try:
+            self.session.title = self.session.title or result.get("title", "")
             if not result.get("empty_final"):
                 # 빈 final 은 히스토리·세션에 저장하지 않는다 — chat 과 동일한 오염 방지.
                 self.session.add_turn(task, result["final"], result["route"], result.get("verdict"))

@@ -287,11 +287,13 @@ def _cmd_chat(args) -> int:
                     line, ws, approver, renderer.on_token, renderer.on_phase,
                     history=session.history, mcp_tools=mcp_tools, mcps_dir=None,
                     run_id=session.id,  # artifact 를 세션 단위로 이어 쓴다
+                    trace_name=session.title,  # 첫 턴은 비어 있어 run_task 가 제목을 짓는다
                 ), renderer.on_phase))
             except Exception as e:
                 _err(f"턴 실패: {type(e).__name__}: {e}")
                 continue
             renderer.finalize(result["final"])
+        session.title = session.title or result.get("title", "")
         verdict = result.get("verdict")
         _err(f"\n--- route: {result['route']}{f' | verdict: {verdict}' if verdict else ''} ---")
         if result.get("empty_final"):

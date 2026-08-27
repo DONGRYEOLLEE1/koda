@@ -5,6 +5,8 @@ import tempfile
 from pathlib import Path
 
 import koda.agents.graph as G
+from contextlib import contextmanager
+from types import SimpleNamespace
 from koda.agents.graph import _build_graph, _planner_tools, enforce_checklist
 from koda.agents.streaming import AgentResult
 from koda.prompts import load_prompt
@@ -389,11 +391,20 @@ def test_resummarize_empty_messages_skips_model():
 class _NoTracer:
     callbacks: list = []
 
+    def __init__(self):
+        self.turns: list = []
+
     def flush(self):
         pass
 
     def trace_url(self):
         return None
+
+    @contextmanager
+    def turn(self, name, task):
+        rec = {"name": name, "task": task}
+        self.turns.append(rec)
+        yield SimpleNamespace(done=lambda answer: rec.update(answer=answer))
 
 
 def _dummy_settings():
@@ -430,3 +441,35 @@ def test_run_task_appends_extra_callbacks_without_touching_core(monkeypatch, tmp
     asyncio.run(G.run_task("q", Workspace(tmp_path), lambda n, a: True, lambda t: None,
                            settings=settings, mcps_dir=None))
     assert sentinel not in captured["callbacks"]       # CLI 경로: 추가 없음(기존 동작)
+
+
+def test_run_task_names_trace_by_session_title_and_records_raw_io(monkeypatch, tmp_path):
+    """trace 이름은 세션 제목(첫 턴에만 LLM 으로 짓고 이후 턴은 넘겨받음), 입력·출력은 질의·답변 원문이다."""
+    calls = []
+
+    class _FakeGraph:
+        async def ainvoke(self, state, config=None):
+            return {"answer": "완료", "route": "read"}
+
+    async def fake_title(task, settings=None):
+        calls.append(task)
+        return "세션 제목"
+
+    tracer = _NoTracer()
+    monkeypatch.setattr(G, "_build_graph", lambda *a, **k: _FakeGraph())
+    monkeypatch.setattr(G, "build_model", lambda s: (object(), "local", None))
+    monkeypatch.setattr(G, "_no_think", lambda m, s: m)
+    monkeypatch.setattr(G, "_thinking", lambda m, s, b: m)
+    monkeypatch.setattr(G, "make_vision_tools", lambda *a, **k: [])
+    monkeypatch.setattr(G, "get_tracer", lambda: tracer)
+    monkeypatch.setattr(G, "make_title", fake_title)
+    settings = _dummy_settings()
+
+    r1 = asyncio.run(G.run_task("첫 질의", Workspace(tmp_path), lambda n, a: True, lambda t: None,
+                                settings=settings, mcps_dir=None))
+    assert r1["title"] == "세션 제목" and calls == ["첫 질의"]
+    r2 = asyncio.run(G.run_task("둘째 질의", Workspace(tmp_path), lambda n, a: True, lambda t: None,
+                                settings=settings, mcps_dir=None, trace_name=r1["title"]))
+    assert r2["title"] == "세션 제목" and calls == ["첫 질의"]            # 이후 턴은 제목 호출 없음
+    assert tracer.turns == [{"name": "세션 제목", "task": "첫 질의", "answer": "완료"},
+                            {"name": "세션 제목", "task": "둘째 질의", "answer": "완료"}]

@@ -18,6 +18,7 @@ class Session:
         self.id = session_id or uuid.uuid4().hex[:8]
         self.history: list[dict] = []   # [{"role": "user"|"assistant", "content": str}]
         self.turns: list[dict] = []     # [{"task","route","verdict","summary"}] 턴별 기록
+        self.title = ""                 # 첫 턴에 LLM 이 지은 세션 제목. langfuse trace 이름·세션 목록에 쓴다
 
     @property
     def path(self) -> Path:
@@ -32,7 +33,7 @@ class Session:
     def save(self) -> Path:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         data = json.dumps(
-            {"id": self.id, "history": self.history, "turns": self.turns},
+            {"id": self.id, "title": self.title, "history": self.history, "turns": self.turns},
             ensure_ascii=False, indent=1,
         )
         tmp = self.path.with_suffix(".tmp")
@@ -46,6 +47,7 @@ class Session:
         data = json.loads(s.path.read_text(encoding="utf-8"))
         s.history = data.get("history", [])
         s.turns = data.get("turns", [])
+        s.title = data.get("title", "")
         return s
 
     # --- 점진적 문맥 압축 (요약 "생성"은 LLM 몫, koda는 분할·교체만) ---
@@ -86,7 +88,7 @@ class Session:
 
     @classmethod
     def summaries(cls, ws_root: str | Path) -> list[dict]:
-        """세션 선택 목록용 요약 [{id, turns, first_task, updated}] — 최근 수정순. 깨진 파일은 건너뛴다."""
+        """세션 선택 목록용 요약 [{id, title, turns, first_task, updated}], 최근 수정순. 깨진 파일은 건너뛴다."""
         d = Path(ws_root).resolve() / KODA_DIR / "sessions"
         if not d.is_dir():
             return []
@@ -97,7 +99,7 @@ class Session:
             except (OSError, ValueError):
                 continue
             turns = data.get("turns") or []
-            out.append({"id": p.stem, "turns": len(turns),
+            out.append({"id": p.stem, "title": data.get("title", ""), "turns": len(turns),
                         "first_task": (turns[0].get("task") if turns else "") or "",
                         "updated": p.stat().st_mtime})
         return sorted(out, key=lambda s: s["updated"], reverse=True)

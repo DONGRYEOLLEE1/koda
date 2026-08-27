@@ -92,3 +92,12 @@ def test_summaries_lists_recent_first_and_skips_broken(tmp_path):
     out = Session.summaries(tmp_path)
     assert [s["id"] for s in out] == ["aaa", "bbb"]           # 최근 수정순, 깨진 파일 제외
     assert out[0]["turns"] == 1 and out[0]["first_task"] == "첫 질문 A"
+
+
+def test_title_roundtrip_and_summaries(tmp_path):
+    s = Session(tmp_path)
+    s.title = "calc 뺄셈 추가"
+    s.add_turn("calc.py 에 sub 추가", "완료", "edit", "pass")
+    s.save()
+    assert Session.load(tmp_path, s.id).title == "calc 뺄셈 추가"
+    assert Session.summaries(tmp_path)[0]["title"] == "calc 뺄셈 추가"

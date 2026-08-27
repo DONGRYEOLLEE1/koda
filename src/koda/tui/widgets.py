@@ -250,7 +250,7 @@ class SessionPicker(ModalScreen[str | None]):
     def _label(s: dict) -> Text:
         import datetime
         when = datetime.datetime.fromtimestamp(s["updated"]).strftime("%m-%d %H:%M")
-        first = " ".join(s["first_task"].split())[:60] or "(질의 없음)"
+        first = s.get("title") or " ".join(s["first_task"].split())[:60] or "(질의 없음)"
         t = Text()
         t.append(s["id"], style="bold")
         t.append(f"  {s['turns']}턴  {when}  ", style="dim")
