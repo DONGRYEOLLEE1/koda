@@ -37,14 +37,22 @@ class PromptArea(TextArea):
             self.value = value
             super().__init__()
 
-    class AtNav(Message):
-        """@경로 후보 목록이 열려 있을 때의 이동·선택·닫기 키."""
+    class PickerNav(Message):
+        """후보 목록(@경로·/명령)이 열려 있을 때의 이동·선택·닫기 키."""
 
         def __init__(self, key: str) -> None:
             self.key = key
             super().__init__()
 
     picker_open = False   # 앱이 후보 목록을 띄우는 동안 True. 이때 방향키·Tab·Enter·Esc 는 목록으로 간다
+
+    def slash_token(self) -> tuple[str, tuple[int, int]] | None:
+        """첫 줄이 `/` 로 시작하고 커서가 그 첫 단어 안에 있으면 (입력 중인 명령, 시작 위치)."""
+        row, col = self.cursor_location
+        head = self.document.get_line(0)[:col]
+        if row != 0 or not head.startswith("/") or any(c.isspace() for c in head):
+            return None
+        return head, (0, 0)
 
     def at_token(self) -> tuple[str, tuple[int, int]] | None:
         """커서 앞의 `@질의`. (질의, @ 위치) 를 돌려주고 없으면 None. `@` 는 줄 처음이나 공백 뒤에만 인정한다."""
@@ -58,15 +66,15 @@ class PromptArea(TextArea):
             return None
         return query, (row, i)
 
-    def complete_at(self, start: tuple[int, int], path: str) -> None:
-        """`@` 부터 커서까지를 `@path` 로 바꾼다. 파일이면 뒤에 공백을 붙이고, 폴더면 그대로 두어 하위로 이어 입력한다."""
-        self.replace("@" + path + ("" if path.endswith("/") else " "), start, self.cursor_location)
+    def complete(self, start: tuple[int, int], text: str) -> None:
+        """start 부터 커서까지를 text 로 바꾼다(후보 선택)."""
+        self.replace(text, start, self.cursor_location)
 
     async def _on_key(self, event) -> None:
         if self.picker_open and event.key in self._PICKER_KEYS:
             event.stop()
             event.prevent_default()
-            self.post_message(self.AtNav(event.key))
+            self.post_message(self.PickerNav(event.key))
             return
         # Enter 는 TextArea 기본 동작(개행 삽입) 대신 제출로 가로챈다. 줄바꿈은 _NEWLINE_KEYS.
         if event.key == "enter":

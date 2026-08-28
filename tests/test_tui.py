@@ -975,7 +975,7 @@ def test_at_path_picker_completes_and_does_not_submit(tmp_path):
             inp.focus()
             await pilot.press(*"보고서 @mc")
             assert await _wait(pilot, lambda: picker.display)
-            assert [str(o.id) for o in picker._options][:2] == ["mcps/", "mcps/exa.json"]
+            assert [str(o.id) for o in picker._options][:2] == ["@mcps/", "@mcps/exa.json "]
             await pilot.press("enter")                                   # 폴더 선택: @mcps/ 로 채우고 목록은 하위로 이어짐
             assert await _wait(pilot, lambda: inp.text == "보고서 @mcps/")
             assert submitted == [] and picker.display
@@ -988,4 +988,26 @@ def test_at_path_picker_completes_and_does_not_submit(tmp_path):
             assert await _wait(pilot, lambda: not picker.display)
             await pilot.press("enter")                                   # 목록이 닫힌 뒤 Enter 는 제출
             assert await _wait(pilot, lambda: submitted == ["보고서 @mcps/exa.json @RE"])
+    asyncio.run(go())
+
+
+def test_slash_command_picker_completes_and_full_command_submits(tmp_path):
+    # / 로 시작하면 입력 중인 접두에 맞는 명령이 설명과 함께 뜨고 Tab/Enter 로 채운다. 다 친 명령은 후보에 없어 Enter 가 바로 실행된다.
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test(size=(100, 30)) as pilot:
+            inp = app.query_one("#prompt", PromptArea)
+            picker = app.query_one("#path_picker")
+            inp.focus()
+            await pilot.press(*"/re")
+            assert await _wait(pilot, lambda: picker.display)
+            assert [str(o.id) for o in picker._options] == ["/resume ", "/remember "]
+            await pilot.press("down", "enter")
+            assert await _wait(pilot, lambda: inp.text == "/remember " and not picker.display)
+            inp.clear()
+            await pilot.press(*"/help")
+            await pilot.pause()
+            assert not picker.display                                    # 정확히 일치하는 명령은 후보가 아니다
+            await pilot.press("enter")                                   # 그대로 실행됨(입력창 비워짐)
+            assert await _wait(pilot, lambda: inp.text == "")
     asyncio.run(go())
