@@ -34,6 +34,7 @@ from .model import (
     ReasoningEnd,
     SessionClosed,
     TokenChunk,
+    TurnCancelled,
     ToolEnd,
     ToolStart,
     TurnDone,
@@ -53,6 +54,7 @@ from .widgets import (
     StepLine,
 )
 
+_CTRL_C_WINDOW_S = 2.0  # 이 안에 Ctrl+C 를 한 번 더 누르면 종료
 _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"  # rich 'dots' 프레임 — toad/Claude Code 계열 표준 스피너
 
 # TUI 전용 단계 라벨 (CLI 의 대괄호 라벨보다 자연스러운 동사형).
@@ -103,8 +105,8 @@ class KodaTui(App):
     # 과거 표 셀 클릭 크래시(textual 8.2.8) 회피용으로 꺼 두었으나 스트리밍 재렌더 중 클릭·드래그 반복으로도 재현되지 않아 되살렸다.
     BINDINGS = [
         ("ctrl+q", "graceful_quit", "종료"),
-        # Ctrl+C 도 정상 종료. 입력창(TextArea) focus 시 기본은 copy 라 priority 로 그것을 이겨 종료로 만든다(IDE 가 Ctrl+Q 를 가로채는 환경 대비).
-        Binding("ctrl+c", "graceful_quit", "종료", priority=True, show=False),
+        # Ctrl+C 는 단계형: 답변 중이면 중단, 2초 안에 한 번 더 누르면 종료. 입력창(TextArea) focus 시 기본은 copy 라 priority 로 이긴다.
+        Binding("ctrl+c", "ctrl_c", "중단/종료", priority=True, show=False),
     ]
     CSS = """
     #conversation { width: 1fr; height: 1fr; padding: 0 1; }
@@ -161,6 +163,7 @@ class KodaTui(App):
                                     run_task_fn=run_task_fn, approval_timeout=approval_timeout, settings=settings)
         self._model_name = model_name
         self._mode = "auto" if auto_yes else "manual"  # 승인 모드 뱃지(statusline)
+        self._ctrl_c_at = 0.0                          # 마지막 Ctrl+C 시각(연타 판정)
         self._ctx_used = 0                             # 최근 LLM 호출의 프롬프트+출력 토큰 = 현재 컨텍스트 점유 근사값
         self._session_tokens = [0, 0]                  # 세션 누적 입력/출력 토큰 (/status)
         # MCP 는 화면이 뜬 뒤 백그라운드로 붙는다(None 이면 --no-mcp). 결과는 /mcp 화면과 상태줄에 보인다.
@@ -818,6 +821,17 @@ class KodaTui(App):
         # 세션 턴 수 갱신은 _end_turn 의 _set_status 가 statusline 을 재구성하며 반영한다.
         self._end_turn()
 
+    @on(TurnCancelled)
+    async def _on_turn_cancelled(self, msg: TurnCancelled) -> None:
+        await self._close_prose()
+        for w in self._turn_widgets:
+            if isinstance(w, ProcessGroup):
+                w.summarize()
+        conv = self.query_one("#conversation", VerticalScroll)
+        await conv.mount(Static(Text("⏹ 중단됨 · 이 턴은 히스토리에 남기지 않음", style=f"bold {self._theme_color('warning')}"), classes="turn-footer"))
+        conv.anchor()
+        self._end_turn()
+
     @on(TurnFailed)
     async def _on_turn_failed(self, msg: TurnFailed) -> None:
         await self._close_prose()
@@ -934,11 +948,38 @@ class KodaTui(App):
     # --- 종료 ---
 
     def action_graceful_quit(self) -> None:
-        # Ctrl+C 관례: 선택이 있으면 복사, 없으면 종료.
+        self._begin_close()
+
+    def action_ctrl_c(self) -> None:
+        # 선택이 있으면 복사. 아니면 1회: 답변 중단(대기 중이면 종료 예고), 2초 안에 2회: 종료.
         if self._copy_selection():
             self.screen.clear_selection()
             return
-        self._begin_close()
+        now = time.monotonic()
+        again = now - self._ctrl_c_at < _CTRL_C_WINDOW_S
+        self._ctrl_c_at = now
+        if again:
+            self._force_exit()
+            return
+        if self._busy and self.runner.cancel_turn():
+            if isinstance(self.screen, ApprovalModal):
+                self.screen.dismiss(False)   # 승인 대기로 막힌 루프를 풀어야 취소가 처리된다
+            self._activity_label = "중단 중"
+            self.notify("답변을 중단합니다. 바로 한 번 더 누르면 koda 를 종료합니다.", timeout=3)
+            return
+        self.notify("한 번 더 Ctrl+C 를 누르면 종료합니다 (Ctrl+Q 는 바로 저장 후 종료).", timeout=2)
+
+    def _force_exit(self) -> None:
+        """Ctrl+C 연타. 진행 중인 턴은 끊고 세션을 저장한 뒤 바로 나간다."""
+        self.runner.cancel_turn()
+        saved = False
+        try:
+            if self.runner.session.history:
+                self.runner.session.save()
+                saved = True
+        except Exception:
+            pass
+        self.exit(saved)
 
     def _begin_close(self) -> None:
         if self._close_requested:

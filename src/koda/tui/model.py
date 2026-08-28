@@ -43,6 +43,10 @@ class TurnDone(Message):
         super().__init__()
 
 
+class TurnCancelled(Message):
+    """사용자가 Ctrl+C 로 턴을 중단함. 부분 답변은 히스토리에 남기지 않는다."""
+
+
 class TurnFailed(Message):
     """턴 실행 예외 (chat 의 '턴 실패: ...' 와 동등)."""
 

@@ -611,27 +611,45 @@ def test_prompt_autogrows_capped(tmp_path):
     asyncio.run(go())
 
 
-def test_ctrl_c_graceful_quit(tmp_path, monkeypatch):
-    # Ctrl+C 는 입력창(TextArea) focus 상태에서도 copy 대신 Ctrl+Q 와 동일한 정상 종료(세션 저장)를 시작한다.
+def test_ctrl_c_once_cancels_turn_twice_exits(tmp_path):
+    # Ctrl+C 1회: 진행 중인 턴을 끊고(부분 답변 미저장) 앱은 살아 있다. 2초 안에 2회: 세션 저장 후 종료.
+    cancelled = []
+
     async def fake(task, ws, approver, on_token, on_phase, **kw):
-        return _result(final="답변")
+        if task == "빠른 질문":
+            on_token("답변")
+            return _result(final="답변")
+        on_token("긴 답변 시작")
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            cancelled.append(task)
+            raise
+        return _result(final="끝")
 
     async def go():
         session = Session(tmp_path)
         app = _make_app(tmp_path, fake, session=session)
-        async with app.run_test() as pilot:
-            await _submit(pilot, "질문")                       # 저장할 히스토리 생성
+        async with app.run_test(size=(100, 30)) as pilot:
+            await _submit(pilot, "빠른 질문")
             assert await _wait(pilot, _turn_done(app))
+            await _submit(pilot, "긴 질문")
+            assert await _wait(pilot, lambda: app._busy and app.runner._turn_task is not None and "긴 답변" in app._draft)
             inp = app.query_one("#prompt", PromptArea)
-            inp.focus()
             inp.text = "hi"
-            inp.selection = Selection((0, 0), (0, 2))          # 선택 상태 — 기본 ctrl+c 는 copy 라, priority 로 이겨 종료돼야 함(이게 override 실검증)
-            await pilot.pause()
+            inp.selection = Selection((0, 0), (0, 2))          # TextArea 내부 선택은 화면 선택이 아니라 copy 로 빠지지 않는다
             await pilot.press("ctrl+c")
-            assert await _wait(pilot, lambda: app._close_requested)   # graceful_quit 시작
+            assert await _wait(pilot, lambda: not app._busy and cancelled == ["긴 질문"])
+            footers = [_static_text(w) for w in app.query(".turn-footer")]
+            assert any("중단됨" in f for f in footers) and not app._exit
+            assert len(session.turns) == 1                      # 중단된 턴은 히스토리에 없다
+            await asyncio.sleep(2.2)                            # 연타 창이 지난 뒤
+            await pilot.press("ctrl+c")                         # 대기 중 1회: 예고만
+            await pilot.pause()
+            assert not app._exit
+            await pilot.press("ctrl+c")                         # 2초 안에 2회: 종료
             assert await _wait(pilot, lambda: app.return_value is not None)
-        assert app.return_value is True      # 저장 후 종료
-        assert session.path.exists()
+        assert app.return_value is True and session.path.exists()
     asyncio.run(go())
 
 

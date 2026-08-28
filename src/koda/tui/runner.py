@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 
 from ..agents import remember_from_turn, run_task, summarize_history
-from ..cli import _auto_approver, _run_with_heartbeat
+from ..cli import _auto_approver
 from ..session import Session
 from .model import (
     ApprovalRequest,
@@ -13,12 +14,24 @@ from .model import (
     PhaseEvent,
     SessionClosed,
     TokenChunk,
+    TurnCancelled,
     TurnDone,
     TurnFailed,
 )
 from .tool_handler import ToolActivityHandler
 
 APPROVAL_TIMEOUT_S = 600.0  # modal 무응답은 deny — 위험 도구가 무기한 대기하지 않는다
+HEARTBEAT_S = 30.0
+
+
+async def _heartbeat(task: asyncio.Task, on_phase, interval: float = HEARTBEAT_S):
+    """장시간 무출력 생성 중에도 살아있음을 표시한다. task 가 취소되면 CancelledError 가 그대로 올라온다."""
+    start = time.monotonic()
+    while True:
+        done, _ = await asyncio.wait({task}, timeout=interval)
+        if done:
+            return task.result()
+        on_phase(f"heartbeat:{int(time.monotonic() - start)}s")
 
 
 class ApprovalBridge:
@@ -53,16 +66,27 @@ class TuiTurnRunner:
         self.memory = memory
         self.mcp_tools = mcp_tools
         self.settings = settings   # None 이면 run_task 가 .env 에서 읽는다. /model 이 이 객체를 교체한다
+        self._turn_loop: asyncio.AbstractEventLoop | None = None   # 진행 중인 턴의 루프·태스크. cancel_turn 이 밖에서 끊는다
+        self._turn_task: asyncio.Task | None = None
         self._run_task = run_task_fn or run_task
         self.approver = _auto_approver if auto_yes else ApprovalBridge(app.post_message, approval_timeout)
 
     # --- 아래 메서드들은 worker thread 진입점: run_worker(..., thread=True) 로만 호출 ---
 
+    def cancel_turn(self) -> bool:
+        """진행 중인 턴을 취소한다(UI 스레드에서 호출). 턴이 없으면 False."""
+        loop, task = self._turn_loop, self._turn_task
+        if loop is None or task is None:
+            return False
+        loop.call_soon_threadsafe(task.cancel)
+        return True
+
     def run_turn(self, task: str) -> None:
         post = self._app.post_message
         try:
-            result = asyncio.run(_run_with_heartbeat(
-                self._run_task(
+            with asyncio.Runner() as runner:
+                self._turn_loop = runner.get_loop()
+                self._turn_task = self._turn_loop.create_task(self._run_task(
                     task, self._ws, self.approver,
                     lambda t: post(TokenChunk(t)),
                     lambda p: post(PhaseEvent(p)),
@@ -73,12 +97,16 @@ class TuiTurnRunner:
                     extra_callbacks=[ToolActivityHandler(post)],
                     trace_name=self.session.title,  # 첫 턴은 비어 있어 run_task 가 제목을 짓는다
                     settings=self.settings,
-                ),
-                lambda p: post(PhaseEvent(p)),
-            ))
+                ))
+                result = runner.run(_heartbeat(self._turn_task, lambda p: post(PhaseEvent(p))))
+        except asyncio.CancelledError:
+            post(TurnCancelled())
+            return
         except Exception as e:
             post(TurnFailed(f"{type(e).__name__}: {e}"))
             return
+        finally:
+            self._turn_loop = self._turn_task = None
         try:
             self.session.title = self.session.title or result.get("title", "")
             if not result.get("empty_final"):
