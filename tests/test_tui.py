@@ -91,7 +91,7 @@ def test_boot_widgets_exist(tmp_path):
             assert app.query_one("#prompt") is not None
             assert app.query_one("#conversation") is not None
             assert app.query_one("#statusline") is not None
-            assert "koda" in _static_text(app.query_one("#statusline"))
+            assert "컨텍스트" in _static_text(app.query_one("#statusline"))
     asyncio.run(go())
 
 
@@ -712,7 +712,7 @@ def test_resume_command_replays_history_and_switches_session(tmp_path):
             texts = [_static_text(w) for w in conv.query(".user-turn")]
             assert texts == ["» 이전 질문"]                      # 이전 user 턴이 화면에 재생됨
             assert len(conv.query(".answer")) == 1               # assistant 답변도 재생됨
-            assert "old1" in _static_text(app.query_one("#statusline"))
+            assert app.runner.session.id == "old1"
             # 이어서 대화하면 재개한 세션에 턴이 쌓인다
             await _submit(pilot, "이어서")
             assert await _wait(pilot, lambda: len(app.runner.session.turns) == 2)
@@ -1010,4 +1010,34 @@ def test_slash_command_picker_completes_and_full_command_submits(tmp_path):
             assert not picker.display                                    # 정확히 일치하는 명령은 후보가 아니다
             await pilot.press("enter")                                   # 그대로 실행됨(입력창 비워짐)
             assert await _wait(pilot, lambda: inp.text == "")
+    asyncio.run(go())
+
+
+def test_statusline_context_usage_status_and_model_switch(tmp_path, monkeypatch):
+    # 상태줄은 모델·모드·컨텍스트 잔량을 보이고, UsageUpdate 로 갱신된다. /status 는 모달, /model 은 설정을 교체하고 상태줄 모델명을 바꾼다.
+    import koda.tui.app as A
+    from koda.config import ModelSettings
+    from koda.tui.model import UsageUpdate
+
+    st = ModelSettings(_env_file=None, openai_model="deepseek-v4-flash", deepseek_api_key="dk", context_budget_tokens=10000)
+    monkeypatch.setattr(A, "select_provider", lambda settings: ("openai", ""))
+
+    async def go():
+        app = KodaTui(Workspace(tmp_path), Session(tmp_path), Memory(tmp_path), None, auto_yes=True,
+                      run_task_fn=None, model_name="deepseek-v4-flash", settings=st)
+        async with app.run_test(size=(120, 30)) as pilot:
+            line = _static_text(app.query_one("#statusline"))
+            assert line.startswith("deepseek-v4-flash · auto · 컨텍스트 0.0k/10k · 100% 남음") and "koda" not in line
+            app.post_message(UsageUpdate(7000, 500))
+            assert await _wait(pilot, lambda: "7.5k/10k · 25% 남음" in _static_text(app.query_one("#statusline")))
+            await _submit(pilot, "/status")
+            assert await _wait(pilot, lambda: type(app.screen).__name__ == "InfoScreen")
+            body = _static_text(app.screen.query_one("#info_body"))
+            assert "deepseek-v4-flash (deepseek)" in body and "세션 누적 입력 7.0k 출력 0.5k" in body
+            await pilot.press("escape")
+            assert await _wait(pilot, lambda: type(app.screen).__name__ != "InfoScreen")
+            await _submit(pilot, "/model gpt-5.6 key=ok")
+            assert await _wait(pilot, lambda: app.runner.settings.openai_model == "gpt-5.6")
+            assert app.runner.settings.openai_api_key == "ok" and app.runner.settings.use_responses_api is True
+            assert _static_text(app.query_one("#statusline")).startswith("gpt-5.6 · auto · 컨텍스트 0.0k/10k")   # 전환 시 점유 초기화
     asyncio.run(go())

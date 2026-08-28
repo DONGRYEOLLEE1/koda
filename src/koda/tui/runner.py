@@ -46,12 +46,13 @@ class TuiTurnRunner:
     """턴 파이프라인(실행 → 히스토리 반영 → 압축 → 저장)을 chat(_cmd_chat)과 동등하게 수행."""
 
     def __init__(self, app, ws, session, memory, mcp_tools: list, auto_yes: bool,
-                 run_task_fn=None, approval_timeout: float = APPROVAL_TIMEOUT_S):
+                 run_task_fn=None, approval_timeout: float = APPROVAL_TIMEOUT_S, settings=None):
         self._app = app
         self._ws = ws
         self.session = session
         self.memory = memory
         self.mcp_tools = mcp_tools
+        self.settings = settings   # None 이면 run_task 가 .env 에서 읽는다. /model 이 이 객체를 교체한다
         self._run_task = run_task_fn or run_task
         self.approver = _auto_approver if auto_yes else ApprovalBridge(app.post_message, approval_timeout)
 
@@ -71,6 +72,7 @@ class TuiTurnRunner:
                     # 툴 가시화: langfuse 와 동일한 config.callbacks 채널로만 관측(실행 로직 무변경).
                     extra_callbacks=[ToolActivityHandler(post)],
                     trace_name=self.session.title,  # 첫 턴은 비어 있어 run_task 가 제목을 짓는다
+                    settings=self.settings,
                 ),
                 lambda p: post(PhaseEvent(p)),
             ))
@@ -83,14 +85,14 @@ class TuiTurnRunner:
                 # 빈 final 은 히스토리·세션에 저장하지 않는다 — chat 과 동일한 오염 방지.
                 self.session.add_turn(task, result["final"], result["route"], result.get("verdict"))
                 try:  # 메모리는 턴마다 판정해 저장한다. 판정 실패가 턴을 실패시키지는 않는다.
-                    for kind, note in asyncio.run(remember_from_turn(self.memory, task, result["final"])):
+                    for kind, note in asyncio.run(remember_from_turn(self.memory, task, result["final"], self.settings)):
                         post(MemorySaved(kind, note))
                 except Exception as e:
                     post(PhaseEvent(f"메모리 판정 생략({type(e).__name__})"))
                 old = self.session.old_messages() if self.session.needs_compaction else []
                 if old:
                     post(PhaseEvent("문맥 압축 중…"))
-                    summary = asyncio.run(summarize_history(old))
+                    summary = asyncio.run(summarize_history(old, self.settings))
                     self.session.apply_compaction(summary)
                 self.session.save()
         except Exception as e:
@@ -130,7 +132,7 @@ class TuiTurnRunner:
             return
         try:
             before = len(self.session.history)
-            summary = asyncio.run(summarize_history(old))
+            summary = asyncio.run(summarize_history(old, self.settings))
             self.session.apply_compaction(summary)
             self.session.save()
             after = len(self.session.history)

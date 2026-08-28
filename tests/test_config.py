@@ -148,3 +148,24 @@ def test_unknown_model_needs_no_profile_and_keeps_deepseek_base(monkeypatch):
 def test_legacy_openai_model_name_alias_still_works(monkeypatch):
     monkeypatch.setenv("OPENAI_MODEL_NAME", "gpt-5.6-terra")
     assert ModelSettings(_env_file=None).openai_model == "gpt-5.6-terra"
+
+
+def test_switch_model_across_providers_and_local():
+    from koda.config import ModelSettings, switch_model
+    base = ModelSettings(_env_file=None, openai_model="deepseek-v4-flash", deepseek_api_key="dk", local_base_url="http://127.0.0.1:4000/v1", local_model="qwen3.8-27b")
+    assert base.openai_api_key == "dk" and base.openai_base_url == "https://api.deepseek.com"
+
+    same = switch_model(base, "deepseek-v4-pro")                       # 같은 provider: 키·URL 유지
+    assert same.openai_model == "deepseek-v4-pro" and same.openai_api_key == "dk" and same.openai_base_url == "https://api.deepseek.com"
+
+    oa = switch_model(base, "gpt-5.6", api_key="ok")                   # provider 전환: 프로필 재적용, 새 키
+    assert (oa.primary, oa.openai_base_url, oa.openai_api_key, oa.use_responses_api, oa.structured_method) == \
+        ("openai", "https://api.openai.com/v1", "ok", True, "json_schema")
+    assert switch_model(base, "gpt-5.6").openai_api_key == ""          # 겸용 복사된 DeepSeek 키는 OpenAI 에 쓰지 않는다
+
+    loc = switch_model(oa, "qwen3.9-30b", provider="local", base_url="http://llm-gateway.example.com:4000/v1")
+    assert (loc.primary, loc.local_model, loc.local_base_url) == ("local", "qwen3.9-30b", "http://llm-gateway.example.com:4000/v1")
+    assert switch_model(loc, "qwen3.8-27b").local_model == "qwen3.8-27b"   # local 에서 유추 불가 이름은 local 유지
+
+    back = switch_model(loc, "deepseek-v4-flash", api_key="dk2")
+    assert (back.primary, back.openai_api_key, back.openai_base_url) == ("openai", "dk2", "https://api.deepseek.com")

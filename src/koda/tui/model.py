@@ -108,6 +108,15 @@ class MemorySaved(Message):
         super().__init__()
 
 
+class UsageUpdate(Message):
+    """LLM 호출 하나의 토큰 사용량. input 은 그 호출의 프롬프트 크기(현재 컨텍스트 점유의 근사값)."""
+
+    def __init__(self, input_tokens: int, output_tokens: int) -> None:
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
+        super().__init__()
+
+
 class McpLoaded(Message):
     """MCP 서버 연결(또는 재연결)이 끝남. servers 는 연결 결과가 채워진 McpServer 목록."""
 

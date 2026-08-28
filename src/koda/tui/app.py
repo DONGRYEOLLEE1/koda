@@ -17,6 +17,8 @@ from textual.widgets import Footer, Markdown, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 
 from ..cli import _err
+from ..config import switch_model
+from ..llm import select_provider
 from ..mcp import connect_mcp, connect_server, disconnect_server, mcp_dirs
 from ..memory import Memory, parse_remember
 from ..session import Session
@@ -24,6 +26,7 @@ from ..workspace import Workspace
 from .paths import index_paths, match_paths
 from .model import (
     ApprovalRequest,
+    UsageUpdate,
     CompactDone,
     McpLoaded,
     MemorySaved,
@@ -40,6 +43,7 @@ from .runner import APPROVAL_TIMEOUT_S, TuiTurnRunner
 from .widgets import (
     ApprovalModal,
     ExploreStep,
+    InfoScreen,
     McpScreen,
     ProcessGroup,
     PromptArea,
@@ -126,6 +130,11 @@ class KodaTui(App):
     #mcp_list { height: auto; max-height: 10; }
     #mcp_detail { color: $text-muted; margin-top: 1; height: auto; max-height: 14; }
     #mcp_dirs { color: $text-muted; margin-top: 1; }
+    InfoScreen { align: center middle; }
+    #info_dialog { width: 80%; max-width: 100; height: auto; max-height: 80%; border: thick $primary;
+                   background: $surface; padding: 1 2; }
+    #info_title { margin-bottom: 1; text-style: bold; }
+    #info_body { color: $text-muted; }
     ProcessGroup, StepLine { border: none; background: transparent; padding: 0; margin: 0; }
     ProcessGroup CollapsibleTitle, StepLine CollapsibleTitle { color: $text-muted; padding: 0; }
     ProcessGroup > Contents { padding: 0 0 0 2; }
@@ -138,12 +147,14 @@ class KodaTui(App):
 
     def __init__(self, ws, session, memory, mcp_dirs: list | None, auto_yes: bool,
                  run_task_fn=None, approval_timeout: float = APPROVAL_TIMEOUT_S,
-                 model_name: str = ""):
+                 model_name: str = "", settings=None):
         super().__init__()
         self.runner = TuiTurnRunner(self, ws, session, memory, [], auto_yes,
-                                    run_task_fn=run_task_fn, approval_timeout=approval_timeout)
+                                    run_task_fn=run_task_fn, approval_timeout=approval_timeout, settings=settings)
         self._model_name = model_name
         self._mode = "auto" if auto_yes else "manual"  # 승인 모드 뱃지(statusline)
+        self._ctx_used = 0                             # 최근 LLM 호출의 프롬프트+출력 토큰 = 현재 컨텍스트 점유 근사값
+        self._session_tokens = [0, 0]                  # 세션 누적 입력/출력 토큰 (/status)
         # MCP 는 화면이 뜬 뒤 백그라운드로 붙는다(None 이면 --no-mcp). 결과는 /mcp 화면과 상태줄에 보인다.
         self._mcp_dirs = mcp_dirs
         self._mcp: list = []
@@ -182,6 +193,8 @@ class KodaTui(App):
             "/clear": ("새 스레드 시작(대화 맥락 초기화)", self._cmd_clear),
             "/resume": ("저장된 세션 재개: /resume [session-id] (인자 없으면 목록에서 선택)", self._cmd_resume),
             "/mcp": ("MCP 서버 상태·도구 보기, 재연결·끄기", self._cmd_mcp),
+            "/status": ("세션·모델·컨텍스트·MCP 상태 보기", self._cmd_status),
+            "/model": ("모델 전환: /model <모델명> [provider=local|openai|deepseek] [base_url=…] [key=…]", self._cmd_model),
             "/memory": ("메모리 내용 보기", self._cmd_memory),
             "/remember": ("메모리에 저장: /remember [semantic|episodic|procedural] <내용>", self._cmd_remember),
             "/theme": ("테마 변경: /theme <이름> (인자 없으면 목록)", self._cmd_theme),
@@ -223,19 +236,29 @@ class KodaTui(App):
                 continue
             yield command
 
-    # --- statusline: 세션 · 모델 · 턴 · 모드 · 상태 (toad 하단 statusline) ---
+    # --- statusline: 모델 · 승인 모드 · MCP · 컨텍스트 잔량 · 상태 ---
 
-    def _statusline_text(self, status: str = "대기 중") -> str:
-        s = self.runner.session
-        parts = [f"koda · {s.id}"]
-        if self._model_name:
-            parts.append(self._model_name)
-        parts.append(f"{len(s.turns)}턴")
-        parts.append(self._mode)
+    @property
+    def _ctx_budget(self) -> int:
+        return int(getattr(self.runner.settings, "context_budget_tokens", 64000) or 64000)
+
+    @staticmethod
+    def _k(n: int) -> str:
+        return f"{n / 1000:.1f}k" if n < 10_000 else f"{n // 1000}k"
+
+    def _statusline_text(self, status: str = "대기 중") -> Text:
+        t = Text()
+        t.append(self._model_name or "모델 미정", style="bold")
+        t.append(f" · {self._mode}")
         if self._mcp_dirs:
-            parts.append(self._mcp_text())
-        parts.append(status)
-        return " · ".join(parts)
+            t.append(f" · {self._mcp_text()}")
+        budget = self._ctx_budget
+        left = max(0.0, 1 - self._ctx_used / budget)
+        color = self._theme_color("success") if left > 0.5 else self._theme_color("warning") if left > 0.2 else self._theme_color("error")
+        t.append(" · 컨텍스트 ")
+        t.append(f"{self._k(self._ctx_used)}/{self._k(budget)} · {left:.0%} 남음", style=f"bold {color}")
+        t.append(f" · {status}")
+        return t
 
     def _mcp_text(self) -> str:
         if self._mcp_connecting:
@@ -246,6 +269,78 @@ class KodaTui(App):
     def _set_status(self, status: str) -> None:
         self._status = status
         self.query_one("#statusline", Static).update(self._statusline_text(status))
+
+    @on(UsageUpdate)
+    def _on_usage(self, msg: UsageUpdate) -> None:
+        self._ctx_used = msg.input_tokens + msg.output_tokens
+        self._session_tokens[0] += msg.input_tokens
+        self._session_tokens[1] += msg.output_tokens
+        self._set_status(self._status)
+
+    # --- /status · /model ---
+
+    def _active_model(self) -> tuple[str, str, str]:
+        """(provider, 모델명, base_url). 설정이 없으면 표시용 이름만."""
+        st = self.runner.settings
+        if st is None:
+            return "", self._model_name, ""
+        if st.primary == "local":
+            return "local", st.local_model, st.local_base_url
+        return st.provider_name, st.openai_model, st.openai_base_url
+
+    async def _cmd_status(self, arg: str) -> None:
+        st, s = self.runner.settings, self.runner.session
+        provider, model, base_url = self._active_model()
+        mcp = ", ".join(f"{x.name}({'꺼짐' if not x.enabled else '실패' if x.error else len(x.tools)})" for x in self._mcp) or ("연결 중" if self._mcp_connecting else "없음")
+        used_in, used_out = self._session_tokens
+        lines = [
+            f"세션        {s.id} · {len(s.turns)}턴" + (f" · {s.title}" if s.title else ""),
+            f"모델        {model} ({provider or '?'}) · {base_url}",
+            f"추론        style={getattr(st, 'reasoning_style', '?')} effort={getattr(st, 'reasoning_effort', '?')} · 구조화={getattr(st, 'structured_method', '?')}"
+            + (" · Responses API" if getattr(st, "use_responses_api", False) else ""),
+            f"컨텍스트    {self._k(self._ctx_used)} / {self._k(self._ctx_budget)} (최근 호출 기준) · 세션 누적 입력 {self._k(used_in)} 출력 {self._k(used_out)}",
+            f"승인        {self._mode}",
+            f"MCP         {mcp}",
+            f"워크스페이스 {self.runner._ws.root}",
+            f"메모리      {sum(len(self.runner.memory.items(k)) for k in ('semantic', 'episodic', 'procedural'))}개 항목",
+        ]
+        self.push_screen(InfoScreen("상태  (ESC 닫기)", "\n".join(lines)))
+
+    async def _cmd_model(self, arg: str) -> None:
+        provider, model, base_url = self._active_model()
+        usage = "사용법: /model <모델명> [provider=local|openai|deepseek] [base_url=…] [key=…]"
+        if not arg:
+            self.notify(f"현재: {model} ({provider or '?'}) · {base_url}\n{usage}", title="모델", timeout=8)
+            return
+        if self.runner.settings is None:
+            self.notify("설정을 읽지 못해 전환할 수 없습니다(.env 확인).", severity="warning", timeout=5)
+            return
+        words = arg.split()
+        opts = dict(w.split("=", 1) for w in words if "=" in w)
+        names = [w for w in words if "=" not in w]
+        if len(names) != 1:
+            self.notify(usage, severity="warning", timeout=5)
+            return
+        try:
+            new = switch_model(self.runner.settings, names[0], provider=opts.get("provider", ""),
+                               base_url=opts.get("base_url", ""), api_key=opts.get("key", ""))
+        except Exception as e:
+            self.notify(f"전환 실패: {e}", severity="error", timeout=6)
+            return
+        self.runner.settings = new
+        self._ctx_used = 0
+        self._model_name = new.local_model if new.primary == "local" else new.openai_model
+        self._set_status(self._status)
+        self.run_worker(partial(self._check_model, new), thread=True, group="model")
+
+    def _check_model(self, settings) -> None:
+        provider, reason = select_provider(settings)
+        name = settings.local_model if provider == "local" else settings.openai_model
+        base = settings.local_base_url if provider == "local" else settings.openai_base_url
+        if provider != settings.primary:
+            self.call_from_thread(self.notify, f"전환한 서버가 응답하지 않아 폴백 사용: {name} · {base} ({reason})", severity="warning", timeout=8)
+        else:
+            self.call_from_thread(self.notify, f"모델 전환: {name} · {base}", timeout=5)
 
     # --- MCP: 백그라운드 연결 · /mcp 화면 ---
 
@@ -448,6 +543,7 @@ class KodaTui(App):
         self._busy = True
         try:
             new_id = self.runner.new_thread()
+            self._ctx_used = 0
             await self.query_one("#conversation", VerticalScroll).remove_children()
             self._activity_off()
             self._set_status("대기 중")
@@ -861,19 +957,17 @@ def run_tui(args) -> int:
     # MCP 는 화면이 뜬 뒤 백그라운드로 세션당 1회 붙는다(로그는 stderr 가 아니라 /mcp 화면·상태줄).
     dirs = None if args.no_mcp else mcp_dirs(ws.root, args.mcps_dir)
 
-    # statusline 에 표시할 활성 모델명 — PRIMARY 가 아니라 실제로 선택된 provider 기준. primary 가 죽어
-    # 폴백으로 뜬 경우 PRIMARY 기준 표시는 호출되지 않는 모델을 보여 준다.
-    model_name = ""
+    # 설정은 세션이 들고 다닌다(/model 이 교체). statusline 모델명은 PRIMARY 가 아니라 실제로 선택된 provider 기준.
+    settings, model_name = None, ""
     try:
         from ..config import load_model_settings
-        from ..llm import select_provider
-        st = load_model_settings()
-        provider, _ = select_provider(st)
-        model_name = st.local_model if provider == "local" else st.openai_model
+        settings = load_model_settings()
+        provider, _ = select_provider(settings)
+        model_name = settings.local_model if provider == "local" else settings.openai_model
     except Exception:
         pass
 
-    app = KodaTui(ws, session, memory, dirs, auto_yes=args.yolo, model_name=model_name)
+    app = KodaTui(ws, session, memory, dirs, auto_yes=args.yolo, model_name=model_name, settings=settings)
     app.run()
     final = app.runner.session   # /clear 로 세션이 교체됐을 수 있으므로 최종 세션 기준
     if final.history:

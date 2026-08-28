@@ -4,7 +4,7 @@ import re
 
 from langchain_core.callbacks import BaseCallbackHandler
 
-from .model import DIFF_TOOLS, ReasoningEnd, ToolEnd, ToolStart
+from .model import DIFF_TOOLS, ReasoningEnd, ToolEnd, ToolStart, UsageUpdate
 
 _OUTPUT_LIMIT = 2000  # 툴 output 표시 상한 (긴 파일 내용·셸 출력 절단)
 _REASONING_LIMIT = 6000  # 사고 내용 표시 상한. 어려운 문제는 8k 자를 넘기도 한다
@@ -112,6 +112,9 @@ class ToolActivityHandler(BaseCallbackHandler):
                 text = (getattr(msg, "additional_kwargs", None) or {}).get("reasoning_content")
                 if text and text.strip():
                     self._post(ReasoningEnd(str(run_id), _trim(_redact(text.strip()), _REASONING_LIMIT)))
+                usage = getattr(msg, "usage_metadata", None) or {}
+                if usage.get("input_tokens"):
+                    self._post(UsageUpdate(int(usage.get("input_tokens") or 0), int(usage.get("output_tokens") or 0)))
 
     def on_tool_error(self, error, *, run_id=None, **kwargs) -> None:
         name = self._names.pop(str(run_id), "")

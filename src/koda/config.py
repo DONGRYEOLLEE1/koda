@@ -138,6 +138,38 @@ class ModelSettings(BaseSettings):
         return v
 
 
+# 프로필이 채우는 파생 값. provider 가 바뀌면 비워서 새 프로필로 다시 채운다.
+_PROFILE_FIELDS = {"openai_base_url": "", "reasoning_style": "", "structured_method": "", "use_responses_api": None}
+
+
+def switch_model(settings: ModelSettings, model: str, provider: str = "", base_url: str = "", api_key: str = "") -> ModelSettings:
+    """세션 중 모델 전환. provider 는 local|openai|deepseek 이며 비우면 모델명 접두로 유추하고, 유추가 안 되면 현재 provider 를 유지한다. .env 를 다시 읽지 않는다."""
+    values = settings.model_dump()
+    current = "local" if settings.primary == "local" else (settings.provider_name if settings.provider_name in ("openai", "deepseek") else "custom")
+    target = provider or infer_provider(model) or current
+    if target not in ("local", "openai", "deepseek", "custom"):
+        raise ValueError("provider 는 local·openai·deepseek 중 하나여야 합니다")
+    if target == "local":
+        values.update(primary="local", local_model=model)
+        if base_url:
+            values["local_base_url"] = base_url
+        if api_key:
+            values["local_api_key"] = api_key
+    else:
+        values.update(primary="openai", openai_model=model)
+        if target != current:                       # provider 가 바뀌면 base_url·reasoning·구조화 방식은 새 프로필을 따른다
+            values.update(_PROFILE_FIELDS)
+            if not api_key and values["openai_api_key"] == values["deepseek_api_key"]:
+                values["openai_api_key"] = ""       # DeepSeek 키가 겸용으로 복사돼 있던 것. 다른 provider 엔 못 쓴다
+        if base_url:
+            values["openai_base_url"] = base_url
+        if api_key:
+            values["deepseek_api_key" if target == "deepseek" else "openai_api_key"] = api_key
+            if target == "deepseek":
+                values["openai_api_key"] = api_key
+    return ModelSettings(_env_file=None, **values)  # type: ignore[call-arg]
+
+
 def load_model_settings(env_file: str | None = None) -> ModelSettings:
     """CLI/런타임 진입점. env_file 미지정 시 CWD/.env → ~/.config/koda/.env 순으로 찾는다."""
     resolved = _resolve_env_file(env_file)

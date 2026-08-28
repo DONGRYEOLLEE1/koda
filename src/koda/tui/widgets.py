@@ -372,6 +372,25 @@ class McpScreen(ModalScreen[None]):
             self._on_reconnect(s)
 
 
+class InfoScreen(ModalScreen[None]):
+    """제목과 본문 한 덩어리를 보여 주는 읽기 전용 모달(/status). ESC 로 닫는다."""
+
+    BINDINGS = [("escape", "close", "닫기")]
+
+    def __init__(self, title: str, body: str) -> None:
+        super().__init__()
+        self._title = title
+        self._body = body
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="info_dialog"):
+            yield Static(self._title, id="info_title", markup=False)
+            yield Static(self._body, id="info_body", markup=False)
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+
 class SessionPicker(ModalScreen[str | None]):
     """/resume 세션 선택 — 최근 수정순 목록에서 Enter 로 고르고 ESC 로 닫는다(None)."""
 
