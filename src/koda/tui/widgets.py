@@ -11,7 +11,7 @@ from textual.containers import Horizontal, Vertical
 from textual.content import Content
 from textual.message import Message
 from textual.screen import ModalScreen
-from textual.widgets import Button, Collapsible, OptionList, Static, TextArea
+from textual.widgets import Button, Collapsible, Input, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 
 from .model import DIFF_TOOLS
@@ -370,6 +370,91 @@ class McpScreen(ModalScreen[None]):
     def action_reconnect(self) -> None:
         if (s := self._current()) is not None:
             self._on_reconnect(s)
+
+
+_PROVIDER_ROWS = (("local", "사내 vLLM · llama.cpp 등 자체 호스팅 (LOCAL_*)"),
+                  ("openai", "OpenAI API (OPENAI_*)"),
+                  ("deepseek", "DeepSeek API (DEEPSEEK_API_KEY)"))
+
+
+class ModelScreen(ModalScreen[dict | None]):
+    """/model 대화형 전환. provider 를 고른 뒤 모델명 → base_url → API 키를 차례로 채운다. Enter 다음 칸, 마지막 칸에서 Enter 적용, ESC 뒤로/닫기."""
+
+    BINDINGS = [("escape", "back", "뒤로")]
+
+    def __init__(self, settings) -> None:
+        super().__init__()
+        self._st = settings
+        self._provider = ""
+
+    def _current(self, provider: str) -> str:
+        st = self._st
+        if provider == "local":
+            return f"{st.local_model} · {st.local_base_url}"
+        if (st.primary != "local") and st.provider_name == provider:
+            return f"{st.openai_model} · {st.openai_base_url}"
+        return ""
+
+    def compose(self) -> ComposeResult:
+        from ..config import PROVIDER_PROFILES  # noqa: F401  (기본 URL 은 _defaults 에서 쓴다)
+        with Vertical(id="model_dialog"):
+            yield Static("모델 전환  (Enter 선택 · ESC 닫기)", id="model_title", markup=False)
+            rows = []
+            for name, desc in _PROVIDER_ROWS:
+                t = Text(); t.append(f"{name:<9}", style="bold"); t.append(desc, style="dim")
+                if cur := self._current(name):
+                    t.append(f"   현재: {cur}", style="dim")
+                rows.append(Option(t, id=name))
+            yield OptionList(*rows, id="model_providers")
+            with Vertical(id="model_form"):
+                yield Static("", id="model_form_title", markup=False)
+                yield Input(placeholder="모델명", id="m_name")
+                yield Input(placeholder="base_url", id="m_url")
+                yield Input(placeholder="API 키 (비우면 기존 값 유지)", id="m_key", password=True)
+                yield Static("Enter 다음 칸 · 마지막 칸에서 Enter 적용 · ESC 뒤로", id="model_hint", markup=False)
+
+    def on_mount(self) -> None:
+        self.query_one("#model_form").display = False
+        self.query_one("#model_providers", OptionList).highlighted = 0
+
+    def _defaults(self, provider: str) -> tuple[str, str]:
+        from ..config import PROVIDER_PROFILES
+        st = self._st
+        if provider == "local":
+            return st.local_model, st.local_base_url
+        same = st.primary != "local" and st.provider_name == provider
+        return (st.openai_model if same else ""), (st.openai_base_url if same else PROVIDER_PROFILES[provider]["base_url"])
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        self._provider = str(event.option.id)
+        name, url = self._defaults(self._provider)
+        self.query_one("#model_form_title", Static).update(f"{self._provider} 설정")
+        self.query_one("#m_name", Input).value = name
+        self.query_one("#m_url", Input).value = url
+        self.query_one("#m_key", Input).value = ""
+        self.query_one("#model_providers").display = False
+        self.query_one("#model_form").display = True
+        self.query_one("#m_name", Input).focus()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id != "m_key":
+            self.focus_next()
+            return
+        name = self.query_one("#m_name", Input).value.strip()
+        if not name:
+            self.query_one("#m_name", Input).focus()
+            return
+        self.dismiss({"provider": self._provider, "model": name,
+                      "base_url": self.query_one("#m_url", Input).value.strip(),
+                      "api_key": self.query_one("#m_key", Input).value.strip()})
+
+    def action_back(self) -> None:
+        if self.query_one("#model_form").display:
+            self.query_one("#model_form").display = False
+            self.query_one("#model_providers").display = True
+            self.query_one("#model_providers", OptionList).focus()
+        else:
+            self.dismiss(None)
 
 
 class InfoScreen(ModalScreen[None]):

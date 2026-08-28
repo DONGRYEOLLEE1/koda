@@ -1048,9 +1048,7 @@ def test_notifications_with_brackets_do_not_crash(tmp_path):
     async def go():
         app = _make_app(tmp_path, None)
         async with app.run_test(size=(120, 30)) as pilot:
-            await _submit(pilot, "/model")
-            await pilot.pause()
-            await _submit(pilot, "/help")
+            await _submit(pilot, "/help")                                # /model 단축 문법의 [provider=…] 가 목록에 실린다
             await pilot.pause()
             app.runner.memory.remember("[대괄호] 가 든 메모리 [b]굵게[/b]")
             await _submit(pilot, "/memory")
@@ -1058,9 +1056,46 @@ def test_notifications_with_brackets_do_not_crash(tmp_path):
             from textual.content import Content
             notes = list(app._notifications)
             texts = [n.message for n in notes]
-            assert any("[provider=local|openai|deepseek]" in t for t in texts) and any("[대괄호]" in t for t in texts)
+            assert any("[provider=" in t for t in texts) and any("[대괄호]" in t for t in texts)
             # 헤드리스에선 토스트가 mount 되지 않으므로 토스트와 같은 방식으로 직접 파싱해 본다(markup=True 면 MarkupError).
             assert all(n.markup is False for n in notes)
             for n in notes:
                 Content.from_text(n.message, markup=n.markup)
+    asyncio.run(go())
+
+
+def test_model_wizard_picks_provider_then_fills_values(tmp_path, monkeypatch):
+    # /model 만 치면 provider 목록 → 선택한 provider 의 모델명·base_url·키 입력 창. 마지막 칸 Enter 로 적용된다.
+    import koda.tui.app as A
+    from koda.config import ModelSettings
+
+    st = ModelSettings(_env_file=None, openai_model="deepseek-v4-flash", deepseek_api_key="dk", local_model="qwen3.8-27b")
+    monkeypatch.setattr(A, "select_provider", lambda settings: (settings.primary, ""))
+
+    async def go():
+        app = KodaTui(Workspace(tmp_path), Session(tmp_path), Memory(tmp_path), None, auto_yes=True, model_name="deepseek-v4-flash", settings=st)
+        async with app.run_test(size=(120, 34)) as pilot:
+            await _submit(pilot, "/model")
+            assert await _wait(pilot, lambda: type(app.screen).__name__ == "ModelScreen")
+            assert not app.screen.query_one("#model_form").display
+            await pilot.press("down", "enter")                                            # openai 선택
+            assert await _wait(pilot, lambda: app.screen.query_one("#model_form").display)
+            assert app.screen.query_one("#m_url").value == "https://api.openai.com/v1"    # 프로필 기본값이 미리 채워짐
+            assert app.screen.query_one("#m_name").value == ""                            # 다른 provider 라 모델명은 비어 있음
+            await pilot.press(*"gpt-5.6", "enter")                                        # 모델명 → 다음 칸
+            await pilot.press("enter")                                                    # base_url 그대로 → 다음 칸
+            await pilot.press(*"ok", "enter")                                             # 키 → 적용
+            assert await _wait(pilot, lambda: app.runner.settings.openai_model == "gpt-5.6")
+            assert app.runner.settings.openai_api_key == "ok" and app.runner.settings.primary == "openai"
+            assert _static_text(app.query_one("#statusline")).startswith("gpt-5.6 · auto")
+            await _submit(pilot, "/model")
+            assert await _wait(pilot, lambda: type(app.screen).__name__ == "ModelScreen")
+            await pilot.press("enter")                                                    # local 선택: 현재 로컬 값이 채워짐
+            assert await _wait(pilot, lambda: app.screen.query_one("#model_form").display)
+            assert app.screen.query_one("#m_name").value == "qwen3.8-27b"
+            await pilot.press("escape")                                                   # 뒤로(목록)
+            assert await _wait(pilot, lambda: not app.screen.query_one("#model_form").display)
+            await pilot.press("escape")                                                   # 닫기
+            assert await _wait(pilot, lambda: type(app.screen).__name__ != "ModelScreen")
+            assert app.runner.settings.openai_model == "gpt-5.6"                          # 취소는 설정을 바꾸지 않는다
     asyncio.run(go())

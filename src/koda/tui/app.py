@@ -45,6 +45,7 @@ from .widgets import (
     ExploreStep,
     InfoScreen,
     McpScreen,
+    ModelScreen,
     ProcessGroup,
     PromptArea,
     ReasoningStep,
@@ -131,6 +132,13 @@ class KodaTui(App):
     #mcp_detail { color: $text-muted; margin-top: 1; height: auto; max-height: 14; }
     #mcp_dirs { color: $text-muted; margin-top: 1; }
     InfoScreen { align: center middle; }
+    ModelScreen { align: center middle; }
+    #model_dialog { width: 80%; max-width: 100; height: auto; border: thick $primary; background: $surface; padding: 1 2; }
+    #model_title, #model_form_title { margin-bottom: 1; text-style: bold; }
+    #model_providers { height: auto; }
+    #model_form { height: auto; }
+    #model_form Input { margin-bottom: 1; }
+    #model_hint { color: $text-muted; }
     #info_dialog { width: 80%; max-width: 100; height: auto; max-height: 80%; border: thick $primary;
                    background: $surface; padding: 1 2; }
     #info_title { margin-bottom: 1; text-style: bold; }
@@ -194,7 +202,7 @@ class KodaTui(App):
             "/resume": ("저장된 세션 재개: /resume [session-id] (인자 없으면 목록에서 선택)", self._cmd_resume),
             "/mcp": ("MCP 서버 상태·도구 보기, 재연결·끄기", self._cmd_mcp),
             "/status": ("세션·모델·컨텍스트·MCP 상태 보기", self._cmd_status),
-            "/model": ("모델 전환: /model <모델명> [provider=local|openai|deepseek] [base_url=…] [key=…]", self._cmd_model),
+            "/model": ("모델 전환 (대화형). 단축: /model <모델명> [provider=…] [base_url=…] [key=…]", self._cmd_model),
             "/memory": ("메모리 내용 보기", self._cmd_memory),
             "/remember": ("메모리에 저장: /remember [semantic|episodic|procedural] <내용>", self._cmd_remember),
             "/theme": ("테마 변경: /theme <이름> (인자 없으면 목록)", self._cmd_theme),
@@ -311,13 +319,13 @@ class KodaTui(App):
         self.push_screen(InfoScreen("상태  (ESC 닫기)", "\n".join(lines)))
 
     async def _cmd_model(self, arg: str) -> None:
-        provider, model, base_url = self._active_model()
-        usage = "사용법: /model <모델명> [provider=local|openai|deepseek] [base_url=…] [key=…]"
-        if not arg:
-            self.notify(f"현재: {model} ({provider or '?'}) · {base_url}\n{usage}", title="모델", timeout=8)
-            return
+        # 인자 없음: provider 선택 → 모델명·base_url·키 입력 창. 인자 있음: 한 줄 단축 문법.
+        usage = "사용법: /model (대화형) 또는 /model <모델명> [provider=local|openai|deepseek] [base_url=…] [key=…]"
         if self.runner.settings is None:
             self.notify("설정을 읽지 못해 전환할 수 없습니다(.env 확인).", severity="warning", timeout=5)
+            return
+        if not arg:
+            self.push_screen(ModelScreen(self.runner.settings), self._apply_model_form)
             return
         words = arg.split()
         opts = dict(w.split("=", 1) for w in words if "=" in w)
@@ -325,9 +333,15 @@ class KodaTui(App):
         if len(names) != 1:
             self.notify(usage, severity="warning", timeout=5)
             return
+        self._switch_model(names[0], opts.get("provider", ""), opts.get("base_url", ""), opts.get("key", ""))
+
+    def _apply_model_form(self, result) -> None:
+        if result:
+            self._switch_model(result["model"], result["provider"], result["base_url"], result["api_key"])
+
+    def _switch_model(self, model: str, provider: str, base_url: str, api_key: str) -> None:
         try:
-            new = switch_model(self.runner.settings, names[0], provider=opts.get("provider", ""),
-                               base_url=opts.get("base_url", ""), api_key=opts.get("key", ""))
+            new = switch_model(self.runner.settings, model, provider=provider, base_url=base_url, api_key=api_key)
         except Exception as e:
             self.notify(f"전환 실패: {e}", severity="error", timeout=6)
             return

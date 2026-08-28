@@ -25,7 +25,7 @@ koda                              # TUI 진입 (= koda tui)
 ```
 
 - `--yolo` 없이 뜨면 위험 도구(쓰기·삭제·명령·MCP) 전에 승인을 묻고, `koda --yolo` 는 자동 승인한다. 재앙적 명령(`sudo`·`rm -rf /` 류)은 `--yolo` 로도 막힌다.
-- TUI 슬래시 명령: `/help` 목록 · `/status` 세션·모델·컨텍스트·MCP 상태 · `/model <모델명> [provider=local|openai|deepseek] [base_url=…] [key=…]` 세션 중 모델 전환(모델명 접두로 provider 를 유추하고 바뀌면 그 프로필을 다시 적용) · `/resume` 저장된 세션을 골라 이전 대화를 띄우고 이어서 진행 · `/mcp` MCP 서버 상태·도구 보기와 재연결·끄기 · `/compact` 이력 압축 · `/clear` 새 스레드 · `/remember <내용>` 영구 메모리 · `/thinking [show|hide]` 사고 줄 표시 전환 · `/exit`.
+- TUI 슬래시 명령: `/help` 목록 · `/status` 세션·모델·컨텍스트·MCP 상태 · `/model` 세션 중 모델 전환(local·openai·deepseek 중 고르면 모델명·base_url·API 키를 차례로 묻는 창이 뜨고, 단축으로 `/model <모델명> [provider=…] [base_url=…] [key=…]` 도 된다. provider 가 바뀌면 그 프로필을 다시 적용) · `/resume` 저장된 세션을 골라 이전 대화를 띄우고 이어서 진행 · `/mcp` MCP 서버 상태·도구 보기와 재연결·끄기 · `/compact` 이력 압축 · `/clear` 새 스레드 · `/remember <내용>` 영구 메모리 · `/thinking [show|hide]` 사고 줄 표시 전환 · `/exit`.
 - 줄바꿈은 `Ctrl+J`(터미널이 확장 키를 지원하면 `Alt+Enter`·`Shift+Enter` 도 된다), `Ctrl+Q`/`Ctrl+C` 종료.
 - 입력창 위 상태줄은 `모델 · 승인 모드 · mcp N · 컨텍스트 사용/예산 · 남은 비율 · 상태` 다. 컨텍스트는 가장 최근 LLM 호출의 프롬프트+출력 토큰을 `CONTEXT_BUDGET_TOKENS` 와 견준 값이며 절반 아래로 내려가면 노랑, 20% 아래면 빨강으로 바뀐다. `/clear` 나 `/model` 로 초기화된다.
 - 입력창에서 `/` 를 치면 슬래시 명령 후보가 설명과 함께 뜨고 이어서 치는 글자에 맞춰 좁혀진다. ↑↓ 로 고르고 Tab/Enter 로 채우며, 명령을 다 치면 후보가 사라져 Enter 가 그대로 실행한다.
