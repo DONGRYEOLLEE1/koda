@@ -217,6 +217,10 @@ class KodaTui(App):
     def get_default_screen(self) -> Screen:
         return KodaScreen(id="_default")
 
+    def notify(self, message: str, *, title: str = "", severity="information", timeout=None, markup: bool = False) -> None:
+        # 알림 본문엔 명령 안내의 [provider=…] 나 메모리 내용처럼 대괄호가 흔하다. Rich 마크업으로 해석하면 MarkupError 로 앱이 죽는다.
+        super().notify(message, title=title, severity=severity, timeout=timeout, markup=markup)
+
     def on_mount(self) -> None:
         self.register_theme(KODA_DARK)
         self.theme = "koda-dark"

@@ -1041,3 +1041,26 @@ def test_statusline_context_usage_status_and_model_switch(tmp_path, monkeypatch)
             assert app.runner.settings.openai_api_key == "ok" and app.runner.settings.use_responses_api is True
             assert _static_text(app.query_one("#statusline")).startswith("gpt-5.6 · auto · 컨텍스트 0.0k/10k")   # 전환 시 점유 초기화
     asyncio.run(go())
+
+
+def test_notifications_with_brackets_do_not_crash(tmp_path):
+    # /model 안내와 /help 목록엔 [provider=…] 같은 대괄호가 있다. 알림이 Rich 마크업으로 해석되면 MarkupError 로 앱이 죽는다.
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await _submit(pilot, "/model")
+            await pilot.pause()
+            await _submit(pilot, "/help")
+            await pilot.pause()
+            app.runner.memory.remember("[대괄호] 가 든 메모리 [b]굵게[/b]")
+            await _submit(pilot, "/memory")
+            await pilot.pause()
+            from textual.content import Content
+            notes = list(app._notifications)
+            texts = [n.message for n in notes]
+            assert any("[provider=local|openai|deepseek]" in t for t in texts) and any("[대괄호]" in t for t in texts)
+            # 헤드리스에선 토스트가 mount 되지 않으므로 토스트와 같은 방식으로 직접 파싱해 본다(markup=True 면 MarkupError).
+            assert all(n.markup is False for n in notes)
+            for n in notes:
+                Content.from_text(n.message, markup=n.markup)
+    asyncio.run(go())
