@@ -18,6 +18,7 @@ from textual.widgets.option_list import Option
 
 from ..cli import _err
 from ..config import switch_model
+from ..gitinfo import git_ref
 from ..llm import select_provider
 from ..mcp import connect_mcp, connect_server, disconnect_server, mcp_dirs
 from ..memory import Memory, parse_remember
@@ -58,6 +59,7 @@ from .widgets import (
 
 _CTRL_C_WINDOW_S = 2.0  # 이 안에 Ctrl+C 를 한 번 더 누르면 종료
 _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"  # rich 'dots' 프레임 — toad/Claude Code 계열 표준 스피너
+_GAUGE_CELLS = 10  # 상태줄 컨텍스트 게이지 칸 수
 
 # TUI 전용 단계 라벨 (CLI 의 대괄호 라벨보다 자연스러운 동사형).
 # 색상은 theme_variables 키 (self._theme_color 로 라이트/다크 적응 조회).
@@ -109,8 +111,11 @@ class SessionRun:
                                     run_task_fn=run_task_fn, approval_timeout=approval_timeout)
         self.conv = VerticalScroll(id=f"conv_{session.id}", classes="conversation")
         self.conv.display = False        # 활성 세션만 보인다. 배경 세션은 자기 컨테이너에 계속 그린다
+        if not session.branch:   # 브랜치·기준 커밋을 세션에 새긴다(저장소가 아니면 빈 값)
+            session.branch, base = git_ref(ws.root)
+            session.base_commit = session.base_commit or base
         self.busy = False
-        self.status = "대기 중"
+        self.failed = False       # 마지막 턴이 실패했는지 (패널의 ✕ 표시)
         self.approval: ApprovalRequest | None = None   # 대기 중인 승인 요청 — 이 세션으로 전환할 때 모달을 띄운다
         self.draft = ""                  # 이번 턴 스트림 누적 — retry 리셋·finalize 폴백 판단용
         self.prose_stream = None
@@ -136,7 +141,9 @@ class SessionRun:
     def state(self) -> str:
         if self.approval is not None:
             return "approval"
-        return "running" if self.busy else "idle"
+        if self.busy:
+            return "running"
+        return "failed" if self.failed else "idle"
 
 
 class KodaTui(App):
@@ -340,19 +347,23 @@ class KodaTui(App):
     def _k(n: int) -> str:
         return f"{n / 1000:.1f}k" if n < 10_000 else f"{n // 1000}k"
 
-    def _statusline_text(self, status: str = "대기 중") -> Text:
+    def _statusline_text(self) -> Text:
+        """모델 · 승인 모드 · 브랜치 · MCP · 컨텍스트 게이지. 진행 상태는 바로 위 활동바가 말하므로 문구로 중복하지 않는다."""
+        run = self._active
         t = Text()
         t.append(self._model_name or "모델 미정", style="bold")
-        t.append(f" · {self._mode}")
+        t.append(f" · {self._mode}", style="dim")
+        if branch := run.session.branch:
+            t.append(f" · ⎇ {branch}", style="dim")
         if self._mcp_dirs:
-            t.append(f" · {self._mcp_text()}")
-        budget = self._ctx_budget
-        used = self._active.ctx_used
-        left = max(0.0, 1 - used / budget)
-        color = self._theme_color("success") if left > 0.5 else self._theme_color("warning") if left > 0.2 else self._theme_color("error")
-        t.append(" · 컨텍스트 ")
-        t.append(f"{self._k(used)}/{self._k(budget)} · {left:.0%} 남음", style=f"bold {color}")
-        t.append(f" · {status}")
+            t.append(f" · {self._mcp_text()}", style="dim")
+        used, budget = run.ctx_used, self._ctx_budget
+        ratio = min(1.0, used / budget) if budget else 0.0
+        color = self._theme_color("success") if ratio < 0.5 else self._theme_color("warning") if ratio < 0.8 else self._theme_color("error")
+        filled = round(ratio * _GAUGE_CELLS)
+        t.append("  컨텍스트 ", style="dim")
+        t.append("█" * filled + "░" * (_GAUGE_CELLS - filled), style=color)
+        t.append(f" {ratio:.0%}", style=f"bold {color}")
         return t
 
     def _mcp_text(self) -> str:
@@ -361,15 +372,8 @@ class KodaTui(App):
         failed = sum(1 for s in self._mcp if s.error and s.enabled)
         return f"mcp {len(self._mcp_tools)}" + (f" (실패 {failed})" if failed else "")
 
-    def _set_status(self, status: str, run: SessionRun | None = None) -> None:
-        """세션의 상태 문구를 바꾼다. 활성 세션일 때만 상태줄에 반영한다."""
-        run = run or self._active
-        run.status = status
-        if run is self._active:
-            self.query_one("#statusline", Static).update(self._statusline_text(status))
-
     def _refresh_statusline(self) -> None:
-        self.query_one("#statusline", Static).update(self._statusline_text(self._active.status))
+        self.query_one("#statusline", Static).update(self._statusline_text())
 
     @on(UsageUpdate)
     def _on_usage(self, msg: UsageUpdate) -> None:
@@ -399,6 +403,7 @@ class KodaTui(App):
         open_ids = ", ".join(f"{r.session.id}{'(답변 중)' if r.busy else ''}" for r in self._runs.values())
         lines = [
             f"세션        {s.id} · {len(s.turns)}턴" + (f" · {s.title}" if s.title else ""),
+            f"브랜치      {s.branch or '(git 저장소 아님)'}" + (f" · 기준 {s.base_commit}" if s.base_commit else ""),
             f"열린 세션   {len(self._runs)}개 · {open_ids}",
             f"모델        {model} ({provider or '?'}) · {base_url}",
             f"추론        style={getattr(st, 'reasoning_style', '?')} effort={getattr(st, 'reasoning_effort', '?')} · 구조화={getattr(st, 'structured_method', '?')}"
@@ -520,7 +525,7 @@ class KodaTui(App):
         for sid, run in self._runs.items():
             s = run.session
             rows.append({"id": sid, "title": s.title, "turns": len(s.turns),
-                         "first_task": s.turns[0]["task"] if s.turns else "",
+                         "first_task": s.turns[0]["task"] if s.turns else "", "branch": s.branch,
                          "answered": s.updated_at, "updated": s.updated_at or s.created_at})
         return rows
 
@@ -603,7 +608,7 @@ class KodaTui(App):
         run.conv.anchor()
         prompt = self.query_one("#prompt", PromptArea)
         prompt.disabled = run.busy          # 답변 중인 세션에는 새 질의를 넣지 않는다(다른 세션에서는 가능)
-        self._set_status(run.status, run)
+        self._refresh_statusline()
         self._sync_activity()
         self.refresh_panel()
         if run.approval is not None:
@@ -847,13 +852,14 @@ class KodaTui(App):
         run = self._active
         run.busy = True
         self.query_one("#prompt", PromptArea).disabled = True
-        self._set_status("압축 중", run)
+        self._refresh_statusline()
         self._activity_on(run, "문맥 압축")
         self.run_worker(run.runner.compact_now, thread=True, exclusive=True, group=f"turn-{run.session.id}")
 
     async def _start_turn(self, task: str) -> None:
         run = self._active
         run.busy = True
+        run.failed = False
         self.query_one("#prompt", PromptArea).disabled = True
         run.draft = ""
         run.prose_stream = None
@@ -864,14 +870,14 @@ class KodaTui(App):
         # 산문 세그먼트는 lazy mount(툴 직전 빈 세그먼트 방지).
         await run.conv.mount(Static(f"» {task}", classes="user-turn", markup=False))
         run.conv.anchor()
-        self._set_status("작업 중", run)
+        self._refresh_statusline()
         self._activity_on(run, "시작")
         # 세션별 group — 다른 세션의 턴을 취소하지 않고 나란히 돈다.
         self.run_worker(partial(run.runner.run_turn, task), thread=True,
                         exclusive=True, group=f"turn-{run.session.id}")
         self.refresh_panel()
 
-    def _end_turn(self, run: SessionRun | None = None, status: str = "대기 중") -> None:
+    def _end_turn(self, run: SessionRun | None = None) -> None:
         run = run or self._active
         run.busy = False
         # 산문 세그먼트 스트림은 _on_turn_done/_on_turn_failed 가 _close_prose 로 이미 닫았다(여긴 방어).
@@ -882,7 +888,7 @@ class KodaTui(App):
             self._finish_step(step, run_id, "(중단됨)", ok=False)
         run.tool_steps = {}
         run.approval = None
-        self._set_status(status, run)
+        self._refresh_statusline()
         if run is self._active:
             if isinstance(self.screen, ApprovalModal):
                 # approver timeout(=deny) 으로 응답 없이 턴이 끝난 고아 modal 정리 — 늦은 resolve 는
@@ -1029,6 +1035,7 @@ class KodaTui(App):
     @on(TurnFailed)
     async def _on_turn_failed(self, msg: TurnFailed) -> None:
         run = self._run_of(msg)
+        run.failed = True   # 패널에 ✕ 로 남는다. 다음 턴을 시작하면 지워진다
         await self._close_prose(run)
         err_color = f"bold {self._theme_color('error')}"
         await run.conv.mount(Static(Text(f"턴 실패: {msg.error}", style=err_color), classes="turn-footer"))
@@ -1200,7 +1207,7 @@ class KodaTui(App):
             return
         self._close_requested = True
         self.query_one("#prompt", PromptArea).disabled = True
-        self._set_status("세션 저장 중")
+        self._refresh_statusline()
         self._activity_on(self._active, "세션 저장·메모리 갱신")
         self.run_worker(self._close_all_sessions, thread=True, exclusive=True, group="close")
 

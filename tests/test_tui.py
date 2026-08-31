@@ -1051,9 +1051,10 @@ def test_statusline_context_usage_status_and_model_switch(tmp_path, monkeypatch)
                       run_task_fn=None, model_name="deepseek-v4-flash", settings=st)
         async with app.run_test(size=(120, 30)) as pilot:
             line = _static_text(app.query_one("#statusline"))
-            assert line.startswith("deepseek-v4-flash · auto · 컨텍스트 0.0k/10k · 100% 남음") and "koda" not in line
+            assert line.startswith("deepseek-v4-flash · auto") and "컨텍스트 ░░░░░░░░░░ 0%" in line
+            assert "대기 중" not in line and "koda" not in line     # 진행 상태는 활동바가 말한다
             app.post_message(UsageUpdate(7000, 500))
-            assert await _wait(pilot, lambda: "7.5k/10k · 25% 남음" in _static_text(app.query_one("#statusline")))
+            assert await _wait(pilot, lambda: "컨텍스트 ████████░░ 75%" in _static_text(app.query_one("#statusline")))
             await _submit(pilot, "/status")
             assert await _wait(pilot, lambda: type(app.screen).__name__ == "InfoScreen")
             body = _static_text(app.screen.query_one("#info_body"))
@@ -1063,7 +1064,7 @@ def test_statusline_context_usage_status_and_model_switch(tmp_path, monkeypatch)
             await _submit(pilot, "/model gpt-5.6 key=ok")
             assert await _wait(pilot, lambda: app.runner.settings.openai_model == "gpt-5.6")
             assert app.runner.settings.openai_api_key == "ok" and app.runner.settings.use_responses_api is True
-            assert _static_text(app.query_one("#statusline")).startswith("gpt-5.6 · auto · 컨텍스트 0.0k/10k")   # 전환 시 점유 초기화
+            assert "컨텍스트 ░░░░░░░░░░ 0%" in _static_text(app.query_one("#statusline"))   # 전환 시 점유 초기화
     asyncio.run(go())
 
 
@@ -1345,6 +1346,52 @@ def test_switching_back_to_busy_session_shows_its_screen_and_locks_input(tmp_pat
             go_on["go"] = True
             assert await _wait(pilot, _turn_done(app))
             assert not app.query_one("#prompt").disabled
+    asyncio.run(go())
+
+
+def test_panel_state_glyphs_and_branch(tmp_path, monkeypatch):
+    """상태 글리프 어휘: 실행 중 스피너 · 승인 대기 ◐ · 실패 ✕ · 보고 있는 세션 ● · 그 외 ○. 두 번째 줄엔 브랜치와 시각."""
+    import koda.tui.app as A
+
+    monkeypatch.setattr(A, "git_ref", lambda root: ("feat/x", "abc1234"))
+    other = Session(tmp_path, session_id="old1")
+    other.title = "지난 작업"
+    other.branch = "main"
+    other.add_turn("q", "a", route="read", verdict=None)
+    other.save()
+
+    async def boom(task, ws, approver, on_token, on_phase, **kw):
+        raise RuntimeError("boom")
+
+    async def go():
+        app = _make_app(tmp_path, boom)
+        async with app.run_test(size=(120, 30)) as pilot:
+            cur = app.runner.session
+            assert cur.branch == "feat/x" and cur.base_commit == "abc1234"   # 세션에 브랜치·기준 커밋이 새겨진다
+            assert "● " in _panel_row(app, 0) and "⎇ feat/x" in _panel_row(app, 0)
+            row_other = _panel_row(app, _panel_ids(app).index("old1"))
+            assert row_other.startswith("○ ") and "⎇ main · " in row_other
+            await _submit(pilot, "실패할 질의")
+            assert await _wait(pilot, _turn_done(app))
+            assert app._active.state == "failed" and "✕ " in _panel_row(app, 0)
+            assert "실패 · " in _panel_row(app, 0)
+    asyncio.run(go())
+
+
+def test_panel_approval_glyph_is_yellow_not_error(tmp_path):
+    """승인 대기는 ◐(노랑)이고 빨강 ✕ 는 실패 전용이다."""
+    record = []
+
+    async def go():
+        app = _make_app(tmp_path, _approval_fake(record), approval_timeout=30.0)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await _submit(pilot, "테스트 실행해줘")
+            assert await _wait(pilot, lambda: app._active.state == "approval")
+            row = app.query_one("#sp_list").get_option_at_index(0).prompt
+            assert row.plain.startswith("◐ ") and "승인 대기" in row.plain
+            assert any("yellow" in str(sp.style) for sp in row.spans) and not any("red" in str(sp.style) for sp in row.spans)
+            await pilot.click("#approve")
+            assert await _wait(pilot, _turn_done(app))
     asyncio.run(go())
 
 

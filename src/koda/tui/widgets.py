@@ -527,30 +527,36 @@ class SessionPanel(Vertical):
         yield OptionList(id="sp_list")
         yield Static("n 새로 · Enter 전환 · d 삭제 · ^B 접기", id="sp_hint", markup=False)
 
-    @staticmethod
-    def _key(s: dict, current: bool, state: str, spin: str) -> tuple:
-        return (s.get("title"), s.get("first_task"), s.get("answered"), current, state,
-                spin if state == "running" else "")
+    # 상태 글리프 어휘는 병렬 에이전트 TUI 들의 관례를 따른다: 실행 중 스피너, 입력 대기 노랑, 실패 빨강, 유휴 회색.
+    _BRANCH_LIMIT = 13   # 패널 폭(30열) 안에서 브랜치 + 시각이 한 줄에 들어가는 상한
+    _GLYPH = {"running": ("", "bold cyan"), "approval": ("◐ ", "bold yellow"),
+              "failed": ("✕ ", "bold red"), "current": ("● ", "bold green"), "idle": ("○ ", "dim")}
 
     @staticmethod
-    def _row(s: dict, current: bool, state: str, spin: str) -> Text:
+    def _key(s: dict, current: bool, state: str, spin: str) -> tuple:
+        return (s.get("title"), s.get("first_task"), s.get("branch"), s.get("answered"), current, state,
+                spin if state == "running" else "")
+
+    @classmethod
+    def _row(cls, s: dict, current: bool, state: str, spin: str) -> Text:
         name = s.get("title") or " ".join((s.get("first_task") or "").split())[:15] or "새 세션"
+        glyph, style = cls._GLYPH[state if state != "idle" else ("current" if current else "idle")]
         t = Text()
-        if state == "running":
-            t.append(f"{spin} ", style="bold yellow")
-        elif state == "approval":
-            t.append("● ", style="bold red")
-        elif current:
-            t.append("● ", style="bold green")
-        else:
-            t.append("  ")
+        t.append(f"{spin} " if state == "running" else glyph, style=style)
         t.append(name, style="bold" if current else "")
         if state == "running":
             t.append("\n  답변 중", style="yellow")
-        elif state == "approval":
-            t.append("\n  승인 대기", style="bold red")
-        else:
-            t.append(f"\n  {_ago(s['answered']) if s.get('answered') else '대화 없음'}", style="dim")
+            return t
+        if state == "approval":
+            t.append("\n  승인 대기", style="bold yellow")
+            return t
+        when = _ago(s["answered"]) if s.get("answered") else "대화 없음"
+        t.append("\n  ")
+        if state == "failed":   # 실패 줄에는 브랜치를 빼 두 줄 안에 들어가게 한다
+            t.append("실패 · ", style="bold red")
+        elif branch := s.get("branch"):
+            t.append(f"⎇ {_cut(branch, cls._BRANCH_LIMIT)} · ", style="dim")
+        t.append(when, style="dim")
         return t
 
     def refresh_sessions(self, rows: list[dict], current_id: str, states: dict | None = None, spin: str = "") -> None:

@@ -24,6 +24,8 @@ class Session:
         self.title_manual = False       # /rename 수동 제목. 압축 갱신이 덮지 않는다
         self.created_at = time.time()
         self.updated_at = 0.0           # 마지막 답변을 받은 시각. 세션 목록의 시간 표시·정렬 기준이다
+        self.branch = ""                # 이 세션이 작업한 git 브랜치 (턴마다 갱신, 저장소가 아니면 빈 값)
+        self.base_commit = ""           # 세션 시작 시점의 HEAD. 이 세션이 만든 변경의 기준점이다
 
     @property
     def path(self) -> Path:
@@ -41,7 +43,8 @@ class Session:
         data = json.dumps(
             {"id": self.id, "title": self.title, "title_tries": self.title_tries,
              "title_manual": self.title_manual, "created_at": self.created_at,
-             "updated_at": self.updated_at, "history": self.history, "turns": self.turns},
+             "updated_at": self.updated_at, "branch": self.branch, "base_commit": self.base_commit,
+             "history": self.history, "turns": self.turns},
             ensure_ascii=False, indent=1,
         )
         tmp = self.path.with_suffix(".tmp")
@@ -60,6 +63,8 @@ class Session:
         s.title_manual = data.get("title_manual", False)
         s.created_at = data.get("created_at") or s.path.stat().st_mtime
         s.updated_at = data.get("updated_at") or (s.path.stat().st_mtime if s.turns else 0.0)
+        s.branch = data.get("branch", "")
+        s.base_commit = data.get("base_commit", "")
         return s
 
     @classmethod
@@ -109,7 +114,7 @@ class Session:
 
     @classmethod
     def summaries(cls, ws_root: str | Path) -> list[dict]:
-        """세션 목록용 요약 [{id, title, turns, first_task, answered, updated}], 마지막 답변순. answered 는 마지막 답변 시각(없으면 0), updated 는 정렬 기준이다. 깨진 파일은 건너뛴다."""
+        """세션 목록용 요약 [{id, title, turns, first_task, branch, answered, updated}], 마지막 답변순. answered 는 마지막 답변 시각(없으면 0), updated 는 정렬 기준이다. 깨진 파일은 건너뛴다."""
         d = Path(ws_root).resolve() / KODA_DIR / "sessions"
         if not d.is_dir():
             return []
@@ -124,5 +129,6 @@ class Session:
             answered = data.get("updated_at") or (mtime if turns else 0.0)   # 구버전 파일은 mtime 으로 대신한다
             out.append({"id": p.stem, "title": data.get("title", ""), "turns": len(turns),
                         "first_task": (turns[0].get("task") if turns else "") or "",
+                        "branch": data.get("branch", ""),
                         "answered": answered, "updated": answered or data.get("created_at") or mtime})
         return sorted(out, key=lambda s: s["updated"], reverse=True)
