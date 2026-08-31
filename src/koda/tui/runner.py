@@ -6,13 +6,11 @@ import time
 
 from ..agents import remember_from_turn, run_task, summarize_history
 from ..cli import _auto_approver
-from ..session import Session
 from .model import (
     ApprovalRequest,
     CompactDone,
     MemorySaved,
     PhaseEvent,
-    SessionClosed,
     TokenChunk,
     TurnCancelled,
     TurnDone,
@@ -38,7 +36,7 @@ class ApprovalBridge:
     """동기 approver 구현체. .auto 속성이 없어 denygate confirm 등급을 통과 가능한 대화형 승인으로 취급된다."""
 
     def __init__(self, post, timeout: float = APPROVAL_TIMEOUT_S):
-        self._post = post  # app.post_message (thread-safe)
+        self._post = post  # runner.post (thread-safe, 세션 표시를 붙인다)
         self._timeout = timeout
 
     def __call__(self, name, args) -> bool:
@@ -56,20 +54,40 @@ class ApprovalBridge:
 
 
 class TuiTurnRunner:
-    """턴 파이프라인(실행 → 히스토리 반영 → 압축 → 저장)을 chat(_cmd_chat)과 동등하게 수행."""
+    """세션 하나의 턴 파이프라인(실행 → 히스토리 반영 → 압축 → 저장). 세션마다 하나씩 두어 서로 다른 세션이 동시에 돌 수 있다."""
 
-    def __init__(self, app, ws, session, memory, mcp_tools: list, auto_yes: bool,
-                 run_task_fn=None, approval_timeout: float = APPROVAL_TIMEOUT_S, settings=None):
+    def __init__(self, app, ws, session, memory, auto_yes: bool,
+                 run_task_fn=None, approval_timeout: float = APPROVAL_TIMEOUT_S):
         self._app = app
         self._ws = ws
         self.session = session
         self.memory = memory
-        self.mcp_tools = mcp_tools
-        self.settings = settings   # None 이면 run_task 가 .env 에서 읽는다. /model 이 이 객체를 교체한다
         self._turn_loop: asyncio.AbstractEventLoop | None = None   # 진행 중인 턴의 루프·태스크. cancel_turn 이 밖에서 끊는다
         self._turn_task: asyncio.Task | None = None
         self._run_task = run_task_fn or run_task
-        self.approver = _auto_approver if auto_yes else ApprovalBridge(app.post_message, approval_timeout)
+        self.approver = _auto_approver if auto_yes else ApprovalBridge(self.post, approval_timeout)
+
+    # 모델 설정과 MCP 도구는 세션이 아니라 앱의 것이다 — /model·/mcp 변경이 모든 세션에 같이 적용된다.
+    @property
+    def settings(self):
+        return self._app._settings
+
+    @settings.setter
+    def settings(self, value) -> None:
+        self._app._settings = value
+
+    @property
+    def mcp_tools(self) -> list:
+        return self._app._mcp_tools
+
+    @mcp_tools.setter
+    def mcp_tools(self, value: list) -> None:
+        self._app._mcp_tools = value
+
+    def post(self, msg) -> None:
+        """worker → UI 메시지. 어느 세션의 이벤트인지 표시해 동시 실행에서도 화면이 섞이지 않게 한다."""
+        msg.session_id = self.session.id
+        self._app.post_message(msg)
 
     # --- 아래 메서드들은 worker thread 진입점: run_worker(..., thread=True) 로만 호출 ---
 
@@ -82,7 +100,7 @@ class TuiTurnRunner:
         return True
 
     def run_turn(self, task: str) -> None:
-        post = self._app.post_message
+        post = self.post
         session = self.session
         # 제목이 없으면 run_task 가 턴 끝에 짓는다(빈약하면 빈 문자열). 2회 실패한 세션은 더 시도하지 않고 질의 앞부분을 trace 이름으로 쓴다.
         fallback = " ".join(task.split())[:15]
@@ -94,9 +112,9 @@ class TuiTurnRunner:
                     task, self._ws, self.approver,
                     lambda t: post(TokenChunk(t)),
                     lambda p: post(PhaseEvent(p)),
-                    history=self.session.history, mcp_tools=self.mcp_tools,
+                    history=session.history, mcp_tools=self.mcp_tools,
                     mcps_dir=None,  # MCP 는 세션당 1회 사전 로드 (AC 10)
-                    run_id=self.session.id,  # artifact 를 세션 단위로 이어 쓴다
+                    run_id=session.id,  # artifact 를 세션 단위로 이어 쓴다
                     # 툴 가시화: langfuse 와 동일한 config.callbacks 채널로만 관측(실행 로직 무변경).
                     extra_callbacks=[ToolActivityHandler(post)],
                     trace_name=trace_name,
@@ -135,33 +153,18 @@ class TuiTurnRunner:
             # 예외가 thread worker 를 뚫으면 exit_on_error 로 앱이 통째로 죽는다 — 턴 실패로 강등
             post(TurnFailed(f"세션 반영 실패 {type(e).__name__}: {e}"))
             return
-        post(TurnDone(result, turns=len(self.session.turns)))
+        post(TurnDone(result, turns=len(session.turns)))
 
-    def new_thread(self) -> str:
-        """/clear: 현재 세션을 저장하고 새 세션으로 컨텍스트를 초기화한다. 이전 세션은 --resume 로 복구 가능, 영구 메모리는 유지된다."""
-        if self.session.history:
-            try:
-                self.session.save()
-            except Exception as e:
-                # 저장 실패해도 새 스레드 진입은 막지 않되 조용히 삼키지 않고 알린다(close_session 과 일관).
-                self._app.notify(f"이전 세션 저장 실패({type(e).__name__})", severity="warning", timeout=5)
-        self.session = Session(self._ws.root)
-        return self.session.id
-
-    def resume(self, session_id: str) -> Session:
-        """/resume: 현재 세션을 저장하고 저장된 세션으로 교체한다. 없으면 FileNotFoundError."""
-        loaded = Session.load(self._ws.root, session_id)
-        if self.session.history and self.session.id != session_id:
-            try:
-                self.session.save()
-            except Exception as e:
-                self._app.notify(f"이전 세션 저장 실패({type(e).__name__})", severity="warning", timeout=5)
-        self.session = loaded
-        return loaded
+    def save_session(self) -> bool:
+        """이력이 있으면 세션을 저장한다. 저장했으면 True."""
+        if not self.session.history:
+            return False
+        self.session.save()
+        return True
 
     def compact_now(self) -> None:
         """/compact: 현재 세션 이력을 요약 압축한다(최근 턴 유지). 임계값과 무관하게 수동으로 트리거한다."""
-        post = self._app.post_message
+        post = self.post
         old = self.session.old_messages()
         if not old:
             post(CompactDone("압축할 오래된 이력이 없습니다 (최근 대화만 있음)."))
@@ -178,16 +181,3 @@ class TuiTurnRunner:
                              f"(히스토리 {before}→{after})."))
         except Exception as e:
             post(CompactDone(f"압축 실패({type(e).__name__}): {e}"))
-
-    def close_session(self) -> None:
-        """/exit·Ctrl+Q: 세션 저장. 메모리는 턴마다 이미 반영됐으므로 여기서는 하지 않는다."""
-        post = self._app.post_message
-        saved = bool(self.session.history)
-        if saved:
-            try:
-                self.session.save()
-            except Exception as e:
-                # 저장 실패로 SessionClosed 가 누락되면 앱이 종료 못 한다 — 항상 post 로 이어간다
-                post(PhaseEvent(f"세션 저장 실패({type(e).__name__})"))
-                saved = False
-        post(SessionClosed(self.session.id, saved))

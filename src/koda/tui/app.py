@@ -101,6 +101,44 @@ class KodaScreen(Screen):
         super()._forward_event(event)
 
 
+class SessionRun:
+    """세션 하나의 실행·표시 상태. 세션들이 동시에 돌아도 대화 영역·스트림·과정 그룹·토큰이 섞이지 않도록 한곳에 모은다."""
+
+    def __init__(self, app, ws, session, memory, auto_yes: bool, run_task_fn, approval_timeout: float):
+        self.runner = TuiTurnRunner(app, ws, session, memory, auto_yes,
+                                    run_task_fn=run_task_fn, approval_timeout=approval_timeout)
+        self.conv = VerticalScroll(id=f"conv_{session.id}", classes="conversation")
+        self.conv.display = False        # 활성 세션만 보인다. 배경 세션은 자기 컨테이너에 계속 그린다
+        self.busy = False
+        self.status = "대기 중"
+        self.approval: ApprovalRequest | None = None   # 대기 중인 승인 요청 — 이 세션으로 전환할 때 모달을 띄운다
+        self.draft = ""                  # 이번 턴 스트림 누적 — retry 리셋·finalize 폴백 판단용
+        self.prose_stream = None
+        self.prose_md = None             # 현재 산문 세그먼트. 열려 있는 동안 도착한 사고는 그 앞 그룹으로 간다
+        self.turn_widgets: list = []     # 이번 턴 mount 위젯(질의 Static 제외) — retry 폐기용
+        self.cur_group: ProcessGroup | None = None
+        self.prose_group: ProcessGroup | None = None
+        self.cur_explore: ExploreStep | None = None
+        self.tool_steps: dict = {}       # run_id → StepLine (ToolStart↔ToolEnd 매칭)
+        self.turn_t0 = 0.0
+        self.think_tok = 0               # reasoning 진행 (think:N) — 토큰 도착 시 해제
+        self.label = ""                  # 활동바 단계 라벨
+        self.detail = ""                 # 현재 실행 중인 도구명
+        self.tools: Counter = Counter()  # 턴 전체 툴 tally(활동바 롤업)
+        self.ctx_used = 0                # 최근 LLM 호출의 프롬프트+출력 토큰 = 현재 컨텍스트 점유 근사값
+        self.tokens = [0, 0]             # 세션 누적 입력/출력 토큰 (/status)
+
+    @property
+    def session(self):
+        return self.runner.session
+
+    @property
+    def state(self) -> str:
+        if self.approval is not None:
+            return "approval"
+        return "running" if self.busy else "idle"
+
+
 class KodaTui(App):
     TITLE = "koda"
     # 텍스트 선택은 켜 둔다. 드래그로 고른 뒤 놓으면 클립보드(OSC 52)로 복사되고, Ctrl+C 도 선택이 있으면 복사다.
@@ -114,6 +152,7 @@ class KodaTui(App):
     CSS = """
     #body { height: 1fr; }
     #main { width: 1fr; height: 1fr; }
+    #conv_stack { width: 1fr; height: 1fr; }
     #session_panel { width: 30; height: 1fr; background: $panel; padding: 0 1; }
     #session_panel.-hidden { display: none; }
     #sp_title { height: 1; text-style: bold; color: $accent; margin-bottom: 1; }
@@ -125,7 +164,7 @@ class KodaTui(App):
     #confirm_body { color: $text-muted; margin: 1 0; }
     #confirm_buttons { height: auto; align-horizontal: center; margin-top: 1; }
     #confirm_buttons Button { margin: 0 2; }
-    #conversation { width: 1fr; height: 1fr; padding: 0 1; }
+    .conversation { width: 1fr; height: 1fr; padding: 0 1; }
     #prompt { height: auto; max-height: 10; }
     #path_picker { height: auto; max-height: 12; border: none; background: $panel; padding: 0 1; }
     #activity { height: 1; padding: 0 1; }
@@ -175,50 +214,39 @@ class KodaTui(App):
                  run_task_fn=None, approval_timeout: float = APPROVAL_TIMEOUT_S,
                  model_name: str = "", settings=None):
         super().__init__()
-        self.runner = TuiTurnRunner(self, ws, session, memory, [], auto_yes,
-                                    run_task_fn=run_task_fn, approval_timeout=approval_timeout, settings=settings)
+        self._ws = ws
+        self._memory = memory
+        self._settings = settings      # /model 이 교체한다. 모든 세션이 공유(runner.settings 로 접근)
+        self._mcp_tools: list = []     # 연결된 MCP 도구 — 모든 세션이 공유(runner.mcp_tools 로 접근)
+        self._auto_yes = auto_yes
+        self._run_task_fn = run_task_fn
+        self._approval_timeout = approval_timeout
+        # 세션 하나 = SessionRun 하나. 여러 세션이 동시에 턴을 돌 수 있고, 화면 전환은 활성 세션 교체다.
+        self._runs: dict[str, SessionRun] = {}
+        self._active_id = session.id
+        self._new_run(session)
         self._model_name = model_name
         self._mode = "auto" if auto_yes else "manual"  # 승인 모드 뱃지(statusline)
         self._ctrl_c_at = 0.0                          # 마지막 Ctrl+C 시각(연타 판정)
-        self._ctx_used = 0                             # 최근 LLM 호출의 프롬프트+출력 토큰 = 현재 컨텍스트 점유 근사값
-        self._session_tokens = [0, 0]                  # 세션 누적 입력/출력 토큰 (/status)
         # MCP 는 화면이 뜬 뒤 백그라운드로 붙는다(None 이면 --no-mcp). 결과는 /mcp 화면과 상태줄에 보인다.
         self._mcp_dirs = mcp_dirs
         self._mcp: list = []
         self._mcp_connecting = bool(mcp_dirs)
-        self._status = "대기 중"
         self._path_index: list[str] = []      # @경로 후보용 워크스페이스 색인 (3초마다 갱신)
         self._path_index_at = 0.0
         self._picker_dismissed: str | None = None  # Esc 로 닫은 토큰(@경로·/명령). 같은 토큰이면 다시 띄우지 않는다
         self._picker_start = (0, 0)               # 선택 시 바꿀 구간의 시작
-        self._busy = False
         # 이름 주의: _closing 은 textual MessagePump 내부 플래그라 덮어쓰면 post_message 가
         # 조용히 드롭된다 — 쓰지 말 것.
         self._close_requested = False
-        self._draft = ""         # 현재 턴 스트림 누적 — retry 리셋·finalize 폴백 판단용
-        # 세그먼트 스트림: 산문을 툴 블록과 시간순 교차되도록 여러 Markdown 세그먼트로 쪼갠다.
-        self._cur_prose_stream = None
-        self._cur_prose_md = None        # 현재 산문 세그먼트 위젯. 열려 있는 동안 도착한 사고는 그 앞 그룹으로 간다
-        self._turn_widgets: list = []   # 이번 턴 mount 위젯(질의 Static 제외) — retry 폐기용
-        # 과정 그룹: 연속 스텝(사고·툴) 구간 하나가 ProcessGroup 하나. 본문 토큰이 오면 구간이 끊긴다.
-        self._cur_group: ProcessGroup | None = None
-        self._prose_group: ProcessGroup | None = None   # 현재 산문 세그먼트 바로 앞의 그룹
-        self._cur_explore: ExploreStep | None = None    # 살아 있는 탐색 병합 줄
         self._thinking_visible = True
-        # 활동바 상태 (모두 UI thread 전용)
-        self._turn_t0 = 0.0
         self._spin_i = 0
-        self._think_tok = 0          # reasoning 진행 (think:N) — 토큰 도착 시 해제
-        self._activity_label = ""    # 현재 단계 라벨
-        self._activity_detail = ""   # 현재 실행 중인 도구명
-        self._turn_tools: Counter = Counter()    # 턴 전체 툴 tally(활동바 롤업)
-        self._tool_steps: dict = {}  # run_id → StepLine (ToolStart↔ToolEnd 매칭)
         # 슬래시 커맨드 레지스트리 — /help 목록·placeholder 의 단일 출처.
         self._commands: dict[str, tuple[str, object]] = {
             "/help": ("사용 가능한 명령 목록", self._cmd_help),
             "/compact": ("대화 이력을 요약으로 압축", self._cmd_compact),
             "/clear": ("새 스레드 시작(대화 맥락 초기화)", self._cmd_clear),
-            "/resume": ("저장된 세션 재개: /resume [session-id] (인자 없으면 목록에서 선택)", self._cmd_resume),
+            "/resume": ("저장된 세션 열기: /resume [session-id] (인자 없으면 목록에서 선택)", self._cmd_resume),
             "/rename": ("세션 이름 바꾸기: /rename <이름> (인자 없으면 현재 이름 표시)", self._cmd_rename),
             "/mcp": ("MCP 서버 상태·도구 보기, 재연결·끄기", self._cmd_mcp),
             "/status": ("세션·모델·컨텍스트·MCP 상태 보기", self._cmd_status),
@@ -231,13 +259,40 @@ class KodaTui(App):
             "/quit": ("저장 후 종료", self._cmd_exit),
         }
 
+    # --- 세션 실행 단위 ---
+
+    @property
+    def _active(self) -> SessionRun:
+        return self._runs[self._active_id]
+
+    @property
+    def runner(self) -> TuiTurnRunner:
+        """활성 세션의 runner. 세션마다 하나씩 있고 설정·MCP 도구는 앱이 공유한다."""
+        return self._active.runner
+
+    @property
+    def conv(self) -> VerticalScroll:
+        """활성 세션의 대화 컨테이너."""
+        return self._active.conv
+
+    def _new_run(self, session) -> SessionRun:
+        run = SessionRun(self, self._ws, session, self._memory, self._auto_yes,
+                         self._run_task_fn, self._approval_timeout)
+        self._runs[session.id] = run
+        return run
+
+    def _run_of(self, msg) -> SessionRun:
+        """메시지를 낸 세션의 실행 단위. 표시가 없거나(직접 post) 이미 닫힌 세션이면 활성 세션으로 본다."""
+        return self._runs.get(getattr(msg, "session_id", "") or "", self._active)
+
     # --- 레이아웃 ---
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="body"):
             yield SessionPanel(id="session_panel")
             with Vertical(id="main"):
-                yield VerticalScroll(id="conversation")
+                with Vertical(id="conv_stack"):
+                    yield self._active.conv
                 yield Static("", id="activity", markup=False)
                 yield Static(self._statusline_text(), id="statusline", markup=False)
                 yield OptionList(id="path_picker")
@@ -255,6 +310,7 @@ class KodaTui(App):
     def on_mount(self) -> None:
         self.register_theme(KODA_DARK)
         self.theme = "koda-dark"
+        self._active.conv.display = True
         self.query_one("#activity", Static).display = False
         self.query_one("#path_picker", OptionList).display = False
         self._activity_timer = self.set_interval(0.125, self._tick_activity, pause=True)
@@ -266,7 +322,7 @@ class KodaTui(App):
             self.run_worker(partial(self._connect_all_mcp, self._mcp_dirs), thread=True, group="mcp")
 
     def get_system_commands(self, screen):
-        # maximize 는 한 위젯으로 화면을 덮어 대화·입력·상태줄을 가린다 — koda 는 이 넷이 한 화면에
+        # maximize 는 한 위젯으로 화면을 덮어 대화·입력·상태줄을 가린다. koda 는 이 넷이 한 화면에
         # 공존하는 단일 뷰라, 어떤 위젯(입력창·툴 블록 등)을 최대화해도 답변이 안 보이는 깨진 상태가
         # 된다. 그래서 커맨드 팔레트에서 maximize 명령을 통째로 뺀다(#21). maximize 의 유일한 트리거다.
         for command in super().get_system_commands(screen):
@@ -278,7 +334,7 @@ class KodaTui(App):
 
     @property
     def _ctx_budget(self) -> int:
-        return int(getattr(self.runner.settings, "context_budget_tokens", 64000) or 64000)
+        return int(getattr(self._settings, "context_budget_tokens", 64000) or 64000)
 
     @staticmethod
     def _k(n: int) -> str:
@@ -291,10 +347,11 @@ class KodaTui(App):
         if self._mcp_dirs:
             t.append(f" · {self._mcp_text()}")
         budget = self._ctx_budget
-        left = max(0.0, 1 - self._ctx_used / budget)
+        used = self._active.ctx_used
+        left = max(0.0, 1 - used / budget)
         color = self._theme_color("success") if left > 0.5 else self._theme_color("warning") if left > 0.2 else self._theme_color("error")
         t.append(" · 컨텍스트 ")
-        t.append(f"{self._k(self._ctx_used)}/{self._k(budget)} · {left:.0%} 남음", style=f"bold {color}")
+        t.append(f"{self._k(used)}/{self._k(budget)} · {left:.0%} 남음", style=f"bold {color}")
         t.append(f" · {status}")
         return t
 
@@ -302,24 +359,32 @@ class KodaTui(App):
         if self._mcp_connecting:
             return "mcp 연결 중"
         failed = sum(1 for s in self._mcp if s.error and s.enabled)
-        return f"mcp {len(self.runner.mcp_tools)}" + (f" (실패 {failed})" if failed else "")
+        return f"mcp {len(self._mcp_tools)}" + (f" (실패 {failed})" if failed else "")
 
-    def _set_status(self, status: str) -> None:
-        self._status = status
-        self.query_one("#statusline", Static).update(self._statusline_text(status))
+    def _set_status(self, status: str, run: SessionRun | None = None) -> None:
+        """세션의 상태 문구를 바꾼다. 활성 세션일 때만 상태줄에 반영한다."""
+        run = run or self._active
+        run.status = status
+        if run is self._active:
+            self.query_one("#statusline", Static).update(self._statusline_text(status))
+
+    def _refresh_statusline(self) -> None:
+        self.query_one("#statusline", Static).update(self._statusline_text(self._active.status))
 
     @on(UsageUpdate)
     def _on_usage(self, msg: UsageUpdate) -> None:
-        self._ctx_used = msg.input_tokens + msg.output_tokens
-        self._session_tokens[0] += msg.input_tokens
-        self._session_tokens[1] += msg.output_tokens
-        self._set_status(self._status)
+        run = self._run_of(msg)
+        run.ctx_used = msg.input_tokens + msg.output_tokens
+        run.tokens[0] += msg.input_tokens
+        run.tokens[1] += msg.output_tokens
+        if run is self._active:
+            self._refresh_statusline()
 
     # --- /status · /model ---
 
     def _active_model(self) -> tuple[str, str, str]:
         """(provider, 모델명, base_url). 설정이 없으면 표시용 이름만."""
-        st = self.runner.settings
+        st = self._settings
         if st is None:
             return "", self._model_name, ""
         if st.primary == "local":
@@ -327,31 +392,33 @@ class KodaTui(App):
         return st.provider_name, st.openai_model, st.openai_base_url
 
     async def _cmd_status(self, arg: str) -> None:
-        st, s = self.runner.settings, self.runner.session
+        st, s = self._settings, self.runner.session
         provider, model, base_url = self._active_model()
         mcp = ", ".join(f"{x.name}({'꺼짐' if not x.enabled else '실패' if x.error else len(x.tools)})" for x in self._mcp) or ("연결 중" if self._mcp_connecting else "없음")
-        used_in, used_out = self._session_tokens
+        used_in, used_out = self._active.tokens
+        open_ids = ", ".join(f"{r.session.id}{'(답변 중)' if r.busy else ''}" for r in self._runs.values())
         lines = [
             f"세션        {s.id} · {len(s.turns)}턴" + (f" · {s.title}" if s.title else ""),
+            f"열린 세션   {len(self._runs)}개 · {open_ids}",
             f"모델        {model} ({provider or '?'}) · {base_url}",
             f"추론        style={getattr(st, 'reasoning_style', '?')} effort={getattr(st, 'reasoning_effort', '?')} · 구조화={getattr(st, 'structured_method', '?')}"
             + (" · Responses API" if getattr(st, "use_responses_api", False) else ""),
-            f"컨텍스트    {self._k(self._ctx_used)} / {self._k(self._ctx_budget)} (최근 호출 기준) · 세션 누적 입력 {self._k(used_in)} 출력 {self._k(used_out)}",
+            f"컨텍스트    {self._k(self._active.ctx_used)} / {self._k(self._ctx_budget)} (최근 호출 기준) · 세션 누적 입력 {self._k(used_in)} 출력 {self._k(used_out)}",
             f"승인        {self._mode}",
             f"MCP         {mcp}",
-            f"워크스페이스 {self.runner._ws.root}",
-            f"메모리      {sum(len(self.runner.memory.items(k)) for k in ('semantic', 'episodic', 'procedural'))}개 항목",
+            f"워크스페이스 {self._ws.root}",
+            f"메모리      {sum(len(self._memory.items(k)) for k in ('semantic', 'episodic', 'procedural'))}개 항목",
         ]
         self.push_screen(InfoScreen("상태  (ESC 닫기)", "\n".join(lines)))
 
     async def _cmd_model(self, arg: str) -> None:
         # 인자 없음: provider 선택 → 모델명·base_url·키 입력 창. 인자 있음: 한 줄 단축 문법.
         usage = "사용법: /model (대화형) 또는 /model <모델명> [provider=local|openai|deepseek] [base_url=…] [key=…]"
-        if self.runner.settings is None:
+        if self._settings is None:
             self.notify("설정을 읽지 못해 전환할 수 없습니다(.env 확인).", severity="warning", timeout=5)
             return
         if not arg:
-            self.push_screen(ModelScreen(self.runner.settings), self._apply_model_form)
+            self.push_screen(ModelScreen(self._settings), self._apply_model_form)
             return
         words = arg.split()
         opts = dict(w.split("=", 1) for w in words if "=" in w)
@@ -367,14 +434,15 @@ class KodaTui(App):
 
     def _switch_model(self, model: str, provider: str, base_url: str, api_key: str) -> None:
         try:
-            new = switch_model(self.runner.settings, model, provider=provider, base_url=base_url, api_key=api_key)
+            new = switch_model(self._settings, model, provider=provider, base_url=base_url, api_key=api_key)
         except Exception as e:
             self.notify(f"전환 실패: {e}", severity="error", timeout=6)
             return
-        self.runner.settings = new
-        self._ctx_used = 0
+        self._settings = new
+        for run in self._runs.values():   # 모델이 바뀌면 어느 세션의 점유량도 더 이상 유효하지 않다
+            run.ctx_used = 0
         self._model_name = new.local_model if new.primary == "local" else new.openai_model
-        self._set_status(self._status)
+        self._refresh_statusline()
         self.run_worker(partial(self._check_model, new), thread=True, group="model")
 
     def _check_model(self, settings) -> None:
@@ -390,7 +458,7 @@ class KodaTui(App):
 
     def _connect_all_mcp(self, dirs) -> None:
         try:
-            servers = asyncio.run(connect_mcp(dirs, cwd=self.runner._ws.root))
+            servers = asyncio.run(connect_mcp(dirs, cwd=self._ws.root))
         except Exception as e:  # 어댑터 미설치 등. 로컬 도구만으로 계속한다
             self.call_from_thread(self.notify, f"MCP 사용 불가: {e}", severity="warning", timeout=6)
             servers = []
@@ -416,9 +484,9 @@ class KodaTui(App):
             self.screen.refresh_servers(connecting=False)
 
     def _apply_mcp(self) -> None:
-        """켜져 있고 연결된 서버의 도구만 다음 턴부터 쓴다."""
-        self.runner.mcp_tools = [t for s in self._mcp for t in s.active_tools]
-        self._set_status(self._status)
+        """켜져 있고 연결된 서버의 도구만 다음 턴부터 쓴다(모든 세션 공통)."""
+        self._mcp_tools = [t for s in self._mcp for t in s.active_tools]
+        self._refresh_statusline()
 
     async def _cmd_mcp(self, arg: str) -> None:
         def reconnect(server) -> None:
@@ -441,35 +509,31 @@ class KodaTui(App):
         """테마 색상 hex 조회. 라이트/다크 자동 적응."""
         return self.theme_variables.get(name, name)
 
-    # --- 세션 패널: 목록 · 현재 세션 상태 표시 · 재개/새로/삭제 ---
+    # --- 세션 패널: 목록 · 세션별 상태 표시 · 전환/새로/삭제 ---
 
-    def _panel_state(self) -> str:
-        if isinstance(self.screen, ApprovalModal):
-            return "approval"
-        return "running" if self._busy else "idle"
+    def _states(self) -> dict[str, str]:
+        return {sid: run.state for sid, run in self._runs.items()}
 
-    def _current_row(self) -> dict:
-        """디스크를 읽지 않고 현재 세션의 패널 항목을 만든다 (스피너 틱마다 호출)."""
-        s = self.runner.session
-        return {"id": s.id, "title": s.title, "turns": len(s.turns),
-                "first_task": s.turns[0]["task"] if s.turns else "", "updated": time.time()}
-
-    def _session_rows(self) -> list[dict]:
-        """저장된 세션 목록에 아직 저장 전인 현재 세션을 얹고, 현재 세션의 제목·턴 수는 메모리 값으로 맞춘다."""
-        rows = Session.summaries(self.runner._ws.root)
-        s = self.runner.session
-        for r in rows:
-            if r["id"] == s.id:
-                r["title"] = s.title
-                r["turns"] = len(s.turns)
-                break
-        else:
-            rows.insert(0, self._current_row())
+    def _open_rows(self) -> list[dict]:
+        """열려 있는 세션의 패널 행. 디스크를 읽지 않아 스피너 틱마다 써도 된다."""
+        rows = []
+        for sid, run in self._runs.items():
+            s = run.session
+            rows.append({"id": sid, "title": s.title, "turns": len(s.turns),
+                         "first_task": s.turns[0]["task"] if s.turns else "",
+                         "answered": s.updated_at, "updated": s.updated_at or s.created_at})
         return rows
+
+    def _panel_rows(self) -> list[dict]:
+        """저장된 세션 목록에 열려 있는(아직 저장 전일 수 있는) 세션을 얹는다. 정렬은 마지막 답변 시각순이라 세션을 오가도 순서가 흔들리지 않는다."""
+        rows = {r["id"]: r for r in Session.summaries(self._ws.root)}
+        for row in self._open_rows():
+            rows[row["id"]] = row
+        return sorted(rows.values(), key=lambda r: r["updated"], reverse=True)
 
     def refresh_panel(self) -> None:
         self.query_one(SessionPanel).refresh_sessions(
-            self._session_rows(), self.runner.session.id, self._panel_state(), self._spin())
+            self._panel_rows(), self._active_id, self._states(), self._spin())
 
     def action_toggle_panel(self) -> None:
         panel = self.query_one(SessionPanel)
@@ -479,51 +543,92 @@ class KodaTui(App):
 
     @on(SessionPanel.Resume)
     async def _on_panel_resume(self, msg: SessionPanel.Resume) -> None:
-        if msg.session_id == self.runner.session.id:
-            self.query_one("#prompt", PromptArea).focus()
-            return
-        if self._busy:
-            self.notify("턴 진행 중 — 끝난 뒤 전환할 수 있습니다.", severity="warning", timeout=4)
-            return
-        await self._resume_session(msg.session_id)
+        await self._switch_to(msg.session_id)
 
     @on(SessionPanel.New)
     async def _on_panel_new(self, msg: SessionPanel.New) -> None:
-        if self._busy:
-            self.notify("턴 진행 중 — 끝난 뒤 만들 수 있습니다.", severity="warning", timeout=4)
-            return
         await self._cmd_clear("")
-        self.query_one("#prompt", PromptArea).focus()
 
     @on(SessionPanel.Delete)
     def _on_panel_delete(self, msg: SessionPanel.Delete) -> None:
-        if msg.session_id == self.runner.session.id:
-            self.notify("현재 세션은 삭제할 수 없습니다 (새 세션으로 옮긴 뒤 지우세요).", severity="warning", timeout=4)
+        run = self._runs.get(msg.session_id)
+        if msg.session_id == self._active_id:
+            self.notify("현재 보고 있는 세션은 삭제할 수 없습니다 (다른 세션으로 옮긴 뒤 지우세요).", severity="warning", timeout=5)
+            return
+        if run is not None and run.busy:
+            self.notify("답변 중인 세션은 삭제할 수 없습니다.", severity="warning", timeout=4)
             return
 
         def done(ok) -> None:
-            if ok and Session.delete(self.runner._ws.root, msg.session_id):
+            if not ok:
+                return
+            if run is not None:   # 열려 있던 세션이면 대화 영역까지 닫는다
+                self._runs.pop(msg.session_id, None)
+                run.conv.remove()
+            if Session.delete(self._ws.root, msg.session_id):
                 self.notify(f"세션 삭제됨: {msg.session_id}", timeout=3)
             self.refresh_panel()
 
         self.push_screen(ConfirmScreen("세션 삭제", f"세션 {msg.session_id} 의 저장 파일을 삭제합니다. 되돌릴 수 없습니다.", yes="삭제"), done)
 
+    async def _switch_to(self, session_id: str) -> None:
+        """세션 전환. 이미 열려 있으면 표시만 바꾸고(진행 중인 답변은 그대로 계속된다), 아니면 불러와 이력을 재생한다."""
+        if session_id == self._active_id:
+            self.query_one("#prompt", PromptArea).focus()
+            return
+        run = self._runs.get(session_id)
+        if run is None:
+            try:
+                session = Session.load(self._ws.root, session_id)
+            except FileNotFoundError:
+                ids = ", ".join(Session.list_ids(self._ws.root)) or "없음"
+                self.notify(f"세션 없음: {session_id} (목록: {ids})", severity="warning", timeout=6)
+                return
+            run = await self._mount_run(session)
+        await self._activate(run)
+        s = run.session
+        self.notify(f"세션 전환 · {s.id} ({len(s.turns)}턴)" + (" · 답변 중" if run.busy else ""), timeout=3)
+
+    async def _mount_run(self, session) -> SessionRun:
+        run = self._new_run(session)
+        await self.query_one("#conv_stack", Vertical).mount(run.conv)
+        if session.history:
+            await self._replay_history(run, session.history)
+        return run
+
+    async def _activate(self, run: SessionRun) -> None:
+        self._active.conv.display = False
+        self._active_id = run.session.id
+        run.conv.display = True
+        run.conv.anchor()
+        prompt = self.query_one("#prompt", PromptArea)
+        prompt.disabled = run.busy          # 답변 중인 세션에는 새 질의를 넣지 않는다(다른 세션에서는 가능)
+        self._set_status(run.status, run)
+        self._sync_activity()
+        self.refresh_panel()
+        if run.approval is not None:
+            self._show_approval(run)        # 배경에서 밀린 승인 요청은 그 세션을 열 때 묻는다
+        elif not run.busy:
+            prompt.focus()
+
     # --- 활동바: 스피너 + 단계 + 경과 초 (+ reasoning 토큰) ---
 
-    def _activity_on(self, label: str) -> None:
-        self._turn_t0 = time.monotonic()
-        self._spin_i = 0
-        self._think_tok = 0
-        self._activity_label = label
-        self._activity_detail = ""
-        self._turn_tools = Counter()   # 롤업 초기화 — 새 턴 시작 깜빡임·/compact 잔존 방지
-        self.query_one("#activity", Static).display = True
+    def _activity_on(self, run: SessionRun, label: str) -> None:
+        run.turn_t0 = time.monotonic()
+        run.think_tok = 0
+        run.label = label
+        run.detail = ""
+        run.tools = Counter()   # 롤업 초기화 — 새 턴 시작 깜빡임·/compact 잔존 방지
+        self._sync_activity()
         self._tick_activity()
-        self._activity_timer.resume()
 
-    def _activity_off(self) -> None:
-        self._activity_timer.pause()
-        self.query_one("#activity", Static).display = False
+    def _sync_activity(self) -> None:
+        """활동바 표시와 타이머를 활성 세션·전체 실행 상태에 맞춘다. 배경 세션이 돌면 타이머는 계속 돈다(패널 스피너)."""
+        self.query_one("#activity", Static).display = self._active.busy
+        if any(r.busy for r in self._runs.values()):
+            self._activity_timer.resume()
+        else:
+            self._activity_timer.pause()
 
     @staticmethod
     def _fmt_elapsed(secs: int) -> str:
@@ -536,29 +641,31 @@ class KodaTui(App):
 
     def _tick_activity(self) -> None:
         self._spin_i = (self._spin_i + 1) % len(_SPINNER)
-        elapsed = int(time.monotonic() - self._turn_t0)
-        # 경과시간 3단계 색상 — 로컬 LLM 추론이 원래 느릴 수 있으므로 실패 신호가 아니라 '오래 걸리고 있다'는 표시다.
-        if elapsed < 10:
-            time_color = self._theme_color("success")
-        elif elapsed <= 30:
-            time_color = self._theme_color("warning")
-        else:
-            time_color = self._theme_color("error")
-        t = Text()
-        accent = self._theme_color("accent")
-        t.append(self._spin() + " ", style=f"bold {accent}")
-        t.append(self._activity_label or "작업 중", style="bold")
-        rollup = self._rollup(self._turn_tools).lstrip(" ·").strip()
-        if rollup:                                   # 턴 툴 롤업 우선 (read×3 edit×2)
-            t.append(f" · {rollup}", style="dim")
-        elif self._activity_detail:
-            t.append(f" · {self._activity_detail}", style="dim")
-        t.append(f" · {self._fmt_elapsed(elapsed)}", style=f"bold {time_color}")
-        if self._think_tok:
-            t.append(f" · 생각 중 ~{self._think_tok} tok", style="dim italic")
-        self.query_one("#activity", Static).update(t)
-        # 세션 패널의 현재 항목 상태(스피너·승인 대기)도 같은 주기로 갱신한다.
-        self.query_one(SessionPanel).set_current(self._current_row(), self._panel_state(), self._spin())
+        run = self._active
+        if run.busy:
+            elapsed = int(time.monotonic() - run.turn_t0)
+            # 경과시간 3단계 색상 — 로컬 LLM 추론이 원래 느릴 수 있으므로 실패 신호가 아니라 '오래 걸리고 있다'는 표시다.
+            if elapsed < 10:
+                time_color = self._theme_color("success")
+            elif elapsed <= 30:
+                time_color = self._theme_color("warning")
+            else:
+                time_color = self._theme_color("error")
+            t = Text()
+            accent = self._theme_color("accent")
+            t.append(self._spin() + " ", style=f"bold {accent}")
+            t.append(run.label or "작업 중", style="bold")
+            rollup = self._rollup(run.tools).lstrip(" ·").strip()
+            if rollup:                                   # 턴 툴 롤업 우선 (read×3 edit×2)
+                t.append(f" · {rollup}", style="dim")
+            elif run.detail:
+                t.append(f" · {run.detail}", style="dim")
+            t.append(f" · {self._fmt_elapsed(elapsed)}", style=f"bold {time_color}")
+            if run.think_tok:
+                t.append(f" · 생각 중 ~{run.think_tok} tok", style="dim italic")
+            self.query_one("#activity", Static).update(t)
+        # 패널의 세션별 상태(스피너·승인 대기)도 같은 주기로 갱신한다.
+        self.query_one(SessionPanel).set_states(self._open_rows(), self._active_id, self._states(), self._spin())
 
     def on_unmount(self) -> None:
         self._activity_timer.stop()
@@ -576,7 +683,7 @@ class KodaTui(App):
 
     def _paths(self) -> list[str]:
         if time.monotonic() - self._path_index_at > 3:
-            self._path_index = index_paths(self.runner._ws)
+            self._path_index = index_paths(self._ws)
             self._path_index_at = time.monotonic()
         return self._path_index
 
@@ -626,7 +733,7 @@ class KodaTui(App):
     @on(PromptArea.Submitted)
     async def _on_submit(self, event: PromptArea.Submitted) -> None:
         line = event.value.strip()
-        if not line or self._busy or self._close_requested:
+        if not line or self._active.busy or self._close_requested:
             return
         self.query_one("#prompt", PromptArea).clear()
         if line.startswith("/"):          # 슬래시 커맨드 → 레지스트리 디스패치
@@ -651,65 +758,40 @@ class KodaTui(App):
         self.notify("\n".join(lines), title="사용 가능한 명령", timeout=12)
 
     async def _cmd_clear(self, arg: str) -> None:
-        # /clear: 화면+대화 맥락을 비우고 새 스레드로 진입한다(이전 세션은 --resume 로 복구 가능,
-        # 메모리는 유지). 세션 교체 중 새 턴이 끼어들지 않도록 _busy 로 막는다.
-        self._busy = True
+        # /clear: 새 세션을 열고 그쪽으로 전환한다. 이전 세션은 패널에 그대로 남아 오갈 수 있다.
         try:
-            new_id = self.runner.new_thread()
-            self._ctx_used = 0
-            await self.query_one("#conversation", VerticalScroll).remove_children()
-            self._activity_off()
-            self._set_status("대기 중")
-            self.notify(f"새 스레드 시작 · 세션 {new_id}", timeout=4)
-        finally:
-            self._busy = False
-        self.refresh_panel()
+            self._active.runner.save_session()
+        except Exception as e:
+            self.notify(f"이전 세션 저장 실패({type(e).__name__})", severity="warning", timeout=5)
+        run = await self._mount_run(Session(self._ws.root))
+        await self._activate(run)
+        self.notify(f"새 스레드 시작 · 세션 {run.session.id}", timeout=4)
 
     async def _cmd_resume(self, arg: str) -> None:
-        # 인자가 있으면 바로, 없으면 목록 modal 에서 고른다. 선택 결과는 콜백으로 받아 세션을 교체하고 이력을 재생한다.
+        # 인자가 있으면 바로, 없으면 목록 modal 에서 고른다. 선택 결과는 콜백으로 받아 그 세션으로 전환한다.
         if arg:
-            await self._resume_session(arg)
+            await self._switch_to(arg)
             return
-        sessions = [s for s in Session.summaries(self.runner._ws.root) if s["id"] != self.runner.session.id]
+        sessions = [s for s in self._panel_rows() if s["id"] != self._active_id]
         if not sessions:
-            self.notify("재개할 저장된 세션이 없습니다.", timeout=4)
+            self.notify("열 수 있는 다른 세션이 없습니다.", timeout=4)
             return
 
         def picked(session_id) -> None:
             if session_id:
-                self.call_later(self._resume_session, session_id)
+                self.call_later(self._switch_to, session_id)
 
         self.push_screen(SessionPicker(sessions), picked)
 
-    async def _resume_session(self, session_id: str) -> None:
-        self._busy = True
-        try:
-            try:
-                session = self.runner.resume(session_id)
-            except FileNotFoundError:
-                ids = ", ".join(Session.list_ids(self.runner._ws.root)) or "없음"
-                self.notify(f"세션 없음: {session_id} (목록: {ids})", severity="warning", timeout=6)
-                return
-            conv = self.query_one("#conversation", VerticalScroll)
-            await conv.remove_children()
-            await self._replay_history(session.history)
-            self._activity_off()
-            self._set_status("대기 중")
-            self.notify(f"세션 재개 · {session.id} ({len(session.turns)}턴)", timeout=4)
-        finally:
-            self._busy = False
-        self.refresh_panel()
-
-    async def _replay_history(self, history: list) -> None:
-        """저장된 user/assistant 이력을 대화 스트림에 다시 그린다 — 이어서 대화할 맥락을 화면에도 보여준다."""
-        conv = self.query_one("#conversation", VerticalScroll)
+    async def _replay_history(self, run: SessionRun, history: list) -> None:
+        """저장된 user/assistant 이력을 그 세션의 대화 영역에 다시 그린다 — 이어서 대화할 맥락을 화면에도 보여준다."""
         for m in history:
             content = m.get("content") or ""
             if m.get("role") == "user":
-                await conv.mount(Static(f"» {content}", classes="user-turn", markup=False))
+                await run.conv.mount(Static(f"» {content}", classes="user-turn", markup=False))
             else:
-                await conv.mount(Markdown(content, classes="answer"))
-        conv.anchor()
+                await run.conv.mount(Markdown(content, classes="answer"))
+        run.conv.anchor()
 
     async def _cmd_rename(self, arg: str) -> None:
         s = self.runner.session
@@ -724,11 +806,11 @@ class KodaTui(App):
         self.notify(f"세션 이름: {s.title}", timeout=3)
 
     async def _cmd_memory(self, arg: str) -> None:
-        self.notify(self.runner.memory.read() or "(비어 있음)", title="메모리", timeout=10)
+        self.notify(self._memory.read() or "(비어 있음)", title="메모리", timeout=10)
 
     async def _cmd_remember(self, arg: str) -> None:
         kind, note = parse_remember(arg)
-        saved = self.runner.memory.remember(note, kind)
+        saved = self._memory.remember(note, kind)
         self.notify(f"기억함({kind})." if saved else "이미 기억하고 있거나 내용이 비어 있음.", timeout=3)
 
     @on(MemorySaved)
@@ -762,147 +844,154 @@ class KodaTui(App):
 
     async def _cmd_compact(self, arg: str) -> None:
         # 압축은 LLM 요약 호출 → 턴과 동일하게 worker thread 로. busy 가드는 _on_submit 이 이미 함.
-        self._busy = True
+        run = self._active
+        run.busy = True
         self.query_one("#prompt", PromptArea).disabled = True
-        self._set_status("압축 중")
-        self._activity_on("문맥 압축")
-        self.run_worker(self.runner.compact_now, thread=True, exclusive=True, group="turn")
+        self._set_status("압축 중", run)
+        self._activity_on(run, "문맥 압축")
+        self.run_worker(run.runner.compact_now, thread=True, exclusive=True, group=f"turn-{run.session.id}")
 
     async def _start_turn(self, task: str) -> None:
-        self._busy = True
+        run = self._active
+        run.busy = True
         self.query_one("#prompt", PromptArea).disabled = True
-        self._draft = ""
-        self._cur_prose_stream = None
-        self._cur_prose_md = None       # 이전 턴의 단락이 기준점으로 남으면 새 턴의 사고가 지난 턴에 끼어든다
-        self._cur_group = self._prose_group = self._cur_explore = None
-        self._turn_widgets = []
-        conv = self.query_one("#conversation", VerticalScroll)
-        # 질의 Static 은 _turn_widgets 에 안 넣는다 — retry 시 산문/툴만 폐기하고 질의는 보존.
+        run.draft = ""
+        run.prose_stream = None
+        run.prose_md = None       # 이전 턴의 단락이 기준점으로 남으면 새 턴의 사고가 지난 턴에 끼어든다
+        run.cur_group = run.prose_group = run.cur_explore = None
+        run.turn_widgets = []
+        # 질의 Static 은 turn_widgets 에 안 넣는다 — retry 시 산문/툴만 폐기하고 질의는 보존.
         # 산문 세그먼트는 lazy mount(툴 직전 빈 세그먼트 방지).
-        await conv.mount(Static(f"» {task}", classes="user-turn", markup=False))
-        conv.anchor()
-        self._set_status("작업 중")
-        self._activity_on("시작")
-        self.run_worker(partial(self.runner.run_turn, task), thread=True,
-                        exclusive=True, group="turn")
+        await run.conv.mount(Static(f"» {task}", classes="user-turn", markup=False))
+        run.conv.anchor()
+        self._set_status("작업 중", run)
+        self._activity_on(run, "시작")
+        # 세션별 group — 다른 세션의 턴을 취소하지 않고 나란히 돈다.
+        self.run_worker(partial(run.runner.run_turn, task), thread=True,
+                        exclusive=True, group=f"turn-{run.session.id}")
+        self.refresh_panel()
 
-    def _end_turn(self, status: str = "대기 중") -> None:
-        self._busy = False
+    def _end_turn(self, run: SessionRun | None = None, status: str = "대기 중") -> None:
+        run = run or self._active
+        run.busy = False
         # 산문 세그먼트 스트림은 _on_turn_done/_on_turn_failed 가 _close_prose 로 이미 닫았다(여긴 방어).
-        self._cur_prose_stream = None
+        run.prose_stream = None
         # 턴 종료 시 미완 스텝 정리. worker 가 툴 도중 죽으면(ToolEnd 미도착) 진행 상태가 영구히
         # 남는다. 성공 턴은 이미 비어 no-op.
-        for run_id, step in self._tool_steps.items():
+        for run_id, step in run.tool_steps.items():
             self._finish_step(step, run_id, "(중단됨)", ok=False)
-        self._tool_steps = {}
-        self._activity_off()
-        self._set_status(status)
-        if isinstance(self.screen, ApprovalModal):
-            # approver timeout(=deny) 으로 응답 없이 턴이 끝난 고아 modal 정리 — 늦은 resolve 는
-            # 이미 반환된 worker 에 no-op.
-            self.screen.dismiss(False)
-        prompt = self.query_one("#prompt", PromptArea)
-        prompt.disabled = False
-        prompt.focus()
-        self.refresh_panel()   # 턴 끝의 제목 확정·상태 복귀를 패널에 반영
+        run.tool_steps = {}
+        run.approval = None
+        self._set_status(status, run)
+        if run is self._active:
+            if isinstance(self.screen, ApprovalModal):
+                # approver timeout(=deny) 으로 응답 없이 턴이 끝난 고아 modal 정리 — 늦은 resolve 는
+                # 이미 반환된 worker 에 no-op.
+                self.screen.dismiss(False)
+            prompt = self.query_one("#prompt", PromptArea)
+            prompt.disabled = False
+            prompt.focus()
+        self._sync_activity()
+        self.refresh_panel()   # 턴 끝의 제목·마지막 답변 시각·상태를 패널에 반영
 
     # --- worker 메시지 핸들러 ---
 
     @on(TokenChunk)
     async def _on_token(self, msg: TokenChunk) -> None:
-        self._draft += msg.text
-        self._think_tok = 0  # 본문 생성 시작 → reasoning 카운터 해제
-        if self._cur_prose_stream is None:
-            await self._open_prose()   # lazy — 턴 시작·툴 직후 첫 토큰에 새 산문 세그먼트
-        await self._cur_prose_stream.write(msg.text)
+        run = self._run_of(msg)
+        run.draft += msg.text
+        run.think_tok = 0  # 본문 생성 시작 → reasoning 카운터 해제
+        if run.prose_stream is None:
+            await self._open_prose(run)   # lazy — 턴 시작·툴 직후 첫 토큰에 새 산문 세그먼트
+        await run.prose_stream.write(msg.text)
 
-    async def _open_prose(self) -> None:
+    async def _open_prose(self, run: SessionRun) -> None:
         """새 산문 세그먼트(Markdown)를 mount 하고 스트림을 연다. 첫 토큰에 lazy 호출."""
-        conv = self.query_one("#conversation", VerticalScroll)
         md = Markdown("", classes="answer")
-        await conv.mount(md)
-        self._turn_widgets.append(md)
-        self._cur_prose_md = md
-        self._cur_prose_stream = Markdown.get_stream(md)
-        # 본문이 시작되면 스텝 구간이 끊긴다. 이 단락 도중 도착하는 사고는 단락 앞 그룹(_prose_group)에 들어간다.
-        self._prose_group = self._cur_group
-        self._cur_group = self._cur_explore = None
-        conv.anchor()
+        await run.conv.mount(md)
+        run.turn_widgets.append(md)
+        run.prose_md = md
+        run.prose_stream = Markdown.get_stream(md)
+        # 본문이 시작되면 스텝 구간이 끊긴다. 이 단락 도중 도착하는 사고는 단락 앞 그룹(prose_group)에 들어간다.
+        run.prose_group = run.cur_group
+        run.cur_group = run.cur_explore = None
+        run.conv.anchor()
 
-    async def _close_prose(self) -> None:
+    async def _close_prose(self, run: SessionRun) -> None:
         """현재 산문 세그먼트 스트림을 닫는다(툴 블록 진입·턴 종료·retry 시)."""
-        if self._cur_prose_stream is None:
+        if run.prose_stream is None:
             return
         try:
-            await self._cur_prose_stream.stop()
+            await run.prose_stream.stop()
         except asyncio.CancelledError:
             pass  # 스트림 태스크가 기동 전에 취소된 극단 케이스 방어 — 핸들러 전파 시 앱이 죽는다
-        self._cur_prose_stream = None
-        self._cur_prose_md = self._prose_group = None   # 닫힌 단락은 기준점이 아니다. 다음 사고는 그 뒤의 새 그룹에 온다
+        run.prose_stream = None
+        run.prose_md = run.prose_group = None   # 닫힌 단락은 기준점이 아니다. 다음 사고는 그 뒤의 새 그룹에 온다
 
     @on(PhaseEvent)
     async def _on_phase(self, msg: PhaseEvent) -> None:
+        run = self._run_of(msg)
         phase = msg.phase
         if phase.startswith("think:"):
             n = phase[6:]
-            self._think_tok = int(n) if n.isdigit() else 0  # 활동바 전용
+            run.think_tok = int(n) if n.isdigit() else 0  # 활동바 전용
             return
         if phase.startswith("heartbeat:"):
             return  # 활동바 경과 초가 대체 — 로그·표시 불필요
         if phase.startswith("retry:"):
-            await self._reset_turn()  # 1차 시도의 산문 세그먼트·툴 블록·매핑 전부 폐기
+            await self._reset_turn(run)  # 1차 시도의 산문 세그먼트·툴 블록·매핑 전부 폐기
             reason = phase[6:]
-            self._activity_label = "재시도"
+            run.label = "재시도"
             self.notify(f"빈 응답 — 변형 재시도 ({reason})", severity="warning", timeout=4)
             return
         if phase in _PHASE_TUI:
             label, _theme = _PHASE_TUI[phase]
-            self._activity_label = label
-            self._activity_detail = ""
+            run.label = label
+            run.detail = ""
             return
         if phase.startswith("tool:"):
             name = phase[5:]
-            self._activity_detail = name
-            self._turn_tools[name] += 1  # 활동바 롤업 tally
+            run.detail = name
+            run.tools[name] += 1  # 활동바 롤업 tally
             return
         if phase.startswith("mcp:"):
             self.notify(phase[4:], timeout=3)
             return
         # 자유 형식 (문맥 압축 중…, 메모리 갱신 중… 등)
-        self._activity_label = phase
+        run.label = phase
 
-    async def _reset_turn(self) -> None:
-        """retry: 이번 시도의 산문 세그먼트·과정 그룹·매핑을 전부 폐기하고 재시작한다(질의 Static 보존). _tool_steps 를 안 비우면 뒤늦은 ToolEnd 가 stale run_id 로 제거된 위젯에 매칭된다."""
-        await self._close_prose()
-        for w in self._turn_widgets:
+    async def _reset_turn(self, run: SessionRun) -> None:
+        """retry: 이번 시도의 산문 세그먼트·과정 그룹·매핑을 전부 폐기하고 재시작한다(질의 Static 보존). tool_steps 를 안 비우면 뒤늦은 ToolEnd 가 stale run_id 로 제거된 위젯에 매칭된다."""
+        await self._close_prose(run)
+        for w in run.turn_widgets:
             try:
                 await w.remove()
             except Exception:
                 pass  # 이미 제거됐거나 mount 전인 위젯 — 폐기 목적이므로 무시
-        self._turn_widgets = []
-        self._tool_steps = {}
-        self._cur_group = self._prose_group = self._cur_explore = None
-        self._draft = ""
+        run.turn_widgets = []
+        run.tool_steps = {}
+        run.cur_group = run.prose_group = run.cur_explore = None
+        run.draft = ""
 
     @on(TurnDone)
     async def _on_turn_done(self, msg: TurnDone) -> None:
+        run = self._run_of(msg)
         result = msg.result
         final = (result.get("final") or "").strip()
-        await self._close_prose()
-        for w in self._turn_widgets:
+        await self._close_prose(run)
+        for w in run.turn_widgets:
             if isinstance(w, ProcessGroup):
                 w.summarize()
         # 스트림 전면 유실일 때만 정본을 산문 세그먼트로 폴백 mount — 스트림된 세그먼트가 있으면
         # 통째 교체 시 멀티툴 턴의 중간 산문이 소실되므로 그대로 둔다.
-        if final and not self._draft.strip():
-            conv = self.query_one("#conversation", VerticalScroll)
+        if final and not run.draft.strip():
             md = Markdown(final, classes="answer")
-            await conv.mount(md)
-            self._turn_widgets.append(md)
-            conv.anchor()
+            await run.conv.mount(md)
+            run.turn_widgets.append(md)
+            run.conv.anchor()
 
         verdict = result.get("verdict")
-        elapsed = int(time.monotonic() - self._turn_t0)
+        elapsed = int(time.monotonic() - run.turn_t0)
         footer = Text()
         footer.append(f"✓ 완료 · {elapsed}초", style=f"bold {self._theme_color('success')}")
         footer.append(f"\nroute: {result.get('route')}", style="dim")
@@ -920,101 +1009,103 @@ class KodaTui(App):
             footer.append(f"\n빈 응답 — {hint} (사유: {reason}) · 히스토리에 저장하지 않음",
                           style=self._theme_color("warning"))
             self.notify(f"빈 응답: {reason} · {hint} · 히스토리 미저장", severity="error", timeout=6)
-        conv = self.query_one("#conversation", VerticalScroll)
-        if not self._turn_widgets:   # 산문·툴 세그먼트가 하나도 없는 빈 턴 — 시각적 공백 방지
-            await conv.mount(Static("(응답 없음)", classes="turn-footer", markup=False))
-        await conv.mount(Static(footer, classes="turn-footer"))
-        conv.anchor()
-        # 세션 턴 수 갱신은 _end_turn 의 _set_status 가 statusline 을 재구성하며 반영한다.
-        self._end_turn()
+        if not run.turn_widgets:   # 산문·툴 세그먼트가 하나도 없는 빈 턴 — 시각적 공백 방지
+            await run.conv.mount(Static("(응답 없음)", classes="turn-footer", markup=False))
+        await run.conv.mount(Static(footer, classes="turn-footer"))
+        run.conv.anchor()
+        if run is not self._active:
+            self.notify(f"'{run.session.title or run.session.id}' 세션 답변 완료", timeout=4)
+        self._end_turn(run)
 
     @on(TurnCancelled)
     async def _on_turn_cancelled(self, msg: TurnCancelled) -> None:
-        await self._close_prose()
-        for w in self._turn_widgets:
+        run = self._run_of(msg)
+        await self._close_prose(run)
+        for w in run.turn_widgets:
             if isinstance(w, ProcessGroup):
                 w.summarize()
-        conv = self.query_one("#conversation", VerticalScroll)
-        await conv.mount(Static(Text("⏹ 중단됨 · 이 턴은 히스토리에 남기지 않음", style=f"bold {self._theme_color('warning')}"), classes="turn-footer"))
-        conv.anchor()
-        self._end_turn()
+        await run.conv.mount(Static(Text("⏹ 중단됨 · 이 턴은 히스토리에 남기지 않음", style=f"bold {self._theme_color('warning')}"), classes="turn-footer"))
+        run.conv.anchor()
+        self._end_turn(run)
 
     @on(TurnFailed)
     async def _on_turn_failed(self, msg: TurnFailed) -> None:
-        await self._close_prose()
-        conv = self.query_one("#conversation", VerticalScroll)
+        run = self._run_of(msg)
+        await self._close_prose(run)
         err_color = f"bold {self._theme_color('error')}"
-        await conv.mount(Static(Text(f"턴 실패: {msg.error}", style=err_color), classes="turn-footer"))
-        conv.anchor()
+        await run.conv.mount(Static(Text(f"턴 실패: {msg.error}", style=err_color), classes="turn-footer"))
+        run.conv.anchor()
         self.notify(f"턴 실패: {msg.error}", severity="error", timeout=8)
-        self._end_turn()
+        self._end_turn(run)
 
     @on(CompactDone)
     async def _on_compact_done(self, msg: CompactDone) -> None:
         # /compact worker 완료 — busy 해제·입력 재활성(턴과 동일 경로) 후 결과 안내
-        self._end_turn()
+        self._end_turn(self._run_of(msg))
         self.notify(msg.note, title="문맥 압축", timeout=5)
 
     # --- 과정 가시화 (ToolActivityHandler 콜백 → 그룹 안의 스텝 줄) ---
 
-    async def _group(self) -> ProcessGroup:
+    async def _group(self, run: SessionRun) -> ProcessGroup:
         """현재 스텝 구간의 그룹. 없으면 산문을 닫고 대화 끝에 새로 만든다."""
-        if self._cur_group is None or not self._cur_group.is_attached:
-            await self._close_prose()
-            self._cur_group = await self._mount_group()
-        return self._cur_group
+        if run.cur_group is None or not run.cur_group.is_attached:
+            await self._close_prose(run)
+            run.cur_group = await self._mount_group(run)
+        return run.cur_group
 
-    async def _mount_group(self, before=None) -> ProcessGroup:
-        conv = self.query_one("#conversation", VerticalScroll)
+    async def _mount_group(self, run: SessionRun, before=None) -> ProcessGroup:
         group = ProcessGroup()
-        await conv.mount(group, before=before)
-        self._turn_widgets.append(group)   # retry 폐기 대상(스텝은 그룹과 함께 제거된다)
-        conv.anchor()
+        await run.conv.mount(group, before=before)
+        run.turn_widgets.append(group)   # retry 폐기 대상(스텝은 그룹과 함께 제거된다)
+        run.conv.anchor()
         return group
 
     @on(ToolStart)
     async def _on_tool_start(self, msg: ToolStart) -> None:
         # 툴 진입 → 현재 산문 세그먼트를 닫아 다음 토큰이 새 세그먼트를 열게 한다(시간순 인터리브).
-        group = await self._group()
+        run = self._run_of(msg)
+        group = await self._group(run)
         # mount(await) 전에 매핑에 넣는다. 그 사이 턴이 끝나면 _end_turn 의 미완 스텝 정리가 이 스텝을 놓친다.
         if msg.target is None:
-            self._cur_explore = None      # 편집·실행 도구는 탐색 병합을 끊는다
+            run.cur_explore = None      # 편집·실행 도구는 탐색 병합을 끊는다
             step = StepLine(msg.title, msg.name)
-            self._tool_steps[msg.run_id] = step
+            run.tool_steps[msg.run_id] = step
             await group.add(step)
         else:
-            fresh = self._cur_explore is None or not self._cur_explore.is_attached or self._cur_explore.full
+            fresh = run.cur_explore is None or not run.cur_explore.is_attached or run.cur_explore.full
             if fresh:
-                self._cur_explore = ExploreStep()
-            self._cur_explore.add(msg.run_id, *msg.target)
-            self._tool_steps[msg.run_id] = self._cur_explore
+                run.cur_explore = ExploreStep()
+            run.cur_explore.add(msg.run_id, *msg.target)
+            run.tool_steps[msg.run_id] = run.cur_explore
             if fresh:
-                await group.add(self._cur_explore)
-        self.query_one("#conversation", VerticalScroll).anchor()
+                await group.add(run.cur_explore)
+        run.conv.anchor()
 
     @on(ReasoningEnd)
     async def _on_reasoning_end(self, msg: ReasoningEnd) -> None:
         # 사고는 그 호출의 본문보다 먼저 일어났으므로, 산문 세그먼트가 흐르는 중이면 그 앞 그룹에 넣는다.
-        self._cur_explore = None      # 새 LLM 라운드. 다음 탐색이 이전 라운드의 줄에 섞이면 순서가 뒤틀린다
+        run = self._run_of(msg)
+        run.cur_explore = None      # 새 LLM 라운드. 다음 탐색이 이전 라운드의 줄에 섞이면 순서가 뒤틀린다
         if not self._thinking_visible:
             return
-        if self._cur_prose_md is not None and self._cur_prose_md.is_attached:
-            if self._prose_group is None or not self._prose_group.is_attached:
-                self._prose_group = await self._mount_group(before=self._cur_prose_md)
-            group = self._prose_group
+        if run.prose_md is not None and run.prose_md.is_attached:
+            if run.prose_group is None or not run.prose_group.is_attached:
+                run.prose_group = await self._mount_group(run, before=run.prose_md)
+            group = run.prose_group
         else:
-            group = await self._group()
+            group = await self._group(run)
         await group.add(ReasoningStep(msg.text))
-        self.query_one("#conversation", VerticalScroll).anchor()
+        run.conv.anchor()
 
     @on(ToolEnd)
     async def _on_tool_end(self, msg: ToolEnd) -> None:
-        step = self._tool_steps.pop(msg.run_id, None)
+        run = self._run_of(msg)
+        step = run.tool_steps.pop(msg.run_id, None)
         if step is None:
             return
         self._finish_step(step, msg.run_id, msg.output, msg.ok)
         if not msg.ok:
-            self._cur_explore = None      # 실패가 섞이면 다음 탐색은 새 줄
+            run.cur_explore = None      # 실패가 섞이면 다음 탐색은 새 줄
 
     @staticmethod
     def _finish_step(step, run_id: str, output: str, ok: bool) -> None:
@@ -1025,13 +1116,27 @@ class KodaTui(App):
 
     @on(ApprovalRequest)
     def _on_approval(self, msg: ApprovalRequest) -> None:
+        run = self._run_of(msg)
+        run.approval = msg
+        if run is self._active:
+            self._show_approval(run)
+        else:
+            # 배경 세션의 승인은 그 세션을 열 때 묻는다 — 보고 있던 대화 위로 모달이 튀어나오지 않게 한다.
+            self.notify(f"'{run.session.title or run.session.id}' 세션이 '{msg.tool}' 승인을 기다립니다.",
+                        severity="warning", timeout=8)
+
+    def _show_approval(self, run: SessionRun) -> None:
+        msg = run.approval
+        if msg is None:
+            return
         # 라벨은 툴 롤업과 무관하게 항상 노출되므로 승인 대기를 라벨로 띄운다(detail 은 롤업에
         # 가려 안 보임). 모달 종료 시 직전 라벨로 복원한다.
-        prev_label = self._activity_label
-        self._activity_label = "승인 대기"
+        prev_label = run.label
+        run.label = "승인 대기"
 
         def resolve(ok) -> None:
-            self._activity_label = prev_label
+            run.approval = None
+            run.label = prev_label
             msg.resolve(bool(ok))
 
         # modal 닫힘(ESC)·거부·승인 결과가 resolve 로 worker 의 threading.Event 를 깨운다
@@ -1058,7 +1163,7 @@ class KodaTui(App):
         self._begin_close()
 
     def action_ctrl_c(self) -> None:
-        # 선택이 있으면 복사. 아니면 1회: 답변 중단(대기 중이면 종료 예고), 2초 안에 2회: 종료.
+        # 선택이 있으면 복사. 아니면 1회: 보고 있는 세션의 답변 중단(대기 중이면 종료 예고), 2초 안에 2회: 종료.
         if self._copy_selection():
             self.screen.clear_selection()
             return
@@ -1068,37 +1173,49 @@ class KodaTui(App):
         if again:
             self._force_exit()
             return
-        if self._busy and self.runner.cancel_turn():
+        run = self._active
+        if run.busy and run.runner.cancel_turn():
             if isinstance(self.screen, ApprovalModal):
                 self.screen.dismiss(False)   # 승인 대기로 막힌 루프를 풀어야 취소가 처리된다
-            self._activity_label = "중단 중"
+            run.label = "중단 중"
             self.notify("답변을 중단합니다. 바로 한 번 더 누르면 koda 를 종료합니다.", timeout=3)
             return
         self.notify("한 번 더 Ctrl+C 를 누르면 종료합니다 (Ctrl+Q 는 바로 저장 후 종료).", timeout=2)
 
     def _force_exit(self) -> None:
-        """Ctrl+C 연타. 진행 중인 턴은 끊고 세션을 저장한 뒤 바로 나간다."""
-        self.runner.cancel_turn()
+        """Ctrl+C 연타. 진행 중인 턴은 모두 끊고 열린 세션을 저장한 뒤 바로 나간다."""
         saved = False
-        try:
-            if self.runner.session.history:
-                self.runner.session.save()
-                saved = True
-        except Exception:
-            pass
+        for run in self._runs.values():
+            run.runner.cancel_turn()
+            try:
+                saved = run.runner.save_session() or saved
+            except Exception:
+                pass
         self.exit(saved)
 
     def _begin_close(self) -> None:
         if self._close_requested:
             return
-        if self._busy:
-            self.notify("턴 실행 중 — 완료 후 종료할 수 있습니다.", severity="warning")
+        busy = [r.session.id for r in self._runs.values() if r.busy]
+        if busy:
+            self.notify(f"턴 실행 중 — 완료 후 종료할 수 있습니다 ({', '.join(busy)})", severity="warning")
             return
         self._close_requested = True
         self.query_one("#prompt", PromptArea).disabled = True
         self._set_status("세션 저장 중")
-        self._activity_on("세션 저장·메모리 갱신")
-        self.run_worker(self.runner.close_session, thread=True, exclusive=True, group="turn")
+        self._activity_on(self._active, "세션 저장·메모리 갱신")
+        self.run_worker(self._close_all_sessions, thread=True, exclusive=True, group="close")
+
+    def _close_all_sessions(self) -> None:
+        """/exit·Ctrl+Q: 열려 있는 세션을 모두 저장한다(worker thread). 메모리는 턴마다 이미 반영됐다."""
+        saved = False
+        for run in list(self._runs.values()):
+            try:
+                saved = run.runner.save_session() or saved
+            except Exception as e:
+                # 저장 실패로 SessionClosed 가 누락되면 앱이 종료 못 한다 — 항상 post 로 이어간다
+                self.post_message(PhaseEvent(f"세션 저장 실패({type(e).__name__})"))
+        self.post_message(SessionClosed(self._active_id, saved))
 
     @on(SessionClosed)
     def _on_session_closed(self, msg: SessionClosed) -> None:
@@ -1123,7 +1240,7 @@ def run_tui(args) -> int:
     # MCP 는 화면이 뜬 뒤 백그라운드로 세션당 1회 붙는다(로그는 stderr 가 아니라 /mcp 화면·상태줄).
     dirs = None if args.no_mcp else mcp_dirs(ws.root, args.mcps_dir)
 
-    # 설정은 세션이 들고 다닌다(/model 이 교체). statusline 모델명은 PRIMARY 가 아니라 실제로 선택된 provider 기준.
+    # 설정은 앱이 들고 다닌다(/model 이 교체). statusline 모델명은 PRIMARY 가 아니라 실제로 선택된 provider 기준.
     settings, model_name = None, ""
     try:
         from ..config import load_model_settings

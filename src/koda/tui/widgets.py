@@ -492,12 +492,12 @@ def _ago(ts: float, now: float | None = None) -> str:
 
 
 class SessionPanel(Vertical):
-    """왼쪽 세션 목록. 항목은 `제목 + 상대 시간` 두 줄이고, 현재 세션 한 항목만 상태(대기 ●·답변 중 스피너·승인 대기)를 표시한다."""
+    """왼쪽 세션 목록. 항목은 `제목 + 마지막 답변 시각` 두 줄이고, 세션마다 상태(대기 ●·답변 중 스피너·승인 대기)를 따로 표시한다."""
 
     BINDINGS = [("n", "new_session", "새 세션"), ("d", "delete_session", "삭제")]
 
     class Resume(Message):
-        """목록에서 Enter/클릭으로 고른 세션 재개 요청."""
+        """목록에서 Enter/클릭으로 고른 세션으로 전환 요청."""
 
         def __init__(self, session_id: str) -> None:
             self.session_id = session_id
@@ -513,47 +513,74 @@ class SessionPanel(Vertical):
             self.session_id = session_id
             super().__init__()
 
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._drawn: dict[str, tuple] = {}   # 행별 마지막 렌더 키 — 틱마다 안 바뀐 행을 다시 그리지 않는다
+
     def compose(self) -> ComposeResult:
         yield Static("세션", id="sp_title", markup=False)
         yield OptionList(id="sp_list")
-        yield Static("n 새로 · Enter 재개 · d 삭제 · ^B 접기", id="sp_hint", markup=False)
+        yield Static("n 새로 · Enter 전환 · d 삭제 · ^B 접기", id="sp_hint", markup=False)
+
+    @staticmethod
+    def _key(s: dict, current: bool, state: str, spin: str) -> tuple:
+        return (s.get("title"), s.get("first_task"), s.get("answered"), current, state,
+                spin if state == "running" else "")
 
     @staticmethod
     def _row(s: dict, current: bool, state: str, spin: str) -> Text:
         name = s.get("title") or " ".join((s.get("first_task") or "").split())[:15] or "새 세션"
         t = Text()
-        if not current:
-            t.append("  ")
-            t.append(name)
-            t.append(f"\n  {_ago(s['updated'])}", style="dim")
-        elif state == "running":
+        if state == "running":
             t.append(f"{spin} ", style="bold yellow")
-            t.append(name, style="bold")
-            t.append("\n  답변 중", style="yellow")
         elif state == "approval":
             t.append("● ", style="bold red")
-            t.append(name, style="bold")
+        elif current:
+            t.append("● ", style="bold green")
+        else:
+            t.append("  ")
+        t.append(name, style="bold" if current else "")
+        if state == "running":
+            t.append("\n  답변 중", style="yellow")
+        elif state == "approval":
             t.append("\n  승인 대기", style="bold red")
         else:
-            t.append("● ", style="bold green")
-            t.append(name, style="bold")
-            t.append(f"\n  {_ago(s['updated'])}", style="dim")
+            t.append(f"\n  {_ago(s['answered']) if s.get('answered') else '대화 없음'}", style="dim")
         return t
 
-    def refresh_sessions(self, sessions: list[dict], current_id: str, state: str = "idle", spin: str = "") -> None:
+    def refresh_sessions(self, rows: list[dict], current_id: str, states: dict | None = None, spin: str = "") -> None:
+        """목록 전체를 다시 그린다. 패널을 조작 중이면 강조를 그대로 두고, 아니면 현재 세션에 맞춘다."""
+        states = states or {}
         lst = self.query_one("#sp_list", OptionList)
+        keep = None
+        if lst.has_focus and lst.highlighted is not None and lst.option_count:
+            keep = str(lst.get_option_at_index(lst.highlighted).id)
+        self._drawn = {}
+        options = []
+        for s in rows:
+            state = states.get(s["id"], "idle")
+            self._drawn[s["id"]] = self._key(s, s["id"] == current_id, state, spin)
+            options.append(Option(self._row(s, s["id"] == current_id, state, spin), id=s["id"]))
         lst.clear_options()
-        lst.add_options([Option(self._row(s, s["id"] == current_id, state, spin), id=s["id"]) for s in sessions])
-        ids = [s["id"] for s in sessions]
-        if current_id in ids:
-            lst.highlighted = ids.index(current_id)
+        lst.add_options(options)
+        ids = [s["id"] for s in rows]
+        target = keep if keep in ids else current_id
+        if target in ids:
+            lst.highlighted = ids.index(target)
 
-    def set_current(self, s: dict, state: str, spin: str) -> None:
-        """현재 세션 항목의 상태 표시만 바꾼다 — 목록 전체를 다시 그리지 않는다."""
-        try:
-            self.query_one("#sp_list", OptionList).replace_option_prompt(s["id"], self._row(s, True, state, spin))
-        except Exception:
-            pass  # 아직 목록에 없는 세션이면 다음 refresh 가 그린다
+    def set_states(self, rows: list[dict], current_id: str, states: dict, spin: str) -> None:
+        """열려 있는 세션 행의 상태 표시만 갱신한다 — 목록 전체를 다시 그리지 않아 강조·스크롤이 흔들리지 않는다."""
+        lst = self.query_one("#sp_list", OptionList)
+        for s in rows:
+            state = states.get(s["id"], "idle")
+            key = self._key(s, s["id"] == current_id, state, spin)
+            if self._drawn.get(s["id"]) == key:
+                continue
+            try:
+                lst.replace_option_prompt(s["id"], self._row(s, s["id"] == current_id, state, spin))
+            except Exception:
+                continue  # 아직 목록에 없는 세션이면 다음 refresh 가 그린다
+            self._drawn[s["id"]] = key
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         event.stop()

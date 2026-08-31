@@ -71,7 +71,11 @@ def _static_text(widget) -> str:
 
 
 def _turn_done(app):
-    return lambda: not app._busy and bool(app.query(".turn-footer"))
+    return lambda: not app._active.busy and bool(app.conv.query(".turn-footer"))
+
+
+def _footers(app) -> list[str]:
+    return [_static_text(w) for w in app.conv.query(".turn-footer")]
 
 
 @pytest.fixture(autouse=True)
@@ -89,7 +93,7 @@ def test_boot_widgets_exist(tmp_path):
         app = _make_app(tmp_path, run_task_fn=None)
         async with app.run_test():
             assert app.query_one("#prompt") is not None
-            assert app.query_one("#conversation") is not None
+            assert app.conv is not None
             assert app.query_one("#statusline") is not None
             assert "컨텍스트" in _static_text(app.query_one("#statusline"))
     asyncio.run(go())
@@ -109,9 +113,9 @@ def test_token_stream_accumulates(tmp_path):
         async with app.run_test() as pilot:
             await _submit(pilot, "설명해줘")
             assert await _wait(pilot, _turn_done(app))
-            assert app._draft == "# 제목\n\n본문 문단"
+            assert app._active.draft == "# 제목\n\n본문 문단"
             # 대화 영역에 user 턴 + Markdown 위젯 + footer 가 순서대로 쌓인다
-            conv = app.query_one("#conversation")
+            conv = app.conv
             texts = [_static_text(w) for w in conv.query(".user-turn")]
             assert any("설명해줘" in t for t in texts)
             footers = [_static_text(w) for w in conv.query(".turn-footer")]
@@ -139,10 +143,10 @@ def test_events_routed(tmp_path):
             await _submit(pilot, "수정해줘")
             assert await _wait(pilot, _turn_done(app))
             # 툴 이벤트는 활동바 롤업 tally 로 누적된다 (workspace_ 접두 제거)
-            assert "write_file" in app._turn_tools
-            assert app._draft == "다시 쓴 본문"             # retry 가 1차 부분 스트림 폐기
+            assert "write_file" in app._active.tools
+            assert app._active.draft == "다시 쓴 본문"             # retry 가 1차 부분 스트림 폐기
             # 검증 결과·판정 근거·trace 는 우측 패널 폐지 후 턴 footer 에 인라인된다
-            footer = "\n".join(_static_text(w) for w in app.query(".turn-footer"))
+            footer = "\n".join(_footers(app))
             assert "verdict: pass" in footer and "테스트 근거" in footer
             assert "trace: http://lf/t/1" in footer
     asyncio.run(go())
@@ -229,7 +233,7 @@ def test_empty_final_not_saved(tmp_path):
             assert await _wait(pilot, _turn_done(app))
             assert session.history == []
             assert not session.path.exists()
-            footer = "\n".join(_static_text(w) for w in app.query(".turn-footer"))
+            footer = "\n".join(_footers(app))
             assert "빈 응답" in footer and "length_truncation" in footer
     asyncio.run(go())
 
@@ -254,7 +258,7 @@ def test_turn_parity_and_session_save(tmp_path):
             await _submit(pilot, "첫 질문")
             assert await _wait(pilot, _turn_done(app))
             await _submit(pilot, "둘째 질문")
-            assert await _wait(pilot, lambda: not app._busy and len(app.query(".turn-footer")) == 2)
+            assert await _wait(pilot, lambda: not app._active.busy and len(app.conv.query(".turn-footer")) == 2)
 
         assert [c["task"] for c in calls] == ["첫 질문", "둘째 질문"]
         assert calls[0]["mcp_tools"] is mcp_tools and calls[1]["mcp_tools"] is mcp_tools
@@ -279,7 +283,7 @@ def test_turn_failed_recovers(tmp_path):
         async with app.run_test() as pilot:
             await _submit(pilot, "질문")
             assert await _wait(pilot, _turn_done(app))
-            footer = "\n".join(_static_text(w) for w in app.query(".turn-footer"))
+            footer = "\n".join(_footers(app))
             assert "턴 실패: RuntimeError: boom" in footer
             assert not app.query_one("#prompt").disabled
     asyncio.run(go())
@@ -392,10 +396,11 @@ def test_slash_clear_starts_new_thread(tmp_path):
             assert await _wait(pilot, _turn_done(app))
             old_id = app.runner.session.id
             assert app.runner.session.history                    # 턴 후 히스토리 존재
-            conv = app.query_one("#conversation", VerticalScroll)
+            conv = app.conv
             assert len(conv.children) > 0
             await _submit(pilot, "/clear")
-            assert await _wait(pilot, lambda: len(conv.children) == 0)
+            assert await _wait(pilot, lambda: app.conv is not conv)   # 새 세션은 자기 대화 영역을 갖는다
+            assert len(app.conv.children) == 0
             assert app.runner.session.id != old_id               # 새 세션(스레드)
             assert app.runner.session.history == []              # 대화 맥락 초기화
             assert Session.load(tmp_path, old_id).history         # 이전 세션은 저장됨(복구 가능)
@@ -447,7 +452,7 @@ def test_tool_step_mounts_in_group_and_finishes(tmp_path):
             assert "⎿ 3 passed" in step.title.plain and "3 passed" in _static_text(step._body)
             assert first_line("exit_code=0\nstdout:\n..      [100%]\n") == ".. [100%]"   # 공백 정규화
             assert first_line("exit_code=1\nstdout:\n\nstderr:\nboom") == "exit_code=1 · boom"
-            assert app._tool_steps == {}                  # 매칭 후 dict 에서 pop
+            assert app._active.tool_steps == {}                  # 매칭 후 dict 에서 pop
     asyncio.run(go())
 
 
@@ -476,7 +481,7 @@ def test_orphan_steps_finished_on_turn_end(tmp_path):
             await pilot.pause()
             for st in app.query(StepLine):
                 assert st.has_class("-fail") and "중단됨" in _static_text(st._body)
-            assert app._tool_steps == {}
+            assert app._active.tool_steps == {}
     asyncio.run(go())
 
 
@@ -493,7 +498,7 @@ def test_tool_output_secret_redaction():
 # --- 세그먼트 스트림: 산문↔툴 시간순 인터리브 ---
 
 def _conv_types(app):
-    return [type(c).__name__ for c in app.query_one("#conversation").children]
+    return [type(c).__name__ for c in app.conv.children]
 
 
 def test_prose_tool_interleave_order(tmp_path):
@@ -502,14 +507,14 @@ def test_prose_tool_interleave_order(tmp_path):
         app = _make_app(tmp_path, None)
         async with app.run_test() as pilot:
             app.post_message(TokenChunk("산문①"))
-            assert await _wait(pilot, lambda: bool(app.query("#conversation Markdown")))
+            assert await _wait(pilot, lambda: bool(app.conv.query("Markdown")))
             app.post_message(ToolStart("r1", "read_file", "읽기 · a.py", ("읽음", "a.py")))
             assert await _wait(pilot, lambda: bool(app.query(StepLine)))
             app.post_message(ToolEnd("r1", "출력", ok=True))
             app.post_message(TokenChunk("산문②"))
-            assert await _wait(pilot, lambda: len(app.query("#conversation Markdown")) == 2)
+            assert await _wait(pilot, lambda: len(app.conv.query("Markdown")) == 2)
             assert _conv_types(app) == ["Markdown", "ProcessGroup", "Markdown"]
-            assert app._draft == "산문①산문②"
+            assert app._active.draft == "산문①산문②"
     asyncio.run(go())
 
 
@@ -521,12 +526,12 @@ def test_retry_discards_segments_and_groups(tmp_path):
             app.post_message(TokenChunk("버릴 산문"))
             app.post_message(ToolStart("r1", "read_file", "읽기", ("읽음", "a.py")))
             assert await _wait(pilot, lambda: bool(app.query(StepLine)))
-            assert app.query("#conversation Markdown") and app._tool_steps
+            assert app.conv.query("Markdown") and app._active.tool_steps
             app.post_message(PhaseEvent("retry:length_truncation"))
             assert await _wait(pilot, lambda: not app.query(ProcessGroup))
-            assert not app.query("#conversation Markdown")   # 세그먼트 폐기(unmount)
-            assert app._tool_steps == {} and app._cur_group is None and app._cur_explore is None
-            assert app._draft == ""
+            assert not app.conv.query("Markdown")   # 세그먼트 폐기(unmount)
+            assert app._active.tool_steps == {} and app._active.cur_group is None and app._active.cur_explore is None
+            assert app._active.draft == ""
     asyncio.run(go())
 
 
@@ -545,8 +550,8 @@ def test_prompt_newline_keys_insert_no_submit(tmp_path):
                 await pilot.press(key)
                 await pilot.pause()
                 assert "\n" in inp.text, key       # 줄바꿈 삽입
-                assert not app._busy               # 제출 안 됨(턴 미시작)
-            assert not app.query(".turn-footer")
+                assert not app._active.busy               # 제출 안 됨(턴 미시작)
+            assert not app.conv.query(".turn-footer")
     asyncio.run(go())
 
 
@@ -634,13 +639,13 @@ def test_ctrl_c_once_cancels_turn_twice_exits(tmp_path):
             await _submit(pilot, "빠른 질문")
             assert await _wait(pilot, _turn_done(app))
             await _submit(pilot, "긴 질문")
-            assert await _wait(pilot, lambda: app._busy and app.runner._turn_task is not None and "긴 답변" in app._draft)
+            assert await _wait(pilot, lambda: app._active.busy and app.runner._turn_task is not None and "긴 답변" in app._active.draft)
             inp = app.query_one("#prompt", PromptArea)
             inp.text = "hi"
             inp.selection = Selection((0, 0), (0, 2))          # TextArea 내부 선택은 화면 선택이 아니라 copy 로 빠지지 않는다
             await pilot.press("ctrl+c")
-            assert await _wait(pilot, lambda: not app._busy and cancelled == ["긴 질문"])
-            footers = [_static_text(w) for w in app.query(".turn-footer")]
+            assert await _wait(pilot, lambda: not app._active.busy and cancelled == ["긴 질문"])
+            footers = _footers(app)
             assert any("중단됨" in f for f in footers) and not app._exit
             assert len(session.turns) == 1                      # 중단된 턴은 히스토리에 없다
             await asyncio.sleep(2.2)                            # 연타 창이 지난 뒤
@@ -726,7 +731,7 @@ def test_resume_command_replays_history_and_switches_session(tmp_path):
         async with app.run_test() as pilot:
             await _submit(pilot, "/resume old1")
             assert await _wait(pilot, lambda: app.runner.session.id == "old1")
-            conv = app.query_one("#conversation")
+            conv = app.conv
             texts = [_static_text(w) for w in conv.query(".user-turn")]
             assert texts == ["» 이전 질문"]                      # 이전 user 턴이 화면에 재생됨
             assert len(conv.query(".answer")) == 1               # assistant 답변도 재생됨
@@ -747,7 +752,7 @@ def test_resume_unknown_id_keeps_current_session(tmp_path):
         async with app.run_test() as pilot:
             await _submit(pilot, "/resume nope")
             await pilot.pause()
-            assert app.runner.session.id == cur and not app._busy
+            assert app.runner.session.id == cur and not app._active.busy
 
     asyncio.run(run())
 
@@ -767,7 +772,7 @@ def test_drag_selection_copies_to_clipboard(tmp_path):
         async with app.run_test(size=(100, 30)) as pilot:
             await _submit(pilot, "질문")
             assert await _wait(pilot, _turn_done(app))
-            md = app.query_one("#conversation").query(".answer").first()
+            md = app.conv.query(".answer").first()
             r = md.region
             await pilot.mouse_down(offset=(r.x, r.y))
             await pilot.hover(offset=(r.x + 6, r.y))
@@ -795,7 +800,7 @@ def test_reasoning_step_lands_in_group_before_open_prose(tmp_path):
         app = _make_app(tmp_path, fake)
         async with app.run_test(size=(100, 30)) as pilot:
             await _submit(pilot, "질문")
-            assert await _wait(pilot, lambda: app._cur_prose_md is not None)   # 산문 세그먼트가 열린 뒤
+            assert await _wait(pilot, lambda: app._active.prose_md is not None)   # 산문 세그먼트가 열린 뒤
             app.post_message(ReasoningEnd("llm1", "이 질문은 단순하다. 바로 답한다."))
             assert await _wait(pilot, lambda: bool(app.query(ReasoningStep)))   # 메시지 처리 완료까지
             assert await _wait(pilot, _turn_done(app))
@@ -837,11 +842,11 @@ def test_reasoning_step_of_next_turn_stays_in_that_turn(tmp_path):
             await _submit(pilot, "첫 질문")
             assert await _wait(pilot, _turn_done(app))
             await _submit(pilot, "둘째 질문")
-            assert await _wait(pilot, lambda: app._busy)
+            assert await _wait(pilot, lambda: app._active.busy)
             app.post_message(ReasoningEnd("llm2", "둘째 턴의 사고"))      # 아직 본문 토큰 없음
             assert await _wait(pilot, lambda: bool(app.query(ReasoningStep)))
             assert await _wait(pilot, _turn_done(app))
-            conv = app.query_one("#conversation")
+            conv = app.conv
             kinds = _conv_types(app)
             i_q2 = [i for i, w in enumerate(conv.children) if "둘째 질문" in _static_text(w)][0]
             i_group = kinds.index("ProcessGroup")
@@ -1173,11 +1178,11 @@ def test_title_set_after_first_turn_with_one_retry(tmp_path):
             assert session.title == "" and session.title_tries == 1      # 빈약 → 다음 실질 턴에서 재시도
             assert "안녕" in _panel_row(app, 0)                          # 제목 전엔 질의 앞부분
             await _submit(pilot, "README 요약해줘")
-            assert await _wait(pilot, lambda: not app._busy and len(app.query(".turn-footer")) == 2)
+            assert await _wait(pilot, lambda: not app._active.busy and len(app.conv.query(".turn-footer")) == 2)
             assert session.title == "진짜 제목" and session.title_tries == 2
             assert "진짜 제목" in _panel_row(app, 0)
             await _submit(pilot, "셋째 질문")
-            assert await _wait(pilot, lambda: not app._busy and len(app.query(".turn-footer")) == 3)
+            assert await _wait(pilot, lambda: not app._active.busy and len(app.conv.query(".turn-footer")) == 3)
             assert seen == ["", "", "진짜 제목"]                          # 확정 후엔 그대로 전달
     asyncio.run(go())
 
@@ -1196,7 +1201,7 @@ def test_title_gives_up_after_two_tries(tmp_path):
         async with app.run_test(size=(120, 30)) as pilot:
             for i, q in enumerate(("하나", "둘", "셋째 질문입니다"), start=1):
                 await _submit(pilot, q)
-                assert await _wait(pilot, lambda: not app._busy and len(app.query(".turn-footer")) == i)
+                assert await _wait(pilot, lambda: not app._active.busy and len(app.conv.query(".turn-footer")) == i)
             assert session.title == "" and session.title_tries == 2       # 2회로 캡
             assert seen == ["", "", "셋째 질문입니다"]                     # 3턴부터 질의 앞부분을 trace 이름으로
     asyncio.run(go())
@@ -1250,6 +1255,160 @@ def test_panel_shows_running_state_during_turn(tmp_path):
             assert await _wait(pilot, lambda: "답변 중" in _panel_row(app, 0))
             assert await _wait(pilot, _turn_done(app))
             assert "답변 중" not in _panel_row(app, 0)                     # 턴이 끝나면 대기 표시로 복귀
+    asyncio.run(go())
+
+
+async def _panel_key(pilot, key):
+    """세션 패널에 포커스를 두고 키를 누른다(답변 중에는 입력창이 잠기므로 전환은 패널로 한다)."""
+    lst = pilot.app.query_one("#sp_list")
+    lst.focus()
+    await pilot.pause()
+    await pilot.press(key)
+    await pilot.pause()
+
+
+async def _panel_open(pilot, session_id):
+    lst = pilot.app.query_one("#sp_list")
+    lst.focus()
+    await pilot.pause()
+    lst.highlighted = _panel_ids(pilot.app).index(session_id)
+    await pilot.press("enter")
+    await pilot.pause()
+
+
+def test_background_turn_continues_while_other_session_answers(tmp_path):
+    """세션 A 가 답변하는 도중 패널로 B 를 열어 질의할 수 있고, 두 턴이 각자의 대화 영역에서 나란히 끝난다."""
+    go_on = {"A": False, "B": False}
+
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        who = task[0]
+        on_token(f"{who} 답변 시작")
+        while not go_on[who]:          # 스레드마다 루프가 달라 asyncio.Event 대신 플래그를 폴링한다
+            await asyncio.sleep(0.02)
+        return _result(final=f"{who} 답변 시작", title=f"{who} 세션")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test(size=(120, 30)) as pilot:
+            a = app.runner.session.id
+            await _submit(pilot, "A 질문")
+            assert await _wait(pilot, lambda: app._runs[a].busy and "A 답변" in app._runs[a].draft)
+            assert app.query_one("#prompt").disabled              # 답변 중인 세션에는 입력이 잠긴다
+            await _panel_key(pilot, "n")                          # 답변 중에도 패널로 새 세션을 연다
+            assert await _wait(pilot, lambda: app._active_id != a)
+            b = app._active_id
+            assert app._runs[a].busy and not app._runs[b].busy    # A 는 배경에서 계속 돈다
+            assert not app.query_one("#prompt").disabled          # B 에서는 바로 질의 가능
+            await _submit(pilot, "B 질문")
+            assert await _wait(pilot, lambda: app._runs[b].busy)
+            go_on["B"] = True
+            assert await _wait(pilot, lambda: not app._runs[b].busy)
+            assert app._runs[a].busy                              # B 가 끝나도 A 는 그대로 진행
+            go_on["A"] = True
+            assert await _wait(pilot, lambda: not app._runs[a].busy)
+            # 각 세션의 답변은 자기 대화 영역에만 쌓인다
+            assert app._runs[a].draft == "A 답변 시작" and app._runs[b].draft == "B 답변 시작"
+            assert len(app._runs[a].conv.query(".turn-footer")) == 1
+            assert len(app._runs[b].conv.query(".turn-footer")) == 1
+            assert app._runs[a].conv.display is False and app._runs[b].conv.display is True
+            assert len(app._runs[a].session.turns) == 1 and len(app._runs[b].session.turns) == 1
+            assert app._runs[a].session.title == "A 세션" and app._runs[b].session.title == "B 세션"
+    asyncio.run(go())
+
+
+def test_switching_back_to_busy_session_shows_its_screen_and_locks_input(tmp_path):
+    """답변 중인 세션으로 돌아가면 그 세션의 화면·활동바가 보이고, 그 세션에서는 끝날 때까지 입력이 잠긴다."""
+    go_on = {"go": False}
+
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_token("긴 답변")
+        while not go_on["go"]:
+            await asyncio.sleep(0.02)
+        return _result(final="긴 답변")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test(size=(120, 30)) as pilot:
+            a = app.runner.session.id
+            await _submit(pilot, "A 질문")
+            assert await _wait(pilot, lambda: app._runs[a].busy)
+            await _panel_key(pilot, "n")
+            assert await _wait(pilot, lambda: app._active_id != a)
+            assert not app.query_one("#activity").display          # 새 세션은 조용하다
+            await _panel_open(pilot, a)                            # 답변 중인 세션으로 복귀
+            assert app._active_id == a and app.conv is app._runs[a].conv
+            assert app.query_one("#prompt").disabled
+            assert app.query_one("#activity").display              # 활동바가 그 세션 기준으로 돌아온다
+            go_on["go"] = True
+            assert await _wait(pilot, _turn_done(app))
+            assert not app.query_one("#prompt").disabled
+    asyncio.run(go())
+
+
+def test_panel_time_is_last_answer_and_order_stable_on_switch(tmp_path):
+    """패널 시각은 마지막 답변 시각으로 고정되고, 세션을 오가도 순서가 바뀌지 않는다."""
+    import time as _t
+
+    old = Session(tmp_path, session_id="old1")
+    old.title = "지난 작업"
+    old.add_turn("이전 질문", "이전 답변", route="read", verdict=None)
+    old.updated_at = _t.time() - 3 * 3600          # 3시간 전 답변
+    old.save()
+
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_token("답")
+        return _result(final="답")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test(size=(120, 30)) as pilot:
+            new_id = app.runner.session.id
+            assert "대화 없음" in _panel_row(app, 0)                 # 아직 답변이 없는 세션
+            await _submit(pilot, "질문")
+            assert await _wait(pilot, _turn_done(app))
+            assert _panel_ids(app) == [new_id, "old1"]              # 방금 답변받은 세션이 위
+            assert "방금" in _panel_row(app, 0) and "3시간 전" in _panel_row(app, 1)
+            await _panel_open(pilot, "old1")                        # 전환은 시각·순서를 바꾸지 않는다
+            assert app._active_id == "old1"
+            assert _panel_ids(app) == [new_id, "old1"]
+            assert "3시간 전" in _panel_row(app, 1) and "방금" in _panel_row(app, 0)
+            await _submit(pilot, "이전 세션에 이어서")               # 답변을 받으면 그때 위로 올라온다
+            assert await _wait(pilot, _turn_done(app))
+            assert _panel_ids(app) == ["old1", new_id]
+            assert "방금" in _panel_row(app, 0)
+    asyncio.run(go())
+
+
+def test_background_approval_waits_until_session_is_opened(tmp_path):
+    """배경 세션의 승인 요청은 보고 있는 화면을 가로채지 않고, 그 세션을 열 때 모달로 묻는다."""
+    go_on = {"go": False}
+    record = []
+
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_token("시작")
+        while not go_on["go"]:
+            await asyncio.sleep(0.02)
+        ok = approver("run_command", {"argv": ["pytest", "-q"]})
+        record.append(ok)
+        return _result(final=f"approved={ok}")
+
+    async def go():
+        app = _make_app(tmp_path, fake, approval_timeout=30.0)
+        async with app.run_test(size=(120, 30)) as pilot:
+            a = app.runner.session.id
+            await _submit(pilot, "테스트 실행해줘")
+            assert await _wait(pilot, lambda: app._runs[a].busy)
+            await _panel_key(pilot, "n")
+            assert await _wait(pilot, lambda: app._active_id != a)
+            go_on["go"] = True                                       # 배경 세션에서 승인 요청 발생
+            assert await _wait(pilot, lambda: app._runs[a].approval is not None)
+            assert not isinstance(app.screen, ApprovalModal)          # 보고 있던 화면을 가로채지 않는다
+            assert app._runs[a].state == "approval"                   # 패널은 승인 대기로 보인다
+            await _panel_open(pilot, a)
+            assert await _wait(pilot, lambda: isinstance(app.screen, ApprovalModal))
+            await pilot.click("#approve")
+            assert await _wait(pilot, _turn_done(app))
+            assert record == [True] and app._runs[a].approval is None
     asyncio.run(go())
 
 

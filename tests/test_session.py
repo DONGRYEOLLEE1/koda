@@ -83,15 +83,37 @@ def test_list_ids(tmp_path):
     assert Session.list_ids(tmp_path) == ["a1", "b2"]
 
 
-def test_summaries_lists_recent_first_and_skips_broken(tmp_path):
-    a = Session(tmp_path, session_id="aaa"); a.add_turn("첫 질문 A", "답", route="read", verdict=None); a.save()
-    b = Session(tmp_path, session_id="bbb"); b.add_turn("첫 질문 B", "답", route="read", verdict=None); b.save()
-    (tmp_path / ".koda" / "sessions" / "broken.json").write_text("{not json", encoding="utf-8")
+def test_summaries_orders_by_last_answer_not_mtime(tmp_path):
+    """정렬·시각 표시는 마지막 답변 시각(updated_at) 기준이다. 세션을 다시 저장(전환·이름 변경)해도 순서가 흔들리지 않는다."""
     import os, time
-    os.utime(a.path, (time.time() + 10, time.time() + 10))   # a 를 더 최근으로
+    a = Session(tmp_path, session_id="aaa"); a.add_turn("첫 질문 A", "답", route="read", verdict=None); a.save()
+    b = Session(tmp_path, session_id="bbb"); b.add_turn("첫 질문 B", "답", route="read", verdict=None)
+    b.updated_at = a.updated_at - 100                          # b 가 더 오래 전에 답변받음
+    b.save()
+    (tmp_path / ".koda" / "sessions" / "broken.json").write_text("{not json", encoding="utf-8")
+    os.utime(b.path, (time.time() + 10, time.time() + 10))     # b 를 나중에 저장(파일 mtime 만 최신)
     out = Session.summaries(tmp_path)
-    assert [s["id"] for s in out] == ["aaa", "bbb"]           # 최근 수정순, 깨진 파일 제외
+    assert [s["id"] for s in out] == ["aaa", "bbb"]             # mtime 이 아니라 답변 시각 순, 깨진 파일 제외
     assert out[0]["turns"] == 1 and out[0]["first_task"] == "첫 질문 A"
+    assert out[0]["answered"] == a.updated_at
+
+
+def test_updated_at_tracks_answers_and_legacy_falls_back(tmp_path):
+    import json
+    s = Session(tmp_path, session_id="u1")
+    assert s.updated_at == 0.0 and s.created_at > 0            # 대화 전에는 답변 시각이 없다
+    s.add_turn("q", "a", route="read", verdict=None)
+    first = s.updated_at
+    assert first > 0
+    s.add_turn("q2", "a2", route="read", verdict=None)
+    assert s.updated_at >= first                               # 답변마다 갱신
+    s.save()
+    assert Session.load(tmp_path, "u1").updated_at == s.updated_at
+    # 구버전 파일(시각 필드 없음)은 파일 mtime 으로 대신한다
+    (tmp_path / ".koda" / "sessions" / "old.json").write_text(
+        json.dumps({"id": "old", "history": [], "turns": [{"task": "q", "route": "read"}]}), encoding="utf-8")
+    legacy = next(x for x in Session.summaries(tmp_path) if x["id"] == "old")
+    assert legacy["answered"] > 0
 
 
 def test_title_state_roundtrip_and_delete(tmp_path):

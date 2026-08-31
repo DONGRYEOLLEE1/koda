@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from pathlib import Path
 
@@ -20,7 +21,9 @@ class Session:
         self.turns: list[dict] = []     # [{"task","route","verdict","summary"}] 턴별 기록
         self.title = ""                 # LLM 이 지은 세션 제목. langfuse trace 이름·세션 패널에 쓴다
         self.title_tries = 0            # 제목 생성 시도 횟수 (세션당 최대 2회)
-        self.title_manual = False       # /rename 수동 제목 — 압축 갱신이 덮지 않는다
+        self.title_manual = False       # /rename 수동 제목. 압축 갱신이 덮지 않는다
+        self.created_at = time.time()
+        self.updated_at = 0.0           # 마지막 답변을 받은 시각. 세션 목록의 시간 표시·정렬 기준이다
 
     @property
     def path(self) -> Path:
@@ -31,12 +34,14 @@ class Session:
         self.history.append({"role": "user", "content": task})
         self.history.append({"role": "assistant", "content": answer})
         self.turns.append({"task": task, "route": route, "verdict": verdict, "summary": summary})
+        self.updated_at = time.time()
 
     def save(self) -> Path:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         data = json.dumps(
             {"id": self.id, "title": self.title, "title_tries": self.title_tries,
-             "title_manual": self.title_manual, "history": self.history, "turns": self.turns},
+             "title_manual": self.title_manual, "created_at": self.created_at,
+             "updated_at": self.updated_at, "history": self.history, "turns": self.turns},
             ensure_ascii=False, indent=1,
         )
         tmp = self.path.with_suffix(".tmp")
@@ -53,6 +58,8 @@ class Session:
         s.title = data.get("title", "")
         s.title_tries = data.get("title_tries", 0)
         s.title_manual = data.get("title_manual", False)
+        s.created_at = data.get("created_at") or s.path.stat().st_mtime
+        s.updated_at = data.get("updated_at") or (s.path.stat().st_mtime if s.turns else 0.0)
         return s
 
     @classmethod
@@ -102,7 +109,7 @@ class Session:
 
     @classmethod
     def summaries(cls, ws_root: str | Path) -> list[dict]:
-        """세션 선택 목록용 요약 [{id, title, turns, first_task, updated}], 최근 수정순. 깨진 파일은 건너뛴다."""
+        """세션 목록용 요약 [{id, title, turns, first_task, answered, updated}], 마지막 답변순. answered 는 마지막 답변 시각(없으면 0), updated 는 정렬 기준이다. 깨진 파일은 건너뛴다."""
         d = Path(ws_root).resolve() / KODA_DIR / "sessions"
         if not d.is_dir():
             return []
@@ -113,7 +120,9 @@ class Session:
             except (OSError, ValueError):
                 continue
             turns = data.get("turns") or []
+            mtime = p.stat().st_mtime
+            answered = data.get("updated_at") or (mtime if turns else 0.0)   # 구버전 파일은 mtime 으로 대신한다
             out.append({"id": p.stem, "title": data.get("title", ""), "turns": len(turns),
                         "first_task": (turns[0].get("task") if turns else "") or "",
-                        "updated": p.stat().st_mtime})
+                        "answered": answered, "updated": answered or data.get("created_at") or mtime})
         return sorted(out, key=lambda s: s["updated"], reverse=True)
