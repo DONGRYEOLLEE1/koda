@@ -211,6 +211,14 @@ class ReasoningStep(StepLine):
         self._body.update(text)
 
 
+class DiffBlock(Static):
+    """편집 도구가 낸 unified diff. 과정이 아니라 결과이므로 대화에 그대로 보여 주고, 과정 그룹이 접혀도 남는다."""
+
+    def __init__(self, title: str, diff: str) -> None:
+        super().__init__(Group(Text(title, style="bold"), Syntax(diff, "diff", theme="ansi_dark", word_wrap=False)),
+                         classes="diff-block", markup=False)
+
+
 class ProcessGroup(Collapsible):
     """한 턴의 연속 스텝 묶음. 진행 중엔 펼쳐 두고, 턴이 끝나면 summarize 로 요약 제목 한 줄로 접는다."""
 

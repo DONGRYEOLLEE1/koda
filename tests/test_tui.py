@@ -17,6 +17,7 @@ from koda.tui.model import PhaseEvent, ReasoningEnd, TokenChunk, ToolEnd, ToolSt
 from koda.tui.tool_handler import ToolActivityHandler, tool_target, tool_title
 from koda.tui.widgets import (
     ApprovalModal,
+    DiffBlock,
     ExploreStep,
     ProcessGroup,
     PromptArea,
@@ -1092,9 +1093,10 @@ def test_slash_command_picker_completes_and_full_command_submits(tmp_path):
 
 
 def test_statusline_context_usage_status_and_model_switch(tmp_path, monkeypatch):
-    # 상태줄은 모델·모드·컨텍스트 잔량을 보이고, UsageUpdate 로 갱신된다. /status 는 모달, /model 은 설정을 교체하고 상태줄 모델명을 바꾼다.
+    # 상태줄은 모델·모드·게이지를 보인다. 게이지는 대화 히스토리가 압축 임계에 다가간 정도이고, 프롬프트 토큰은 /status 에 있다.
     import koda.tui.app as A
     from koda.config import ModelSettings
+    from koda.session import COMPACT_THRESHOLD_CHARS
     from koda.tui.model import UsageUpdate
 
     st = ModelSettings(_env_file=None, openai_model="deepseek-v4-flash", deepseek_api_key="dk", context_budget_tokens=10000)
@@ -1102,27 +1104,33 @@ def test_statusline_context_usage_status_and_model_switch(tmp_path, monkeypatch)
     monkeypatch.setattr(A, "select_provider", lambda settings: ("openai", ""))
 
     async def go():
-        app = KodaTui(Workspace(tmp_path), Session(tmp_path), Memory(tmp_path), None, auto_yes=True,
+        session = Session(tmp_path)
+        app = KodaTui(Workspace(tmp_path), session, Memory(tmp_path), None, auto_yes=True,
                       run_task_fn=None, model_name="deepseek-v4-flash", settings=st)
         async with app.run_test(size=(120, 30)) as pilot:
             line = _static_text(app.query_one("#statusline"))
             assert line.startswith("deepseek-v4-flash · yolo") and "컨텍스트 ░░░░░░░░░░ 0%" in line
             assert "대기 중" not in line and "koda" not in line     # 진행 상태는 활동바가 말한다
-            app.post_message(UsageUpdate(7000, 500))
-            assert await _wait(pilot, lambda: "컨텍스트 ████████░░ 75%" in _static_text(app.query_one("#statusline")))
-            app.post_message(UsageUpdate(1000, 100))   # 턴 끝의 검증 호출처럼 작은 호출이 와도 게이지는 내려가지 않는다
+            # 대화가 쌓이면 게이지가 오른다 (턴마다 실제로 증가하는 값)
+            session.add_turn("질문", "답" * (COMPACT_THRESHOLD_CHARS // 4), route="read", verdict=None)
+            app._refresh_statusline()
             await pilot.pause()
-            assert "컨텍스트 ████████░░ 75%" in _static_text(app.query_one("#statusline"))
+            assert "컨텍스트 ███░░░░░░░ 25%" in _static_text(app.query_one("#statusline"))
+            app.post_message(UsageUpdate(7000, 500))                # 토큰 사용량은 게이지를 흔들지 않는다
+            await pilot.pause()
+            assert "컨텍스트 ███░░░░░░░ 25%" in _static_text(app.query_one("#statusline"))
             await _submit(pilot, "/status")
             assert await _wait(pilot, lambda: type(app.screen).__name__ == "InfoScreen")
             body = _static_text(app.screen.query_one("#info_body"))
-            assert "deepseek-v4-flash (deepseek)" in body and "세션 누적 입력 8.0k 출력 0.6k" in body   # 누적은 모든 호출의 합
+            assert "deepseek-v4-flash (deepseek)" in body
+            assert "압축 임계" in body and "25%" in body
+            assert "최대 7.5k / 예산 10k 토큰" in body and "세션 누적 입력 7.0k 출력 0.5k" in body
             await pilot.press("escape")
             assert await _wait(pilot, lambda: type(app.screen).__name__ != "InfoScreen")
             await _submit(pilot, "/model gpt-5.6 key=ok")
             assert await _wait(pilot, lambda: app.runner.settings.openai_model == "gpt-5.6")
             assert app.runner.settings.openai_api_key == "ok" and app.runner.settings.use_responses_api is True
-            assert "컨텍스트 ░░░░░░░░░░ 0%" in _static_text(app.query_one("#statusline"))   # 전환 시 점유 초기화
+            assert _static_text(app.query_one("#statusline")).startswith("gpt-5.6 · yolo")
     asyncio.run(go())
 
 
@@ -1554,4 +1562,46 @@ def test_model_wizard_picks_provider_then_fills_values(tmp_path, monkeypatch):
             await pilot.press("escape")                                                   # 닫기
             assert await _wait(pilot, lambda: type(app.screen).__name__ != "ModelScreen")
             assert app.runner.settings.openai_model == "gpt-5.6"                          # 취소는 설정을 바꾸지 않는다
+    asyncio.run(go())
+
+
+def test_edit_diff_is_shown_in_conversation_not_folded(tmp_path):
+    """편집 diff 는 접힌 과정 박스 안이 아니라 대화에 직접 보인다. 이후 스텝은 diff 아래 새 그룹으로 간다."""
+    diff = "수정함: calc.py (+1/-1)\n@@ -1 +1 @@\n-x = 1\n+x = 10"
+
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test(size=(120, 40)) as pilot:
+            app.post_message(ToolStart("r1", "edit_file", "수정 · calc.py"))
+            assert await _wait(pilot, lambda: bool(app.query(StepLine)))
+            app.post_message(ToolEnd("r1", diff, ok=True, name="edit_file"))
+            assert await _wait(pilot, lambda: bool(app.query(DiffBlock)))
+            block = app.query_one(DiffBlock)
+            assert block.parent is app.conv                       # 과정 그룹 안이 아니라 대화 직속
+            assert _conv_types(app) == ["ProcessGroup", "DiffBlock"]
+            # 다음 도구는 diff 아래 새 그룹으로 (시간순 유지)
+            app.post_message(ToolStart("r2", "read_file", "읽기 · calc.py", ("읽음", "calc.py")))
+            assert await _wait(pilot, lambda: len(app.query(ProcessGroup)) == 2)
+            assert _conv_types(app) == ["ProcessGroup", "DiffBlock", "ProcessGroup"]
+            # 턴이 끝나 과정이 접혀도 diff 는 그대로 보인다
+            app.post_message(ToolEnd("r2", "내용", ok=True, name="read_file"))
+            for w in app._active.turn_widgets:
+                if isinstance(w, ProcessGroup):
+                    w.summarize()
+            await pilot.pause()
+            assert all(g.collapsed for g in app.query(ProcessGroup))
+            assert block.display and block.is_attached
+    asyncio.run(go())
+
+
+def test_non_diff_edit_output_stays_in_step(tmp_path):
+    """diff 가 아닌 편집 결과(실패 안내 등)는 대화에 별도 블록을 만들지 않는다."""
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test(size=(120, 30)) as pilot:
+            app.post_message(ToolStart("r1", "edit_file", "수정 · b.py"))
+            assert await _wait(pilot, lambda: bool(app.query(StepLine)))
+            app.post_message(ToolEnd("r1", "실패: old 를 찾지 못했다\n비슷한 줄:", ok=True, name="edit_file"))
+            await pilot.pause()
+            assert not app.query(DiffBlock)
     asyncio.run(go())

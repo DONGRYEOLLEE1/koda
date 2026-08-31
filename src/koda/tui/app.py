@@ -22,10 +22,11 @@ from ..gitinfo import git_ref
 from ..llm import select_provider
 from ..mcp import connect_mcp, connect_server, disconnect_server, mcp_dirs
 from ..memory import Memory, parse_remember
-from ..session import Session
+from ..session import COMPACT_THRESHOLD_CHARS, Session
 from ..workspace import Workspace
 from .paths import index_paths, match_paths
 from .model import (
+    DIFF_TOOLS,
     ApprovalRequest,
     UsageUpdate,
     CompactDone,
@@ -45,6 +46,7 @@ from .runner import APPROVAL_TIMEOUT_S, TuiTurnRunner
 from .widgets import (
     ApprovalModal,
     ConfirmScreen,
+    DiffBlock,
     ExploreStep,
     InfoScreen,
     McpScreen,
@@ -177,6 +179,7 @@ class KodaTui(App):
     #activity { height: 1; padding: 0 1; }
     #statusline { height: 1; background: $panel; color: $text-muted; padding: 0 1; }
     .user-turn { color: $accent; text-style: bold; margin: 1 0 0 0; }
+    .diff-block { margin: 0 0 1 0; padding: 0 0 0 2; }
     .turn-footer { color: $text-muted; margin: 0 0 1 0; }
     ApprovalModal { align: center middle; }
     #approval_dialog { width: 80%; max-width: 90; height: auto; border: thick $error;
@@ -347,6 +350,10 @@ class KodaTui(App):
     def _k(n: int) -> str:
         return f"{n / 1000:.1f}k" if n < 10_000 else f"{n // 1000}k"
 
+    @staticmethod
+    def _history_chars(session) -> int:
+        return sum(len(m.get("content") or "") for m in session.history)
+
     def _statusline_text(self) -> Text:
         """모델 · 승인 모드 · 브랜치 · MCP · 컨텍스트 게이지. 진행 상태는 바로 위 활동바가 말하므로 문구로 중복하지 않는다."""
         run = self._active
@@ -357,7 +364,9 @@ class KodaTui(App):
             t.append(f" · ⎇ {branch}", style="dim")
         if self._mcp_dirs:
             t.append(f" · {self._mcp_text()}", style="dim")
-        used, budget = run.ctx_used, self._ctx_budget
+        # 게이지는 대화 히스토리가 압축 임계에 얼마나 다가갔는지를 보여 준다. 턴마다 실제로 차오르고,
+        # 곧 일어날 일(문맥 압축)을 예고한다. 프롬프트 토큰 최대치는 /status 에 둔다.
+        used, budget = self._history_chars(run.session), COMPACT_THRESHOLD_CHARS
         ratio = min(1.0, used / budget) if budget else 0.0
         color = self._theme_color("success") if ratio < 0.5 else self._theme_color("warning") if ratio < 0.8 else self._theme_color("error")
         filled = round(ratio * _GAUGE_CELLS)
@@ -382,8 +391,6 @@ class KodaTui(App):
         run.ctx_used = max(run.ctx_used, msg.input_tokens + msg.output_tokens)
         run.tokens[0] += msg.input_tokens
         run.tokens[1] += msg.output_tokens
-        if run is self._active:
-            self._refresh_statusline()
 
     # --- /status · /model ---
 
@@ -409,7 +416,8 @@ class KodaTui(App):
             f"모델        {model} ({provider or '?'}) · {base_url}",
             f"추론        style={getattr(st, 'reasoning_style', '?')} effort={getattr(st, 'reasoning_effort', '?')} · 구조화={getattr(st, 'structured_method', '?')}"
             + (" · Responses API" if getattr(st, "use_responses_api", False) else ""),
-            f"컨텍스트    {self._k(self._active.ctx_used)} / {self._k(self._ctx_budget)} (최근 호출 기준) · 세션 누적 입력 {self._k(used_in)} 출력 {self._k(used_out)}",
+            f"컨텍스트    대화 {self._k(self._history_chars(s))}/{self._k(COMPACT_THRESHOLD_CHARS)}자 ({self._history_chars(s) / COMPACT_THRESHOLD_CHARS:.0%}, 압축 임계)",
+            f"프롬프트    최대 {self._k(self._active.ctx_used)} / 예산 {self._k(self._ctx_budget)} 토큰 · 세션 누적 입력 {self._k(used_in)} 출력 {self._k(used_out)}",
             f"승인        {self._mode}",
             f"MCP         {mcp}",
             f"워크스페이스 {self._ws.root}",
@@ -1114,6 +1122,19 @@ class KodaTui(App):
         self._finish_step(step, msg.run_id, msg.output, msg.ok)
         if not msg.ok:
             run.cur_explore = None      # 실패가 섞이면 다음 탐색은 새 줄
+            return
+        if msg.name in DIFF_TOOLS:
+            summary, _, body = msg.output.partition("\n")
+            if body.startswith("@@"):
+                await self._mount_diff(run, summary, body)
+
+    async def _mount_diff(self, run: SessionRun, title: str, diff: str) -> None:
+        """편집 diff 를 과정 그룹 밖 대화에 붙인다. 결과이므로 턴이 끝나 그룹이 접혀도 그대로 보여야 한다."""
+        block = DiffBlock(title, diff)
+        await run.conv.mount(block)
+        run.turn_widgets.append(block)
+        run.cur_group = run.cur_explore = None   # 이후 스텝은 diff 아래 새 그룹으로 (시간순 유지)
+        run.conv.anchor()
 
     @staticmethod
     def _finish_step(step, run_id: str, output: str, ok: bool) -> None:
