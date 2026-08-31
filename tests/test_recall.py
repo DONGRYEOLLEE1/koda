@@ -33,6 +33,32 @@ def test_judge_memory_returns_empty_when_structured_output_fails(monkeypatch):
     assert asyncio.run(R.judge_memory("q", "a", settings=_settings())) == {}
 
 
+class _FixedModel:
+    def __init__(self, out):
+        self.out = out
+
+    async def ainvoke(self, msgs, config=None):
+        from langchain_core.messages import AIMessage
+        return AIMessage(self.out)
+
+
+def test_make_title_limits_and_none_marker(monkeypatch):
+    monkeypatch.setattr(R, "build_model", lambda s: (None, "openai", ""))
+    monkeypatch.setattr(R, "_no_think", lambda m, s: _FixedModel('"세션 패널 구현 계획서 정리본"'))
+    assert asyncio.run(R.make_title("질문", "답", settings=_settings())) == "세션 패널 구현 계획서 정리"   # 15자 절단
+    monkeypatch.setattr(R, "_no_think", lambda m, s: _FixedModel("없음"))
+    assert asyncio.run(R.make_title("안녕", "", settings=_settings())) == ""                            # 빈약 → 빈 제목
+
+
+def test_summarize_history_splits_title_line(monkeypatch):
+    monkeypatch.setattr(R, "build_model", lambda s: (None, "openai", ""))
+    monkeypatch.setattr(R, "_no_think", lambda m, s: _FixedModel("본문 요약이다.\n제목: 패널 리팩토링"))
+    out = asyncio.run(R.summarize_history([{"role": "user", "content": "q"}], settings=_settings()))
+    assert out == ("본문 요약이다.", "패널 리팩토링")
+    monkeypatch.setattr(R, "_no_think", lambda m, s: _FixedModel("제목 줄 없는 요약"))
+    assert asyncio.run(R.summarize_history([{"role": "user", "content": "q"}], settings=_settings())) == ("제목 줄 없는 요약", "")
+
+
 def test_remember_from_turn_stores_by_kind_and_compacts(tmp_path, monkeypatch):
     m = Memory(tmp_path)
     m.remember("이미 있음", "procedural")

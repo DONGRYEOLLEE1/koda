@@ -83,6 +83,10 @@ class TuiTurnRunner:
 
     def run_turn(self, task: str) -> None:
         post = self._app.post_message
+        session = self.session
+        # 제목이 없으면 run_task 가 턴 끝에 짓는다(빈약하면 빈 문자열). 2회 실패한 세션은 더 시도하지 않고 질의 앞부분을 trace 이름으로 쓴다.
+        fallback = " ".join(task.split())[:15]
+        trace_name = session.title or (fallback if session.title_tries >= 2 else "")
         try:
             with asyncio.Runner() as runner:
                 self._turn_loop = runner.get_loop()
@@ -95,7 +99,7 @@ class TuiTurnRunner:
                     run_id=self.session.id,  # artifact 를 세션 단위로 이어 쓴다
                     # 툴 가시화: langfuse 와 동일한 config.callbacks 채널로만 관측(실행 로직 무변경).
                     extra_callbacks=[ToolActivityHandler(post)],
-                    trace_name=self.session.title,  # 첫 턴은 비어 있어 run_task 가 제목을 짓는다
+                    trace_name=trace_name,
                     settings=self.settings,
                 ))
                 result = runner.run(_heartbeat(self._turn_task, lambda p: post(PhaseEvent(p))))
@@ -108,21 +112,25 @@ class TuiTurnRunner:
         finally:
             self._turn_loop = self._turn_task = None
         try:
-            self.session.title = self.session.title or result.get("title", "")
+            if not session.title and session.title_tries < 2:
+                session.title_tries += 1
+                session.title = result.get("title", "")
             if not result.get("empty_final"):
                 # 빈 final 은 히스토리·세션에 저장하지 않는다 — chat 과 동일한 오염 방지.
-                self.session.add_turn(task, result["final"], result["route"], result.get("verdict"))
+                session.add_turn(task, result["final"], result["route"], result.get("verdict"))
                 try:  # 메모리는 턴마다 판정해 저장한다. 판정 실패가 턴을 실패시키지는 않는다.
                     for kind, note in asyncio.run(remember_from_turn(self.memory, task, result["final"], self.settings)):
                         post(MemorySaved(kind, note))
                 except Exception as e:
                     post(PhaseEvent(f"메모리 판정 생략({type(e).__name__})"))
-                old = self.session.old_messages() if self.session.needs_compaction else []
+                old = session.old_messages() if session.needs_compaction else []
                 if old:
                     post(PhaseEvent("문맥 압축 중…"))
-                    summary = asyncio.run(summarize_history(old, self.settings))
-                    self.session.apply_compaction(summary)
-                self.session.save()
+                    summary, new_title = asyncio.run(summarize_history(old, self.settings))
+                    session.apply_compaction(summary)
+                    if new_title and not session.title_manual:  # 압축 요약이 대화 전체를 반영한 제목을 공짜로 준다
+                        session.title = new_title
+                session.save()
         except Exception as e:
             # 예외가 thread worker 를 뚫으면 exit_on_error 로 앱이 통째로 죽는다 — 턴 실패로 강등
             post(TurnFailed(f"세션 반영 실패 {type(e).__name__}: {e}"))
@@ -160,8 +168,10 @@ class TuiTurnRunner:
             return
         try:
             before = len(self.session.history)
-            summary = asyncio.run(summarize_history(old, self.settings))
+            summary, new_title = asyncio.run(summarize_history(old, self.settings))
             self.session.apply_compaction(summary)
+            if new_title and not self.session.title_manual:
+                self.session.title = new_title
             self.session.save()
             after = len(self.session.history)
             post(CompactDone(f"문맥 압축 완료 — 이전 메시지 {len(old)}개를 요약으로 치환 "

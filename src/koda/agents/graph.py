@@ -303,7 +303,7 @@ async def run_task(
     mcp_tools: list | None = None, run_id: str | None = None,
     extra_callbacks: list | None = None, trace_name: str = "",
 ) -> dict:
-    """단일 턴 실행. mcps_dir 는 MCP 설정 폴더 목록(None 이면 로드 생략), history 는 멀티턴 맥락, mcp_tools 는 세션당 1회 로드해 재사용(캐시 prefix 유지), extra_callbacks 는 config.callbacks 에 추가로 얹는 핸들러(TUI 용), trace_name 은 세션 제목(비어 있으면 이 질의로 새로 짓는다)."""
+    """단일 턴 실행. mcps_dir 는 MCP 설정 폴더 목록(None 이면 로드 생략), history 는 멀티턴 맥락, mcp_tools 는 세션당 1회 로드해 재사용(캐시 prefix 유지), extra_callbacks 는 config.callbacks 에 추가로 얹는 핸들러(TUI 용), trace_name 은 세션 제목(비어 있으면 턴이 끝날 때 질의·답변으로 새로 짓는다)."""
     settings = settings or load_model_settings()
     model, provider, _reason = build_model(settings)
     set_structured_method(settings.structured_method)  # 방식을 고정하면 탐색 왕복이 사라진다
@@ -336,16 +336,20 @@ async def run_task(
                          memory_text, store=store, explore_model=explore_model, skills=skills,
                          context_budget=settings.context_budget_tokens,
                          mcp_auto_approve=settings.mcp_auto_approve_set)
-    # trace 하나 = 턴 하나. 이름은 세션 제목(첫 턴에만 LLM 으로 짓고 이후 턴은 넘겨받는다), 입력·출력은
-    # 질의와 답변 원문이며 graph 실행은 그 아래 자식으로 매달린다. artifact_ns 를 metadata 에 실어
-    # langfuse ↔ .koda/artifacts 상호참조를 유지한다.
-    title = trace_name or await make_title(task, settings)
+    # trace 하나 = 턴 하나. 이름은 세션 제목, 입력·출력은 질의와 답변 원문이며 graph 실행은 그 아래
+    # 자식으로 매달린다. trace_name 이 비어 있으면 답변까지 본 뒤 제목을 짓고(내용이 빈약하면 빈 문자열)
+    # 그 전 표시는 질의 앞부분으로 대신한다. run_id(세션 id)는 langfuse Sessions 묶음과
+    # .koda/artifacts 상호참조(artifact_ns)에 함께 쓰인다.
+    title = trace_name
+    fallback_name = " ".join(task.split())[:15] or "koda"
     config = {"callbacks": [*tracer.callbacks, *(extra_callbacks or [])], "run_name": task[:60],
               "metadata": {"provider": provider, "artifact_ns": artifact_ns}}
-    with tracer.turn(title, task) as turn:
+    with tracer.turn(title or fallback_name, task, session_id=run_id or "") as turn:
         final = await graph.ainvoke({"task": task, "history": history or []}, config=config)
         answer = final.get("answer", "")
-        turn.done(answer)
+        if not title:
+            title = await make_title(task, answer, settings)
+        turn.done(answer, name=title or fallback_name)
     tracer.flush()
     return {
         "final": answer,

@@ -280,6 +280,8 @@ def _cmd_chat(args) -> int:
             _err(memory.read() or "(비어 있음)")
             continue
 
+        # 제목이 없으면 run_task 가 턴 끝에 짓는다(빈약하면 빈 문자열). 2회 실패한 세션은 질의 앞부분을 trace 이름으로 쓴다.
+        trace_name = session.title or (" ".join(line.split())[:15] if session.title_tries >= 2 else "")
         # 턴마다 새 renderer — Live 는 턴 종료 시 완전히 정리되고 프롬프트는 context 밖에서 표시되므로 충돌하지 않는다.
         with MarkdownStreamRenderer(use_rich=_use_rich_renderer()) as renderer:
             try:
@@ -287,13 +289,15 @@ def _cmd_chat(args) -> int:
                     line, ws, approver, renderer.on_token, renderer.on_phase,
                     history=session.history, mcp_tools=mcp_tools, mcps_dir=None,
                     run_id=session.id,  # artifact 를 세션 단위로 이어 쓴다
-                    trace_name=session.title,  # 첫 턴은 비어 있어 run_task 가 제목을 짓는다
+                    trace_name=trace_name,
                 ), renderer.on_phase))
             except Exception as e:
                 _err(f"턴 실패: {type(e).__name__}: {e}")
                 continue
             renderer.finalize(result["final"])
-        session.title = session.title or result.get("title", "")
+        if not session.title and session.title_tries < 2:
+            session.title_tries += 1
+            session.title = result.get("title", "")
         verdict = result.get("verdict")
         _err(f"\n--- route: {result['route']}{f' | verdict: {verdict}' if verdict else ''} ---")
         if result.get("empty_final"):
@@ -311,8 +315,10 @@ def _cmd_chat(args) -> int:
         old = session.old_messages() if session.needs_compaction else []
         if old:  # 임계 초과 + 자를 오래된 턴이 있을 때만 (압축 = 캐시 prefix 재구성 1회)
             _err("[문맥 압축 중…]")
-            summary = asyncio.run(summarize_history(old))
+            summary, new_title = asyncio.run(summarize_history(old))
             session.apply_compaction(summary)  # 빈 요약·빈 대상은 내부 no-op
+            if new_title and not session.title_manual:
+                session.title = new_title
         session.save()
 
     if session.history:

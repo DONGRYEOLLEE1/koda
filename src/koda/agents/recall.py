@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -17,30 +18,39 @@ def _history_text(history: list) -> str:
     return "\n".join(f"[{m['role']}] {m['content']}" for m in history)
 
 
-async def summarize_history(history: list, settings=None) -> str:
-    """오래된 대화의 압축 요약 생성 (패턴 5 — 요약 내용은 LLM 이 만든다)."""
+_TITLE_LIMIT = 15
+_SUMMARY_TITLE = re.compile(r"^제목\s*[:：]\s*(.+)$", re.MULTILINE)
+
+
+def _clean_title(text: str) -> str:
+    return " ".join(text.split()).strip("\"'“”「」 ")[:_TITLE_LIMIT].strip()
+
+
+async def summarize_history(history: list, settings=None) -> tuple[str, str]:
+    """오래된 대화의 (압축 요약, 세션 제목). 요약 끝의 `제목:` 줄을 분리하며, 그 줄이 없으면 제목은 빈 문자열이다."""
     settings = settings or load_model_settings()
     model, _provider, _ = build_model(settings)
     m = _no_think(model, settings)
     resp = await m.ainvoke([SystemMessage(load_prompt("history_summary")), HumanMessage(_history_text(history))])
-    return _to_text(resp.content).strip()
+    text = _to_text(resp.content).strip()
+    match = _SUMMARY_TITLE.search(text)
+    if not match:
+        return text, ""
+    return _SUMMARY_TITLE.sub("", text).strip(), _clean_title(match.group(1))
 
 
-_TITLE_LIMIT = 30
-
-
-async def make_title(task: str, settings=None) -> str:
-    """세션 제목(15자 안팎)을 첫 질의에서 만든다. LLM 이 실패하면 질의 앞부분으로 대신한다."""
-    fallback = " ".join(task.split())[:15]
+async def make_title(task: str, answer: str = "", settings=None) -> str:
+    """세션 제목(10~15자)을 질의와 첫 답변으로 짓는다. 내용이 빈약하거나(LLM 이 `없음`) 호출이 실패하면 빈 문자열을 돌려 호출자가 다음 실질 턴에서 재시도하게 한다."""
     try:
         settings = settings or load_model_settings()
         model, _provider, _ = build_model(settings)
         m = _no_think(model, settings)
-        resp = await m.ainvoke([SystemMessage(load_prompt("session_title")), HumanMessage(task)])
-        title = " ".join(_to_text(resp.content).split()).strip("\"'“”「」 ")
+        human = f"[질의]\n{task}\n\n[답변]\n{answer[:500]}"
+        resp = await m.ainvoke([SystemMessage(load_prompt("session_title")), HumanMessage(human)])
+        title = _clean_title(_to_text(resp.content))
     except Exception:
-        return fallback
-    return title[:_TITLE_LIMIT] or fallback
+        return ""
+    return "" if title == "없음" else title
 
 
 async def compact_memory(memory_text: str, settings=None) -> str:

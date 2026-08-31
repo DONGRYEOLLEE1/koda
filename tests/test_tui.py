@@ -1019,8 +1019,8 @@ def test_slash_command_picker_completes_and_full_command_submits(tmp_path):
             inp.focus()
             await pilot.press(*"/re")
             assert await _wait(pilot, lambda: picker.display)
-            assert [str(o.id) for o in picker._options] == ["/resume ", "/remember "]
-            await pilot.press("down", "enter")
+            assert [str(o.id) for o in picker._options] == ["/resume ", "/rename ", "/remember "]
+            await pilot.press("down", "down", "enter")
             assert await _wait(pilot, lambda: inp.text == "/remember " and not picker.display)
             inp.clear()
             await pilot.press(*"/help")
@@ -1079,6 +1079,177 @@ def test_notifications_with_brackets_do_not_crash(tmp_path):
             assert all(n.markup is False for n in notes)
             for n in notes:
                 Content.from_text(n.message, markup=n.markup)
+    asyncio.run(go())
+
+
+# --- 세션 패널: 목록 · 상태 표시 · 재개/삭제 · 제목 시점 ---
+
+def _panel_ids(app) -> list[str]:
+    lst = app.query_one("#sp_list")
+    return [str(lst.get_option_at_index(i).id) for i in range(lst.option_count)]
+
+
+def _panel_row(app, i: int) -> str:
+    return app.query_one("#sp_list").get_option_at_index(i).prompt.plain
+
+
+def test_session_panel_lists_current_first_and_toggles(tmp_path):
+    old = Session(tmp_path, session_id="old1")
+    old.title = "지난 작업"
+    old.add_turn("이전 질문", "이전 답변", route="read", verdict=None)
+    old.save()
+
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test(size=(120, 30)) as pilot:
+            panel = app.query_one("#session_panel")
+            assert not panel.has_class("-hidden")                       # 100열 이상이면 펼친 채 시작
+            assert _panel_ids(app) == [app.runner.session.id, "old1"]   # 미저장 현재 세션이 맨 앞
+            assert "● 새 세션" in _panel_row(app, 0)                     # 대기 중 = ● + 임시 이름
+            assert "지난 작업" in _panel_row(app, 1) and "●" not in _panel_row(app, 1)
+            await pilot.press("ctrl+b")
+            assert await _wait(pilot, lambda: panel.has_class("-hidden"))
+            await pilot.press("ctrl+b")
+            assert await _wait(pilot, lambda: not panel.has_class("-hidden"))
+    asyncio.run(go())
+
+
+def test_panel_starts_hidden_on_narrow_terminal(tmp_path):
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test(size=(90, 30)):
+            assert app.query_one("#session_panel").has_class("-hidden")
+    asyncio.run(go())
+
+
+def test_panel_resume_and_delete_with_confirm(tmp_path):
+    for sid in ("old1", "old2"):
+        s = Session(tmp_path, session_id=sid)
+        s.title = f"작업 {sid}"
+        s.add_turn(f"{sid} 질문", f"{sid} 답변", route="read", verdict=None)
+        s.save()
+
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test(size=(120, 30)) as pilot:
+            lst = app.query_one("#sp_list")
+            lst.focus()
+            await pilot.pause()
+            lst.highlighted = _panel_ids(app).index("old1")
+            await pilot.press("enter")                                   # 패널에서 재개
+            assert await _wait(pilot, lambda: app.runner.session.id == "old1")
+            assert any("old1 질문" in _static_text(w) for w in app.query(".user-turn"))
+            lst.focus()
+            await pilot.pause()
+            lst.highlighted = _panel_ids(app).index("old1")
+            await pilot.press("d")                                       # 현재 세션 삭제는 거부
+            await pilot.pause()
+            assert (tmp_path / ".koda" / "sessions" / "old1.json").exists()
+            lst.highlighted = _panel_ids(app).index("old2")
+            await pilot.press("d")                                       # 다른 세션은 확인 모달 뒤 삭제
+            assert await _wait(pilot, lambda: type(app.screen).__name__ == "ConfirmScreen")
+            await pilot.click("#confirm_yes")
+            assert await _wait(pilot, lambda: not (tmp_path / ".koda" / "sessions" / "old2.json").exists())
+            assert "old2" not in _panel_ids(app)
+    asyncio.run(go())
+
+
+def test_title_set_after_first_turn_with_one_retry(tmp_path):
+    # run_task 계약의 대역: trace_name 이 비어 있을 때만 제목을 짓는다. 1턴은 빈약(빈 제목), 2턴에 성공.
+    titles = iter(["", "진짜 제목"])
+    seen = []
+
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        seen.append(kw["trace_name"])
+        on_token("답")
+        return _result(final="답", title=(next(titles) if not kw["trace_name"] else ""))
+
+    async def go():
+        session = Session(tmp_path)
+        app = _make_app(tmp_path, fake, session=session)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await _submit(pilot, "안녕")
+            assert await _wait(pilot, _turn_done(app))
+            assert session.title == "" and session.title_tries == 1      # 빈약 → 다음 실질 턴에서 재시도
+            assert "안녕" in _panel_row(app, 0)                          # 제목 전엔 질의 앞부분
+            await _submit(pilot, "README 요약해줘")
+            assert await _wait(pilot, lambda: not app._busy and len(app.query(".turn-footer")) == 2)
+            assert session.title == "진짜 제목" and session.title_tries == 2
+            assert "진짜 제목" in _panel_row(app, 0)
+            await _submit(pilot, "셋째 질문")
+            assert await _wait(pilot, lambda: not app._busy and len(app.query(".turn-footer")) == 3)
+            assert seen == ["", "", "진짜 제목"]                          # 확정 후엔 그대로 전달
+    asyncio.run(go())
+
+
+def test_title_gives_up_after_two_tries(tmp_path):
+    seen = []
+
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        seen.append(kw["trace_name"])
+        on_token("답")
+        return _result(final="답", title="")
+
+    async def go():
+        session = Session(tmp_path)
+        app = _make_app(tmp_path, fake, session=session)
+        async with app.run_test(size=(120, 30)) as pilot:
+            for i, q in enumerate(("하나", "둘", "셋째 질문입니다"), start=1):
+                await _submit(pilot, q)
+                assert await _wait(pilot, lambda: not app._busy and len(app.query(".turn-footer")) == i)
+            assert session.title == "" and session.title_tries == 2       # 2회로 캡
+            assert seen == ["", "", "셋째 질문입니다"]                     # 3턴부터 질의 앞부분을 trace 이름으로
+    asyncio.run(go())
+
+
+def test_rename_sets_manual_title(tmp_path):
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await _submit(pilot, "/rename 패널 작업")
+            await pilot.pause()
+            s = app.runner.session
+            assert s.title == "패널 작업" and s.title_manual is True
+            assert "패널 작업" in _panel_row(app, 0)
+    asyncio.run(go())
+
+
+def test_compaction_updates_title_unless_manual(tmp_path, monkeypatch):
+    async def fake_sum(old, settings=None):
+        return "요약", "압축 제목"
+
+    monkeypatch.setattr(runner_mod, "summarize_history", fake_sum)
+
+    async def go():
+        session = Session(tmp_path)
+        for i in range(6):
+            session.add_turn(f"q{i}", f"a{i}", route="read", verdict=None)
+        app = _make_app(tmp_path, None, session=session)
+        async with app.run_test(size=(120, 30)):
+            await asyncio.to_thread(app.runner.compact_now)
+            assert session.title == "압축 제목"                            # 압축이 제목을 공짜로 갱신
+            session.title = "내 제목"
+            session.title_manual = True
+            for i in range(6, 12):
+                session.add_turn(f"q{i}", f"a{i}", route="read", verdict=None)
+            await asyncio.to_thread(app.runner.compact_now)
+            assert session.title == "내 제목"                              # 수동 제목은 덮지 않는다
+    asyncio.run(go())
+
+
+def test_panel_shows_running_state_during_turn(tmp_path):
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_token("진행")
+        await asyncio.sleep(0.6)
+        return _result(final="진행")
+
+    async def go():
+        app = _make_app(tmp_path, fake)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await _submit(pilot, "질문")
+            assert await _wait(pilot, lambda: "답변 중" in _panel_row(app, 0))
+            assert await _wait(pilot, _turn_done(app))
+            assert "답변 중" not in _panel_row(app, 0)                     # 턴이 끝나면 대기 표시로 복귀
     asyncio.run(go())
 
 

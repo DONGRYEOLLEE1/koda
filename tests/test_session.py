@@ -94,6 +94,19 @@ def test_summaries_lists_recent_first_and_skips_broken(tmp_path):
     assert out[0]["turns"] == 1 and out[0]["first_task"] == "첫 질문 A"
 
 
+def test_title_state_roundtrip_and_delete(tmp_path):
+    s = Session(tmp_path, session_id="t1")
+    s.title_tries = 1
+    s.title_manual = True
+    s.add_turn("q", "a", route="read", verdict=None)
+    s.save()
+    loaded = Session.load(tmp_path, "t1")
+    assert loaded.title_tries == 1 and loaded.title_manual is True
+    assert Session.delete(tmp_path, "t1") is True
+    assert Session.list_ids(tmp_path) == []
+    assert Session.delete(tmp_path, "t1") is False   # 없는 세션 삭제는 조용히 False
+
+
 def test_title_roundtrip_and_summaries(tmp_path):
     s = Session(tmp_path)
     s.title = "calc 뺄셈 추가"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import re
 import time
 
@@ -476,6 +477,123 @@ class InfoScreen(ModalScreen[None]):
         self.dismiss(None)
 
 
+def _ago(ts: float, now: float | None = None) -> str:
+    """세션 목록용 상대 시간. 이틀 안은 상대 표기, 그 밖은 MM-DD."""
+    d = int((now if now is not None else time.time()) - ts)
+    if d < 60:
+        return "방금"
+    if d < 3600:
+        return f"{d // 60}분 전"
+    if d < 86400:
+        return f"{d // 3600}시간 전"
+    if d < 2 * 86400:
+        return "어제"
+    return datetime.datetime.fromtimestamp(ts).strftime("%m-%d")
+
+
+class SessionPanel(Vertical):
+    """왼쪽 세션 목록. 항목은 `제목 + 상대 시간` 두 줄이고, 현재 세션 한 항목만 상태(대기 ●·답변 중 스피너·승인 대기)를 표시한다."""
+
+    BINDINGS = [("n", "new_session", "새 세션"), ("d", "delete_session", "삭제")]
+
+    class Resume(Message):
+        """목록에서 Enter/클릭으로 고른 세션 재개 요청."""
+
+        def __init__(self, session_id: str) -> None:
+            self.session_id = session_id
+            super().__init__()
+
+    class New(Message):
+        """n — 새 세션 요청 (/clear 동등)."""
+
+    class Delete(Message):
+        """d — 강조된 세션 삭제 요청."""
+
+        def __init__(self, session_id: str) -> None:
+            self.session_id = session_id
+            super().__init__()
+
+    def compose(self) -> ComposeResult:
+        yield Static("세션", id="sp_title", markup=False)
+        yield OptionList(id="sp_list")
+        yield Static("n 새로 · Enter 재개 · d 삭제 · ^B 접기", id="sp_hint", markup=False)
+
+    @staticmethod
+    def _row(s: dict, current: bool, state: str, spin: str) -> Text:
+        name = s.get("title") or " ".join((s.get("first_task") or "").split())[:15] or "새 세션"
+        t = Text()
+        if not current:
+            t.append("  ")
+            t.append(name)
+            t.append(f"\n  {_ago(s['updated'])}", style="dim")
+        elif state == "running":
+            t.append(f"{spin} ", style="bold yellow")
+            t.append(name, style="bold")
+            t.append("\n  답변 중", style="yellow")
+        elif state == "approval":
+            t.append("● ", style="bold red")
+            t.append(name, style="bold")
+            t.append("\n  승인 대기", style="bold red")
+        else:
+            t.append("● ", style="bold green")
+            t.append(name, style="bold")
+            t.append(f"\n  {_ago(s['updated'])}", style="dim")
+        return t
+
+    def refresh_sessions(self, sessions: list[dict], current_id: str, state: str = "idle", spin: str = "") -> None:
+        lst = self.query_one("#sp_list", OptionList)
+        lst.clear_options()
+        lst.add_options([Option(self._row(s, s["id"] == current_id, state, spin), id=s["id"]) for s in sessions])
+        ids = [s["id"] for s in sessions]
+        if current_id in ids:
+            lst.highlighted = ids.index(current_id)
+
+    def set_current(self, s: dict, state: str, spin: str) -> None:
+        """현재 세션 항목의 상태 표시만 바꾼다 — 목록 전체를 다시 그리지 않는다."""
+        try:
+            self.query_one("#sp_list", OptionList).replace_option_prompt(s["id"], self._row(s, True, state, spin))
+        except Exception:
+            pass  # 아직 목록에 없는 세션이면 다음 refresh 가 그린다
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        event.stop()
+        self.post_message(self.Resume(str(event.option.id)))
+
+    def action_new_session(self) -> None:
+        self.post_message(self.New())
+
+    def action_delete_session(self) -> None:
+        lst = self.query_one("#sp_list", OptionList)
+        if lst.highlighted is not None:
+            self.post_message(self.Delete(str(lst.get_option_at_index(lst.highlighted).id)))
+
+
+class ConfirmScreen(ModalScreen[bool]):
+    """되돌릴 수 없는 조작(세션 삭제 등)의 확인 모달. ESC·취소=False."""
+
+    BINDINGS = [("escape", "cancel", "취소")]
+
+    def __init__(self, title: str, body: str, yes: str = "확인") -> None:
+        super().__init__()
+        self._title = title
+        self._body = body
+        self._yes = yes
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="confirm_dialog"):
+            yield Static(self._title, id="confirm_title", markup=False)
+            yield Static(self._body, id="confirm_body", markup=False)
+            with Horizontal(id="confirm_buttons"):
+                yield Button(self._yes, variant="error", id="confirm_yes")
+                yield Button("취소", id="confirm_no")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        self.dismiss(event.button.id == "confirm_yes")
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
 class SessionPicker(ModalScreen[str | None]):
     """/resume 세션 선택 — 최근 수정순 목록에서 Enter 로 고르고 ESC 로 닫는다(None)."""
 
@@ -487,13 +605,11 @@ class SessionPicker(ModalScreen[str | None]):
 
     @staticmethod
     def _label(s: dict) -> Text:
-        import datetime
-        when = datetime.datetime.fromtimestamp(s["updated"]).strftime("%m-%d %H:%M")
         first = s.get("title") or " ".join(s["first_task"].split())[:60] or "(질의 없음)"
         t = Text()
-        t.append(s["id"], style="bold")
-        t.append(f"  {s['turns']}턴  {when}  ", style="dim")
-        t.append(first)
+        t.append(first, style="bold")
+        t.append(f"  {_ago(s['updated'])}", style="dim")
+        t.append(f"  {s['id']} · {s['turns']}턴", style="dim")
         return t
 
     def compose(self) -> ComposeResult:

@@ -9,7 +9,7 @@ from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.events import MouseDown
 from textual.screen import Screen
 from textual.theme import Theme
@@ -43,6 +43,7 @@ from .model import (
 from .runner import APPROVAL_TIMEOUT_S, TuiTurnRunner
 from .widgets import (
     ApprovalModal,
+    ConfirmScreen,
     ExploreStep,
     InfoScreen,
     McpScreen,
@@ -50,6 +51,7 @@ from .widgets import (
     ProcessGroup,
     PromptArea,
     ReasoningStep,
+    SessionPanel,
     SessionPicker,
     StepLine,
 )
@@ -105,10 +107,24 @@ class KodaTui(App):
     # 과거 표 셀 클릭 크래시(textual 8.2.8) 회피용으로 꺼 두었으나 스트리밍 재렌더 중 클릭·드래그 반복으로도 재현되지 않아 되살렸다.
     BINDINGS = [
         ("ctrl+q", "graceful_quit", "종료"),
+        ("ctrl+b", "toggle_panel", "세션 패널"),
         # Ctrl+C 는 단계형: 답변 중이면 중단, 2초 안에 한 번 더 누르면 종료. 입력창(TextArea) focus 시 기본은 copy 라 priority 로 이긴다.
         Binding("ctrl+c", "ctrl_c", "중단/종료", priority=True, show=False),
     ]
     CSS = """
+    #body { height: 1fr; }
+    #main { width: 1fr; height: 1fr; }
+    #session_panel { width: 30; height: 1fr; background: $panel; padding: 0 1; }
+    #session_panel.-hidden { display: none; }
+    #sp_title { height: 1; text-style: bold; color: $accent; margin-bottom: 1; }
+    #sp_list { height: 1fr; border: none; background: transparent; padding: 0; }
+    #sp_list > .option-list--option { padding: 0 0 1 0; }
+    #sp_hint { height: auto; color: $text-muted; }
+    ConfirmScreen { align: center middle; }
+    #confirm_dialog { width: 60%; max-width: 80; height: auto; border: thick $error; background: $surface; padding: 1 2; }
+    #confirm_body { color: $text-muted; margin: 1 0; }
+    #confirm_buttons { height: auto; align-horizontal: center; margin-top: 1; }
+    #confirm_buttons Button { margin: 0 2; }
     #conversation { width: 1fr; height: 1fr; padding: 0 1; }
     #prompt { height: auto; max-height: 10; }
     #path_picker { height: auto; max-height: 12; border: none; background: $panel; padding: 0 1; }
@@ -203,6 +219,7 @@ class KodaTui(App):
             "/compact": ("대화 이력을 요약으로 압축", self._cmd_compact),
             "/clear": ("새 스레드 시작(대화 맥락 초기화)", self._cmd_clear),
             "/resume": ("저장된 세션 재개: /resume [session-id] (인자 없으면 목록에서 선택)", self._cmd_resume),
+            "/rename": ("세션 이름 바꾸기: /rename <이름> (인자 없으면 현재 이름 표시)", self._cmd_rename),
             "/mcp": ("MCP 서버 상태·도구 보기, 재연결·끄기", self._cmd_mcp),
             "/status": ("세션·모델·컨텍스트·MCP 상태 보기", self._cmd_status),
             "/model": ("모델 전환 (대화형). 단축: /model <모델명> [provider=…] [base_url=…] [key=…]", self._cmd_model),
@@ -217,12 +234,15 @@ class KodaTui(App):
     # --- 레이아웃 ---
 
     def compose(self) -> ComposeResult:
-        yield VerticalScroll(id="conversation")
-        yield Static("", id="activity", markup=False)
-        yield Static(self._statusline_text(), id="statusline", markup=False)
-        yield OptionList(id="path_picker")
-        yield PromptArea(id="prompt", tab_behavior="focus",
-                         placeholder="요청 입력…  (Alt+Enter·Ctrl+J 줄바꿈 · /help 명령 · Ctrl+Q 종료)")
+        with Horizontal(id="body"):
+            yield SessionPanel(id="session_panel")
+            with Vertical(id="main"):
+                yield VerticalScroll(id="conversation")
+                yield Static("", id="activity", markup=False)
+                yield Static(self._statusline_text(), id="statusline", markup=False)
+                yield OptionList(id="path_picker")
+                yield PromptArea(id="prompt", tab_behavior="focus",
+                                 placeholder="요청 입력…  (Alt+Enter·Ctrl+J 줄바꿈 · /help 명령 · Ctrl+Q 종료)")
         yield Footer()
 
     def get_default_screen(self) -> Screen:
@@ -238,6 +258,9 @@ class KodaTui(App):
         self.query_one("#activity", Static).display = False
         self.query_one("#path_picker", OptionList).display = False
         self._activity_timer = self.set_interval(0.125, self._tick_activity, pause=True)
+        if self.size.width < 100:
+            self.query_one(SessionPanel).add_class("-hidden")   # 좁은 화면은 접힌 채 시작 (Ctrl+B 로 펼침)
+        self.refresh_panel()
         self.query_one("#prompt", PromptArea).focus()
         if self._mcp_dirs:
             self.run_worker(partial(self._connect_all_mcp, self._mcp_dirs), thread=True, group="mcp")
@@ -418,6 +441,73 @@ class KodaTui(App):
         """테마 색상 hex 조회. 라이트/다크 자동 적응."""
         return self.theme_variables.get(name, name)
 
+    # --- 세션 패널: 목록 · 현재 세션 상태 표시 · 재개/새로/삭제 ---
+
+    def _panel_state(self) -> str:
+        if isinstance(self.screen, ApprovalModal):
+            return "approval"
+        return "running" if self._busy else "idle"
+
+    def _current_row(self) -> dict:
+        """디스크를 읽지 않고 현재 세션의 패널 항목을 만든다 (스피너 틱마다 호출)."""
+        s = self.runner.session
+        return {"id": s.id, "title": s.title, "turns": len(s.turns),
+                "first_task": s.turns[0]["task"] if s.turns else "", "updated": time.time()}
+
+    def _session_rows(self) -> list[dict]:
+        """저장된 세션 목록에 아직 저장 전인 현재 세션을 얹고, 현재 세션의 제목·턴 수는 메모리 값으로 맞춘다."""
+        rows = Session.summaries(self.runner._ws.root)
+        s = self.runner.session
+        for r in rows:
+            if r["id"] == s.id:
+                r["title"] = s.title
+                r["turns"] = len(s.turns)
+                break
+        else:
+            rows.insert(0, self._current_row())
+        return rows
+
+    def refresh_panel(self) -> None:
+        self.query_one(SessionPanel).refresh_sessions(
+            self._session_rows(), self.runner.session.id, self._panel_state(), self._spin())
+
+    def action_toggle_panel(self) -> None:
+        panel = self.query_one(SessionPanel)
+        panel.toggle_class("-hidden")
+        if panel.has_class("-hidden"):
+            self.query_one("#prompt", PromptArea).focus()
+
+    @on(SessionPanel.Resume)
+    async def _on_panel_resume(self, msg: SessionPanel.Resume) -> None:
+        if msg.session_id == self.runner.session.id:
+            self.query_one("#prompt", PromptArea).focus()
+            return
+        if self._busy:
+            self.notify("턴 진행 중 — 끝난 뒤 전환할 수 있습니다.", severity="warning", timeout=4)
+            return
+        await self._resume_session(msg.session_id)
+
+    @on(SessionPanel.New)
+    async def _on_panel_new(self, msg: SessionPanel.New) -> None:
+        if self._busy:
+            self.notify("턴 진행 중 — 끝난 뒤 만들 수 있습니다.", severity="warning", timeout=4)
+            return
+        await self._cmd_clear("")
+        self.query_one("#prompt", PromptArea).focus()
+
+    @on(SessionPanel.Delete)
+    def _on_panel_delete(self, msg: SessionPanel.Delete) -> None:
+        if msg.session_id == self.runner.session.id:
+            self.notify("현재 세션은 삭제할 수 없습니다 (새 세션으로 옮긴 뒤 지우세요).", severity="warning", timeout=4)
+            return
+
+        def done(ok) -> None:
+            if ok and Session.delete(self.runner._ws.root, msg.session_id):
+                self.notify(f"세션 삭제됨: {msg.session_id}", timeout=3)
+            self.refresh_panel()
+
+        self.push_screen(ConfirmScreen("세션 삭제", f"세션 {msg.session_id} 의 저장 파일을 삭제합니다. 되돌릴 수 없습니다.", yes="삭제"), done)
+
     # --- 활동바: 스피너 + 단계 + 경과 초 (+ reasoning 토큰) ---
 
     def _activity_on(self, label: str) -> None:
@@ -467,6 +557,8 @@ class KodaTui(App):
         if self._think_tok:
             t.append(f" · 생각 중 ~{self._think_tok} tok", style="dim italic")
         self.query_one("#activity", Static).update(t)
+        # 세션 패널의 현재 항목 상태(스피너·승인 대기)도 같은 주기로 갱신한다.
+        self.query_one(SessionPanel).set_current(self._current_row(), self._panel_state(), self._spin())
 
     def on_unmount(self) -> None:
         self._activity_timer.stop()
@@ -571,6 +663,7 @@ class KodaTui(App):
             self.notify(f"새 스레드 시작 · 세션 {new_id}", timeout=4)
         finally:
             self._busy = False
+        self.refresh_panel()
 
     async def _cmd_resume(self, arg: str) -> None:
         # 인자가 있으면 바로, 없으면 목록 modal 에서 고른다. 선택 결과는 콜백으로 받아 세션을 교체하고 이력을 재생한다.
@@ -605,6 +698,7 @@ class KodaTui(App):
             self.notify(f"세션 재개 · {session.id} ({len(session.turns)}턴)", timeout=4)
         finally:
             self._busy = False
+        self.refresh_panel()
 
     async def _replay_history(self, history: list) -> None:
         """저장된 user/assistant 이력을 대화 스트림에 다시 그린다 — 이어서 대화할 맥락을 화면에도 보여준다."""
@@ -616,6 +710,18 @@ class KodaTui(App):
             else:
                 await conv.mount(Markdown(content, classes="answer"))
         conv.anchor()
+
+    async def _cmd_rename(self, arg: str) -> None:
+        s = self.runner.session
+        if not arg:
+            self.notify(f"현재 세션 이름: {s.title or '(없음)'} — /rename <이름> 으로 바꿉니다.", timeout=5)
+            return
+        s.title = " ".join(arg.split())[:60]
+        s.title_manual = True   # 수동 제목은 압축 갱신이 덮지 않는다
+        if s.history:
+            s.save()
+        self.refresh_panel()
+        self.notify(f"세션 이름: {s.title}", timeout=3)
 
     async def _cmd_memory(self, arg: str) -> None:
         self.notify(self.runner.memory.read() or "(비어 있음)", title="메모리", timeout=10)
@@ -698,6 +804,7 @@ class KodaTui(App):
         prompt = self.query_one("#prompt", PromptArea)
         prompt.disabled = False
         prompt.focus()
+        self.refresh_panel()   # 턴 끝의 제목 확정·상태 복귀를 패널에 반영
 
     # --- worker 메시지 핸들러 ---
 

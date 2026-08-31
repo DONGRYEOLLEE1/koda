@@ -401,10 +401,16 @@ class _NoTracer:
         return None
 
     @contextmanager
-    def turn(self, name, task):
-        rec = {"name": name, "task": task}
+    def turn(self, name, task, session_id=""):
+        rec = {"name": name, "task": task, "session_id": session_id}
         self.turns.append(rec)
-        yield SimpleNamespace(done=lambda answer: rec.update(answer=answer))
+
+        def done(answer, name=None):
+            rec["answer"] = answer
+            if name:
+                rec["name"] = name
+
+        yield SimpleNamespace(done=done)
 
 
 def _dummy_settings():
@@ -424,12 +430,16 @@ def test_run_task_appends_extra_callbacks_without_touching_core(monkeypatch, tmp
             captured["callbacks"] = list((config or {}).get("callbacks") or [])
             return {"answer": "완료", "route": "read"}
 
+    async def no_title(task, answer="", settings=None):
+        return "t"
+
     monkeypatch.setattr(G, "_build_graph", lambda *a, **k: _FakeGraph())
     monkeypatch.setattr(G, "build_model", lambda s: (object(), "local", None))
     monkeypatch.setattr(G, "_no_think", lambda m, s: m)
     monkeypatch.setattr(G, "_thinking", lambda m, s, b: m)
     monkeypatch.setattr(G, "make_vision_tools", lambda *a, **k: [])
     monkeypatch.setattr(G, "get_tracer", lambda: _NoTracer())
+    monkeypatch.setattr(G, "make_title", no_title)
 
     settings = _dummy_settings()
     sentinel = object()
@@ -443,16 +453,16 @@ def test_run_task_appends_extra_callbacks_without_touching_core(monkeypatch, tmp
     assert sentinel not in captured["callbacks"]       # CLI 경로: 추가 없음(기존 동작)
 
 
-def test_run_task_names_trace_by_session_title_and_records_raw_io(monkeypatch, tmp_path):
-    """trace 이름은 세션 제목(첫 턴에만 LLM 으로 짓고 이후 턴은 넘겨받음), 입력·출력은 질의·답변 원문이다."""
+def test_run_task_makes_title_after_answer_and_records_raw_io(monkeypatch, tmp_path):
+    """trace_name 이 비어 있으면 답변까지 본 뒤 제목을 1회 짓고, trace 이름을 그 제목으로 확정한다. 입력·출력은 질의·답변 원문, run_id 는 session_id 로 실린다."""
     calls = []
 
     class _FakeGraph:
         async def ainvoke(self, state, config=None):
             return {"answer": "완료", "route": "read"}
 
-    async def fake_title(task, settings=None):
-        calls.append(task)
+    async def fake_title(task, answer="", settings=None):
+        calls.append((task, answer))
         return "세션 제목"
 
     tracer = _NoTracer()
@@ -466,13 +476,38 @@ def test_run_task_names_trace_by_session_title_and_records_raw_io(monkeypatch, t
     settings = _dummy_settings()
 
     r1 = asyncio.run(G.run_task("첫 질의", Workspace(tmp_path), lambda n, a: True, lambda t: None,
-                                settings=settings, mcps_dir=None))
-    assert r1["title"] == "세션 제목" and calls == ["첫 질의"]
+                                settings=settings, mcps_dir=None, run_id="sess1"))
+    assert r1["title"] == "세션 제목" and calls == [("첫 질의", "완료")]   # 답변을 본 뒤 짓는다
     r2 = asyncio.run(G.run_task("둘째 질의", Workspace(tmp_path), lambda n, a: True, lambda t: None,
-                                settings=settings, mcps_dir=None, trace_name=r1["title"]))
-    assert r2["title"] == "세션 제목" and calls == ["첫 질의"]            # 이후 턴은 제목 호출 없음
-    assert tracer.turns == [{"name": "세션 제목", "task": "첫 질의", "answer": "완료"},
-                            {"name": "세션 제목", "task": "둘째 질의", "answer": "완료"}]
+                                settings=settings, mcps_dir=None, run_id="sess1", trace_name=r1["title"]))
+    assert r2["title"] == "세션 제목" and len(calls) == 1                  # 제목이 있으면 호출 없음
+    assert tracer.turns == [{"name": "세션 제목", "task": "첫 질의", "session_id": "sess1", "answer": "완료"},
+                            {"name": "세션 제목", "task": "둘째 질의", "session_id": "sess1", "answer": "완료"}]
+
+
+def test_run_task_empty_title_names_trace_by_task_head(monkeypatch, tmp_path):
+    """제목 생성이 빈 문자열(빈약한 대화)이면 결과 title 은 비고, trace 이름은 질의 앞부분으로 대신한다."""
+
+    class _FakeGraph:
+        async def ainvoke(self, state, config=None):
+            return {"answer": "완료", "route": "read"}
+
+    async def empty_title(task, answer="", settings=None):
+        return ""
+
+    tracer = _NoTracer()
+    monkeypatch.setattr(G, "_build_graph", lambda *a, **k: _FakeGraph())
+    monkeypatch.setattr(G, "build_model", lambda s: (object(), "local", None))
+    monkeypatch.setattr(G, "_no_think", lambda m, s: m)
+    monkeypatch.setattr(G, "_thinking", lambda m, s, b: m)
+    monkeypatch.setattr(G, "make_vision_tools", lambda *a, **k: [])
+    monkeypatch.setattr(G, "get_tracer", lambda: tracer)
+    monkeypatch.setattr(G, "make_title", empty_title)
+
+    r = asyncio.run(G.run_task("안녕 반가워", Workspace(tmp_path), lambda n, a: True, lambda t: None,
+                               settings=_dummy_settings(), mcps_dir=None))
+    assert r["title"] == ""
+    assert tracer.turns[0]["name"] == "안녕 반가워"
 
 
 def test_run_task_probes_vision_on_active_provider(monkeypatch, tmp_path):

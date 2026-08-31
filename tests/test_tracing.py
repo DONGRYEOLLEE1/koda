@@ -31,7 +31,7 @@ def test_noop_tracer_turn_is_harmless():
 
 
 def test_turn_sends_root_first_then_upserts_trace_io(monkeypatch):
-    """root span 을 자식보다 먼저 보내고(임시 trace 레코드 방지), 턴이 끝나면 이름·입출력을 전부 실어 확정한다."""
+    """root span 을 자식보다 먼저 보내고(임시 trace 레코드 방지), 턴이 끝나면 done 이 확정한 이름과 입출력·session_id 를 전부 실어 확정한다."""
     from contextlib import contextmanager
     log: list = []
 
@@ -58,10 +58,16 @@ def test_turn_sends_root_first_then_upserts_trace_io(monkeypatch):
             return f"http://lf/traces/{trace_id}"
 
     t = Tracer(handler=object(), client=_Client(), host="http://lf", auth=("pk", "sk"))
-    monkeypatch.setattr(t, "_upsert_trace", lambda *a: log.append(("upsert", a[0], a[2], a[3], a[4])))
-    with t.turn("제목", "질의") as turn:
+    monkeypatch.setattr(t, "_upsert_trace", lambda *a: log.append(("upsert", a[0], a[2], a[3], a[4], a[5])))
+    with t.turn("질의 앞부분", "질의", session_id="s1") as turn:
         log.append(("graph",))
-        turn.done("답변")
-    assert log[:5] == [("start", "제목", "질의", False), ("trace_io", {"input": "질의"}), ("end",), ("flush",), ("graph",)]
-    assert log[5:] == [("flush",), ("upsert", "t" * 32, "제목", "질의", "답변")]
+        turn.done("답변", name="확정 제목")
+    assert log[:5] == [("start", "질의 앞부분", "질의", False), ("trace_io", {"input": "질의"}), ("end",), ("flush",), ("graph",)]
+    assert log[5:] == [("flush",), ("upsert", "t" * 32, "확정 제목", "질의", "답변", "s1")]
     assert t.trace_url() == "http://lf/traces/" + "t" * 32
+
+    # done 이 이름을 주지 않으면(이미 제목이 있는 세션) 시작 이름을 그대로 쓴다
+    log.clear()
+    with t.turn("세션 제목", "질의2") as turn:
+        turn.done("답변2")
+    assert log[-1] == ("upsert", "t" * 32, "세션 제목", "질의2", "답변2", "")
