@@ -7,6 +7,8 @@ import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .config import koda_home
+
 
 def _normalize(spec: dict) -> dict:
     """설정 축약형에 transport 를 채운다 (url→streamable_http, command→stdio)."""
@@ -20,15 +22,13 @@ def _normalize(spec: dict) -> dict:
 
 
 def _global_dir() -> Path | None:
-    """전역 MCP 폴더 ~/.config/koda/mcps — .env 탐색과 같은 위치. 홈 미정의 환경이면 None."""
-    try:
-        return Path.home() / ".config" / "koda" / "mcps"
-    except (RuntimeError, OSError):
-        return None
+    """전역 MCP 폴더 ~/.koda/mcps. .env 탐색과 같은 위치를 쓴다."""
+    home = koda_home()
+    return home / "mcps" if home else None
 
 
 def mcp_dirs(workspace: str | Path, mcps_dir: str | None = None) -> list[Path]:
-    """로드 순서: 전역(~/.config/koda/mcps) → 프로젝트(<workspace>/mcps 또는 --mcps-dir). 같은 서버명은 뒤(프로젝트)가 이긴다."""
+    """로드 순서: 전역(~/.koda/mcps) → 프로젝트(<workspace>/mcps 또는 --mcps-dir). 같은 서버명은 뒤(프로젝트)가 이긴다."""
     project = (Path(mcps_dir) if mcps_dir else Path(workspace) / "mcps").resolve()
     g = _global_dir()
     return [g, project] if g and g.resolve() != project else [project]

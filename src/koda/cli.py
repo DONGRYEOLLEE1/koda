@@ -348,7 +348,7 @@ def main(argv=None) -> int:
     common.add_argument("--yolo", action="store_true", help="위험 도구 자동 승인")
     common.add_argument("--resume", metavar="SESSION_ID", help="저장된 세션 재개")
     common.add_argument("--mcps-dir", default=None,
-                        help="프로젝트 MCP 설정 폴더 (기본: <workspace>/mcps). 전역 ~/.config/koda/mcps 는 항상 함께 읽는다")
+                        help="프로젝트 MCP 설정 폴더 (기본: <workspace>/mcps). 전역 ~/.koda/mcps 는 항상 함께 읽는다")
     common.add_argument("--no-mcp", action="store_true", help="외부 MCP 로드 생략(로컬만, 빠름)")
 
     # 서브커맨드 없이 `koda [옵션]` 만 실행하면 TUI 로 진입한다 (사람용 기본 진입점).
@@ -362,7 +362,7 @@ def main(argv=None) -> int:
     pr.add_argument("--workspace", default=".")
     pr.add_argument("--yolo", action="store_true", help="위험 도구 자동 승인")
     pr.add_argument("--mcps-dir", default=None,
-                    help="프로젝트 MCP 설정 폴더 (기본: <workspace>/mcps). 전역 ~/.config/koda/mcps 는 항상 함께 읽는다")
+                    help="프로젝트 MCP 설정 폴더 (기본: <workspace>/mcps). 전역 ~/.koda/mcps 는 항상 함께 읽는다")
     pr.add_argument("--no-mcp", action="store_true", help="외부 MCP 로드 생략(로컬만, 빠름)")
     pr.set_defaults(func=_cmd_run)
 

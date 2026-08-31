@@ -38,7 +38,7 @@ koda                              # TUI 진입 (= koda tui)
 - 턴이 끝나면 답변 아래에 `✓ 완료 · N초`(편집 경로면 검증 결과까지)만 남는다. 경로(route)와 langfuse trace 주소는 진단용이라 표시하지 않으며 `/status` 와 langfuse 에서 본다.
 - 답변 전 과정(사고·툴 호출)은 흐린 한 줄 스텝으로 `과정` 그룹 안에 쌓인다. 연속된 읽기·검색·조사는 `⏺ 탐색 · a.py, b.py 읽음 · "add" 검색` 한 줄로 합쳐지고, 모델이 사고 내용(`reasoning_content`)을 따로 주면(vLLM·DeepSeek) `∙ 첫 문장` 으로 보인다. 턴이 끝나면 그룹이 `▸ 과정 · 사고 N · 탐색 N · 편집 N · Ns` 로 접히며, 클릭하면 다시 펼쳐 각 스텝의 출력 전체를 볼 수 있다(접힌 상태에서는 드래그 선택이 되지 않는다).
 
-**모델 전환·로컬 모델** — 모델명으로 provider 를 유추해 base_url·reasoning·구조화 출력 방식을 맞추므로 `MODEL` 과 키만 바꾸면 된다. 회사별 환경변수 블록과 주의사항은 [`providers/`](providers/README.md) 에 있다. 환경변수로 넘기거나 `CWD/.env` · `~/.config/koda/.env` 에 둔다(환경변수가 파일보다 우선). 전체 항목은 `.env.example`.
+**모델 전환·로컬 모델** — 모델명으로 provider 를 유추해 base_url·reasoning·구조화 출력 방식을 맞추므로 `MODEL` 과 키만 바꾸면 된다. 회사별 환경변수 블록과 주의사항은 [`providers/`](providers/README.md) 에 있다. 환경변수로 넘기거나 `CWD/.env` · `~/.koda/.env` 에 둔다(환경변수가 파일보다 우선). 전체 항목은 `.env.example`.
 
 ```bash
 export MODEL=gpt-5.6-terra OPENAI_API_KEY=sk-...                                   # OpenAI 로 전환 (base_url 자동)
@@ -107,13 +107,13 @@ langgraph `StateGraph` 분기: **router → { answer | reader | investigator →
 
 외부 MCP 서버를 `*.json`(또는 `*.yaml`) 파일 하나당 하나씩 두면 일괄 로드해 answer·reader·investigator·coder·planner 에 주입한다. LLM 이 최신 문서·웹검색이 필요하다고 판단하면 스스로 호출한다.
 
-- **전역** `~/.config/koda/mcps/` — 모든 워크스페이스에서 잡힌다(exa·context7 같은 범용).
+- **전역** `~/.koda/mcps/` — 모든 워크스페이스에서 잡힌다(exa·context7 같은 범용).
 - **프로젝트** `<workspace>/mcps/` (`--mcps-dir` 로 변경) — 그 프로젝트에만. 같은 서버명이면 전역을 덮어쓴다.
 
 ```jsonc
-// ~/.config/koda/mcps/exa.json — 웹 검색
+// ~/.koda/mcps/exa.json — 웹 검색
 { "mcpServers": { "exa": { "url": "https://mcp.exa.ai/mcp" } } }
-// ~/.config/koda/mcps/context7.json — 최신 라이브러리 문서
+// ~/.koda/mcps/context7.json — 최신 라이브러리 문서
 { "mcpServers": { "context7": { "url": "https://mcp.context7.com/mcp" } } }
 ```
 

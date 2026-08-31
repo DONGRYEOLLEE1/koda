@@ -16,7 +16,7 @@ Anthropic 은 OpenAI 호환 API 가 아니라 아직 지원하지 않는다(별�
 
 koda 는 `MODEL` 의 접두로 provider 프로필을 유추해 base_url·reasoning 방식·구조화 출력 방식·API 형태를 채운다(`src/koda/config.py` 의 `PROVIDER_PROFILES`). 그래서 provider 전환은 **`MODEL` 과 그 provider 의 키를 바꾸는 것**이 전부다. 어떤 값이든 같은 이름의 환경변수를 주면 프로필보다 우선하므로, 다른 provider 에서 쓰던 `OPENAI_BASE_URL`·`REASONING_STYLE`·`STRUCTURED_METHOD` 가 셸에 남아 있으면 `unset` 한다 — 401·400 의 흔한 원인이 이 잔재다.
 
-환경변수 대신 파일을 쓰려면 같은 내용을 `CWD/.env` 나 `~/.config/koda/.env` 에 둔다(환경변수가 파일보다 우선). 전체 항목은 `.env.example`.
+환경변수 대신 파일을 쓰려면 같은 내용을 `CWD/.env` 나 `~/.koda/.env` 에 둔다(환경변수가 파일보다 우선). 전체 항목은 `.env.example`.
 
 각 provider 가 무엇을 받고 거절하는지(실측)는 루트 README 의 "엔드포인트 호환" 표에 요약돼 있다.
 

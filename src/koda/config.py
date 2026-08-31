@@ -9,16 +9,27 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEFAULT_CONTEXT_BUDGET = 131_072  # 실효 컨텍스트 예산 기본값(128Ki). 모델이 더 크면 CONTEXT_BUDGET_TOKENS 로 올린다
 
 
+KODA_HOME = ".koda"   # 홈의 전역 설정 폴더. 워크스페이스의 .koda 와 같은 이름을 쓴다
+
+
+def koda_home() -> Path | None:
+    """전역 설정 폴더 ~/.koda. 아직 없고 예전 위치(~/.config/koda)만 있으면 그쪽을 쓴다. 홈 미정의 환경이면 None."""
+    try:
+        home = Path.home()
+    except (RuntimeError, OSError):
+        return None
+    new = home / KODA_HOME
+    legacy = home / ".config" / "koda"
+    return legacy if not new.is_dir() and legacy.is_dir() else new
+
+
 def _env_files(env_file: str | None = None) -> tuple[str, ...]:
-    """설정 파일 계층: ~/.config/koda/.env 를 깔고 CWD/.env 가 덮는다(뒤 파일이 우선). 명시값이 있으면 그것만 쓴다."""
+    """설정 파일 계층: ~/.koda/.env 를 깔고 CWD/.env 가 덮는다(뒤 파일이 우선). 명시값이 있으면 그것만 쓴다."""
     if env_file:
         return (env_file,)
     files = []
-    try:
-        glob = Path.home() / ".config" / "koda" / ".env"
-    except (RuntimeError, OSError):  # 홈 디렉토리 미정의 환경 → 환경변수 경로로
-        glob = None
-    if glob and glob.is_file():
+    home = koda_home()
+    if home and (glob := home / ".env").is_file():
         files.append(str(glob))
     if Path(".env").is_file():
         files.append(".env")
@@ -176,7 +187,7 @@ def switch_model(settings: ModelSettings, model: str, provider: str = "", base_u
 
 
 def load_model_settings(env_file: str | None = None) -> ModelSettings:
-    """CLI/런타임 진입점. env_file 미지정 시 ~/.config/koda/.env 와 CWD/.env 를 겹쳐 읽는다(환경변수 > CWD > 전역)."""
+    """CLI/런타임 진입점. env_file 미지정 시 ~/.koda/.env 와 CWD/.env 를 겹쳐 읽는다(환경변수 > CWD > 전역)."""
     files = _env_files(env_file)
     if files:
         return ModelSettings(_env_file=files)  # type: ignore[call-arg]

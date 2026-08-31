@@ -97,7 +97,7 @@ def test_env_files_layered(tmp_path, monkeypatch):
     # 2) 아무것도 없으면 빈 튜플 → 환경변수 폴백 경로
     assert _env_files() == ()
     # 3) 전역 설정만 있으면 전역 하나
-    koda_dir = fake_home / ".config" / "koda"
+    koda_dir = fake_home / ".koda"
     koda_dir.mkdir(parents=True)
     (koda_dir / ".env").write_text("PRIMARY=local", encoding="utf-8")
     assert _env_files() == (str(koda_dir / ".env"),)
@@ -114,7 +114,7 @@ def test_cwd_env_does_not_hide_global_keys(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     fake_home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(fake_home))
-    koda_dir = fake_home / ".config" / "koda"
+    koda_dir = fake_home / ".koda"
     koda_dir.mkdir(parents=True)
     (koda_dir / ".env").write_text(
         "LANGFUSE_PUBLIC_KEY=pk-global\nLANGFUSE_SECRET_KEY=sk-global\nPRIMARY=local\n", encoding="utf-8")
@@ -192,3 +192,15 @@ def test_switch_model_across_providers_and_local():
 
     back = switch_model(loc, "deepseek-v4-flash", api_key="dk2")
     assert (back.primary, back.openai_api_key, back.openai_base_url) == ("openai", "dk2", "https://api.deepseek.com")
+
+
+def test_koda_home_prefers_new_path_and_falls_back(tmp_path, monkeypatch):
+    """전역 설정 폴더는 ~/.koda 다. 아직 없고 예전 위치(~/.config/koda)만 있으면 그쪽을 읽어 기존 설정이 끊기지 않는다."""
+    from koda.config import koda_home
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert koda_home() == tmp_path / ".koda"          # 둘 다 없으면 새 경로
+    legacy = tmp_path / ".config" / "koda"
+    legacy.mkdir(parents=True)
+    assert koda_home() == legacy                       # 예전 위치만 있으면 그쪽
+    (tmp_path / ".koda").mkdir()
+    assert koda_home() == tmp_path / ".koda"          # 새 경로가 생기면 새 경로가 이긴다
