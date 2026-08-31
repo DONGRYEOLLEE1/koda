@@ -130,7 +130,7 @@ class SessionRun:
         self.label = ""                  # 활동바 단계 라벨
         self.detail = ""                 # 현재 실행 중인 도구명
         self.tools: Counter = Counter()  # 턴 전체 툴 tally(활동바 롤업)
-        self.ctx_used = 0                # 최근 LLM 호출의 프롬프트+출력 토큰 = 현재 컨텍스트 점유 근사값
+        self.ctx_used = 0                # 이 세션에서 가장 컸던 LLM 호출의 프롬프트+출력 토큰 = 컨텍스트 점유 근사값
         self.tokens = [0, 0]             # 세션 누적 입력/출력 토큰 (/status)
 
     @property
@@ -378,7 +378,8 @@ class KodaTui(App):
     @on(UsageUpdate)
     def _on_usage(self, msg: UsageUpdate) -> None:
         run = self._run_of(msg)
-        run.ctx_used = msg.input_tokens + msg.output_tokens
+        # 한 턴 안에도 라우터·검증처럼 작은 호출이 섞이므로 마지막 호출은 대화 크기가 아니다. 최대값이 실제 점유에 가깝다.
+        run.ctx_used = max(run.ctx_used, msg.input_tokens + msg.output_tokens)
         run.tokens[0] += msg.input_tokens
         run.tokens[1] += msg.output_tokens
         if run is self._active:
@@ -1046,7 +1047,9 @@ class KodaTui(App):
     @on(CompactDone)
     async def _on_compact_done(self, msg: CompactDone) -> None:
         # /compact worker 완료 — busy 해제·입력 재활성(턴과 동일 경로) 후 결과 안내
-        self._end_turn(self._run_of(msg))
+        run = self._run_of(msg)
+        run.ctx_used = 0   # 히스토리가 줄었으니 점유 최대값도 다시 센다
+        self._end_turn(run)
         self.notify(msg.note, title="문맥 압축", timeout=5)
 
     # --- 과정 가시화 (ToolActivityHandler 콜백 → 그룹 안의 스텝 줄) ---

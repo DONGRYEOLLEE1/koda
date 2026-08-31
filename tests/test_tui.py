@@ -1056,10 +1056,13 @@ def test_statusline_context_usage_status_and_model_switch(tmp_path, monkeypatch)
             assert "대기 중" not in line and "koda" not in line     # 진행 상태는 활동바가 말한다
             app.post_message(UsageUpdate(7000, 500))
             assert await _wait(pilot, lambda: "컨텍스트 ████████░░ 75%" in _static_text(app.query_one("#statusline")))
+            app.post_message(UsageUpdate(1000, 100))   # 턴 끝의 검증 호출처럼 작은 호출이 와도 게이지는 내려가지 않는다
+            await pilot.pause()
+            assert "컨텍스트 ████████░░ 75%" in _static_text(app.query_one("#statusline"))
             await _submit(pilot, "/status")
             assert await _wait(pilot, lambda: type(app.screen).__name__ == "InfoScreen")
             body = _static_text(app.screen.query_one("#info_body"))
-            assert "deepseek-v4-flash (deepseek)" in body and "세션 누적 입력 7.0k 출력 0.5k" in body
+            assert "deepseek-v4-flash (deepseek)" in body and "세션 누적 입력 8.0k 출력 0.6k" in body   # 누적은 모든 호출의 합
             await pilot.press("escape")
             assert await _wait(pilot, lambda: type(app.screen).__name__ != "InfoScreen")
             await _submit(pilot, "/model gpt-5.6 key=ok")
