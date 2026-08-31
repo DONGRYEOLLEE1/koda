@@ -119,7 +119,8 @@ def test_token_stream_accumulates(tmp_path):
             texts = [_static_text(w) for w in conv.query(".user-turn")]
             assert any("설명해줘" in t for t in texts)
             footers = [_static_text(w) for w in conv.query(".turn-footer")]
-            assert any("route: read" in t for t in footers)
+            assert any("완료" in t for t in footers)
+            assert not any("route:" in t or "trace:" in t for t in footers)   # 진단용 값은 답변 아래에 남기지 않는다
     asyncio.run(go())
 
 
@@ -148,7 +149,7 @@ def test_events_routed(tmp_path):
             # 검증 결과·판정 근거·trace 는 우측 패널 폐지 후 턴 footer 에 인라인된다
             footer = "\n".join(_footers(app))
             assert "verdict: pass" in footer and "테스트 근거" in footer
-            assert "trace: http://lf/t/1" in footer
+            assert "trace:" not in footer and "route:" not in footer
     asyncio.run(go())
 
 
@@ -1109,6 +1110,8 @@ def test_session_panel_lists_current_first_and_toggles(tmp_path):
         async with app.run_test(size=(120, 30)) as pilot:
             panel = app.query_one("#session_panel")
             assert not panel.has_class("-hidden")                       # 100열 이상이면 펼친 채 시작
+            title = _static_text(app.query_one("#sp_title"))
+            assert title.startswith("📁") and title.endswith(tmp_path.name[-12:])   # 머리글에 워크스페이스 이름(길면 앞을 자름)
             assert _panel_ids(app) == [app.runner.session.id, "old1"]   # 미저장 현재 세션이 맨 앞
             assert "● 새 세션" in _panel_row(app, 0)                     # 대기 중 = ● + 임시 이름
             assert "지난 작업" in _panel_row(app, 1) and "●" not in _panel_row(app, 1)

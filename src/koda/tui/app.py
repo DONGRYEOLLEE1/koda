@@ -289,7 +289,7 @@ class KodaTui(App):
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="body"):
-            yield SessionPanel(id="session_panel")
+            yield SessionPanel(self._ws.root.name, id="session_panel")
             with Vertical(id="main"):
                 with Vertical(id="conv_stack"):
                     yield self._active.conv
@@ -992,17 +992,15 @@ class KodaTui(App):
 
         verdict = result.get("verdict")
         elapsed = int(time.monotonic() - run.turn_t0)
+        # 경로(route)와 trace 주소는 진단용이라 답변 아래에 남기지 않는다. 필요하면 /status 와 langfuse 에서 본다.
         footer = Text()
         footer.append(f"✓ 완료 · {elapsed}초", style=f"bold {self._theme_color('success')}")
-        footer.append(f"\nroute: {result.get('route')}", style="dim")
         if verdict:
             footer.append("  ·  ", style="dim")
             verdict_color = self._theme_color("success") if verdict == "pass" else self._theme_color("error")
             footer.append(f"verdict: {verdict}", style=f"bold {verdict_color}")
         if result.get("verify_detail"):   # 검증 상세는 우측 패널 대신 턴 footer 인라인 (패널 폐지)
             footer.append(f"\n판정: {result['verify_detail']}", style="dim")
-        if result.get("trace_url"):
-            footer.append(f"\ntrace: {result['trace_url']}", style="dim")
         if result.get("empty_final"):
             reason = result.get("empty_reason") or "unknown"
             hint = "출력 예산 소진(재시도 권장)" if reason == "length_truncation" else "재시도 권장"

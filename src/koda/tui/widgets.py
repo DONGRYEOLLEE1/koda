@@ -513,12 +513,17 @@ class SessionPanel(Vertical):
             self.session_id = session_id
             super().__init__()
 
-    def __init__(self, *args, **kwargs) -> None:
+    _NAME_LIMIT = 24   # 패널 폭(30열)에 맞춘 워크스페이스 이름 상한
+
+    def __init__(self, workspace: str = "", *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+        self._workspace = workspace   # 프로세스 하나에 워크스페이스 하나라 세션 행이 아니라 머리글에 둔다
         self._drawn: dict[str, tuple] = {}   # 행별 마지막 렌더 키 — 틱마다 안 바뀐 행을 다시 그리지 않는다
 
     def compose(self) -> ComposeResult:
-        yield Static("세션", id="sp_title", markup=False)
+        name = self._workspace or "세션"
+        yield Static("📁 " + (name if len(name) <= self._NAME_LIMIT else "…" + name[-self._NAME_LIMIT:]),
+                     id="sp_title", markup=False)
         yield OptionList(id="sp_list")
         yield Static("n 새로 · Enter 전환 · d 삭제 · ^B 접기", id="sp_hint", markup=False)
 
