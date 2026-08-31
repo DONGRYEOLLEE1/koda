@@ -32,9 +32,10 @@ class Session:
         return self.root / KODA_DIR / "sessions" / f"{self.id}.json"
 
     def add_turn(self, task: str, answer: str, route: str, verdict: str | None, summary: str = "") -> None:
-        """턴 결과를 히스토리에 추가한다. 최종 답변 텍스트만 저장(reasoning/도구 원본 없음)."""
+        """턴 결과를 히스토리에 추가한다. 최종 답변 텍스트만 저장(reasoning/도구 원본 없음). 검증 실패는 답변에 표시해 다음 턴이 사실로 오해하지 않게 한다."""
         self.history.append({"role": "user", "content": task})
-        self.history.append({"role": "assistant", "content": answer})
+        content = answer if verdict != "fail" else f"{answer}\n\n(koda 검증: 실패, 위 내용은 확인되지 않았다)"
+        self.history.append({"role": "assistant", "content": content})
         self.turns.append({"task": task, "route": route, "verdict": verdict, "summary": summary})
         self.updated_at = time.time()
 

@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 from koda.agents.graph import _build_graph, _planner_tools, enforce_checklist
 from koda.agents.streaming import AgentResult
+from koda.agents.toollog import ToolLog
 from koda.prompts import load_prompt
 from koda.workspace import Workspace
 
@@ -54,6 +55,13 @@ def test_checklist_crlf_normalized():
 class _FakeTool:
     def __init__(self, name):
         self.name = name
+
+
+def _worked_log():
+    """도구를 실제로 돌린 턴의 기록. 이게 없으면 '도구 0회 + 무변경' 결정론 게이트가 먼저 fail 을 낸다."""
+    log = ToolLog()
+    log.calls.append(("edit_file", "a.py", True))
+    return log
 
 
 def test_planner_tools_drops_web_search_keeps_docs():
@@ -243,7 +251,7 @@ def test_plan_uses_fast_model_and_retries_on_empty(monkeypatch, tmp_path):
 
     phases: list[str] = []
     g = _build_graph(think_model, fast_model, Workspace(tmp_path), lambda n, a: True,
-                     lambda t: None, phases.append, [])
+                     lambda t: None, phases.append, [], tool_log=_worked_log())
     final = asyncio.run(g.ainvoke({"task": "복잡 편집 요청", "history": []}))
 
     assert "plan" in phases and "retry:length_truncation" in phases
@@ -289,7 +297,7 @@ def test_coder_empty_recovers_without_full_rerun(monkeypatch, tmp_path):
     monkeypatch.setattr(G, "_judge", fake_judge)
 
     g = _build_graph(object(), _EditRouter(), Workspace(tmp_path), lambda n, a: True,
-                     lambda t: None, lambda p: None, [])
+                     lambda t: None, lambda p: None, [], tool_log=_worked_log())
     final = asyncio.run(g.ainvoke({"task": "간단 편집", "history": []}))
 
     assert len(astream_calls) == 1              # coder 1회만 — 전체 재실행 없음
@@ -318,7 +326,7 @@ def test_empty_full_rerun_only_when_no_messages(monkeypatch, tmp_path):
     monkeypatch.setattr(G, "_judge", fake_judge)
 
     g = _build_graph(object(), _EditRouter(), Workspace(tmp_path), lambda n, a: True,
-                     lambda t: None, lambda p: None, [])
+                     lambda t: None, lambda p: None, [], tool_log=_worked_log())
     final = asyncio.run(g.ainvoke({"task": "편집", "history": []}))
 
     assert len(astream_calls) == 2                        # 폴백 전체 재실행 1회
@@ -328,18 +336,66 @@ def test_empty_full_rerun_only_when_no_messages(monkeypatch, tmp_path):
 
 # --- 무변경이어도 verify 는 LLM 판정을 거친다: "편집 요청인데 무변경 → FAIL" 안전 게이트 유지 ---
 
-def test_verify_still_judges_when_no_file_change(monkeypatch, tmp_path):
-    # 파일 변경이 없다고 판정을 건너뛰면 "편집 요청했는데 아무것도 안 함"을 pass 로 은폐한다.
-    # verifier 는 무변경 증거(변경 없음)를 받아 스스로 pass/fail 을 판정해야 한다(재시도 복구 경로 보존).
+def test_no_tool_and_no_change_fails_without_llm(monkeypatch, tmp_path):
+    """도구 0회 + 무변경이면 아무 일도 없었던 것이므로 LLM 판정 없이 fail 이다. 답변의 수행 주장은 증거가 아니다."""
     coder_spy, planner_spy = _SpySpec(), _SpySpec()
     monkeypatch.setitem(G.AGENTS, "coder", coder_spy)
-    monkeypatch.setitem(G.AGENTS, "planner", planner_spy)   # fail → plan 재수립 경로용
+    monkeypatch.setitem(G.AGENTS, "planner", planner_spy)
 
     async def fake_astream(agent, messages, on_token, config=None, on_event=None):
-        return AgentResult(answer="완료했다고 주장", messages=[object()])   # 파일 변경 없음
+        return AgentResult(answer="완료했습니다. kill 로 전부 종료했습니다.", messages=[object()])
+
+    monkeypatch.setattr(G, "astream_agent", fake_astream)
+    seen: list = []
+
+    async def fake_judge(model, vtask, config):
+        seen.append(vtask)
+        return "pass", "ok"
+
+    monkeypatch.setattr(G, "_judge", fake_judge)
+    g = _build_graph(object(), _EditRouter(), Workspace(tmp_path), lambda n, a: True,
+                     lambda t: None, lambda p: None, [])
+    final = asyncio.run(g.ainvoke({"task": "프론트 백엔드 다 죽여줘", "history": []}))
+
+    assert final["verdict"] == "fail"
+    assert seen == []                                      # LLM 판정을 부르지도 않는다
+    assert "실행된 도구가 없고" in final["verify_detail"]
+
+
+def test_no_tool_answer_triggers_one_retry(monkeypatch, tmp_path):
+    """도구 0회로 답만 내면 1회 재촉한다 — 실행 결과를 지어낸 답이 그대로 확정되지 않게."""
+    monkeypatch.setitem(G.AGENTS, "coder", _SpySpec())
+    monkeypatch.setitem(G.AGENTS, "planner", _SpySpec())
+    calls: list = []
+
+    async def fake_astream(agent, messages, on_token, config=None, on_event=None):
+        calls.append(messages[-1]["content"])
+        return AgentResult(answer="완료했습니다.", messages=[object()])
 
     monkeypatch.setattr(G, "astream_agent", fake_astream)
 
+    async def fake_judge(model, vtask, config):
+        return "pass", "ok"
+
+    monkeypatch.setattr(G, "_judge", fake_judge)
+    phases: list = []
+    g = _build_graph(object(), _EditRouter(), Workspace(tmp_path), lambda n, a: True,
+                     lambda t: None, phases.append, [])
+    asyncio.run(g.ainvoke({"task": "포트 8791 죽여줘", "history": []}))
+
+    assert "retry:도구 미사용" in phases
+    assert calls[1].endswith(load_prompt("no_tool_retry"))   # 재촉 프롬프트가 붙는다
+
+
+def test_verify_judges_with_observed_tool_evidence(monkeypatch, tmp_path):
+    """도구를 실제로 돌렸으면 LLM 판정을 거치고, 관측된 실행 목록이 증거로 전달된다."""
+    monkeypatch.setitem(G.AGENTS, "coder", _SpySpec())
+    monkeypatch.setitem(G.AGENTS, "planner", _SpySpec())
+
+    async def fake_astream(agent, messages, on_token, config=None, on_event=None):
+        return AgentResult(answer="완료했다고 주장", messages=[object()])
+
+    monkeypatch.setattr(G, "astream_agent", fake_astream)
     seen: list = []
 
     async def fake_judge(model, vtask, config):
@@ -347,14 +403,17 @@ def test_verify_still_judges_when_no_file_change(monkeypatch, tmp_path):
         return "fail", "변경 없음"
 
     monkeypatch.setattr(G, "_judge", fake_judge)
-
+    log = ToolLog()
+    log.calls.append(("run_command", "pkill -f 8791", True))
     g = _build_graph(object(), _EditRouter(), Workspace(tmp_path), lambda n, a: True,
-                     lambda t: None, lambda p: None, [])
+                     lambda t: None, lambda p: None, [], tool_log=log)
     final = asyncio.run(g.ainvoke({"task": "a.txt 를 만들어라", "history": []}))
 
-    assert len(seen) >= 1                                  # 무변경이어도 판정을 건너뛰지 않음
-    assert "(변경 없음)" in seen[0]                         # 무변경 증거가 verifier 에 전달됨
-    assert final["verdict"] == "fail"                     # 은폐하지 않고 fail 로 노출
+    assert len(seen) >= 1                                   # 무변경이어도 판정을 건너뛰지 않는다
+    assert "(변경 없음)" in seen[0]
+    assert "run_command(pkill -f 8791) → 성공" in seen[0]    # 관측된 실행이 증거로 들어간다
+    assert "주장" in seen[0]                                 # 답변은 주장으로 라벨링된다
+    assert final["verdict"] == "fail"
 
 
 # --- resummarize: 누적 messages + nudge 로 요약 1콜 ---

@@ -302,7 +302,12 @@ def _cmd_chat(args) -> int:
         _err(f"\n--- route: {result['route']}{f' | verdict: {verdict}' if verdict else ''} ---")
         if result.get("empty_final"):
             # 빈 final 은 히스토리에 저장하지 않는다 — 다음 턴 프롬프트·compaction·메모리 추출 입력을 오염시키기 때문.
+            # 단, 실제로 도구를 돌린 턴은 무슨 일이 있었는지 남긴다.
             _err(f"(빈 응답 — 재시도 권장. 사유: {result.get('empty_reason') or 'unknown'})")
+            if result.get("tool_calls"):
+                session.add_turn(line, f"(응답 없음 · 이 턴에서 실행: {result.get('tool_summary') or '도구'})",
+                                 result["route"], verdict)
+                session.save()
             continue
         session.add_turn(line, result["final"], result["route"], verdict)
         # 메모리는 세션 종료가 아니라 턴마다 판정해 저장한다 (저장할 게 없으면 조용히 지나간다)

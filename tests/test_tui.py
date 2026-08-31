@@ -318,6 +318,60 @@ def test_turn_stores_judged_memory_and_exit_saves_session(tmp_path, monkeypatch)
     asyncio.run(go())
 
 
+def test_empty_answer_with_tool_calls_is_recorded(tmp_path):
+    """실제로 도구를 돌린 턴은 최종 응답이 비어도 히스토리에 남는다. 안 그러면 그 작업이 통째로 사라져 다음 턴이 맥락을 잃는다."""
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        return _result(final="", empty_final=True, empty_reason="no_content",
+                       tool_calls=5, tool_summary="run_command×5 · edit_file")
+
+    async def go():
+        session = Session(tmp_path)
+        app = _make_app(tmp_path, fake, session=session)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "다른 포트로 서버 띄워줘")
+            assert await _wait(pilot, _turn_done(app))
+            assert len(session.turns) == 1                                  # 실행한 턴은 기록된다
+            assert session.history[0]["content"] == "다른 포트로 서버 띄워줘"
+            assert "run_command×5 · edit_file" in session.history[1]["content"]
+            assert session.path.exists()
+    asyncio.run(go())
+
+
+def test_empty_answer_without_tool_calls_is_not_recorded(tmp_path):
+    """도구도 안 돌고 응답도 없으면 남길 것이 없다(기존 오염 방지 유지)."""
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        return _result(final="", empty_final=True, empty_reason="length_truncation", tool_calls=0)
+
+    async def go():
+        session = Session(tmp_path)
+        app = _make_app(tmp_path, fake, session=session)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "질문")
+            assert await _wait(pilot, _turn_done(app))
+            assert session.history == [] and not session.path.exists()
+    asyncio.run(go())
+
+
+def test_failed_verdict_is_marked_in_history(tmp_path):
+    """검증 실패 턴의 답변은 히스토리에 실패 표시와 함께 남아, 다음 턴이 사실로 오해하지 않는다."""
+    async def fake(task, ws, approver, on_token, on_phase, **kw):
+        on_token("완료했습니다. kill 로 전부 종료했습니다.")
+        return _result(final="완료했습니다. kill 로 전부 종료했습니다.", route="edit", verdict="fail",
+                       verify_detail="실행된 도구가 없다", tool_calls=0)
+
+    async def go():
+        session = Session(tmp_path)
+        app = _make_app(tmp_path, fake, session=session)
+        async with app.run_test() as pilot:
+            await _submit(pilot, "프론트 백엔드 다 죽여줘")
+            assert await _wait(pilot, _turn_done(app))
+            saved = session.history[1]["content"]
+            assert saved.startswith("완료했습니다.") and "koda 검증: 실패" in saved
+            footer = "\n".join(_footers(app))
+            assert "verdict: fail" in footer
+    asyncio.run(go())
+
+
 # --- 승인 args 미리보기 — 길이 제한 + run_command 명령 표시 + secret redaction ---
 
 def test_args_preview():

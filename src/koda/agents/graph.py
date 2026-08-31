@@ -21,6 +21,7 @@ from ..tracing import get_tracer
 from ..workspace import Workspace
 from ..tools.vision import make_vision_tools
 from .recall import make_title
+from .toollog import ToolLog
 from .specs import AGENTS
 from .streaming import _to_text, astream_agent, resummarize
 from .verify import _judge
@@ -73,7 +74,7 @@ def _planner_tools(mcp_tools: list) -> list:
 
 def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase, mcp_tools,
                  memory_text="", store=None, explore_model=None, skills=(), context_budget=DEFAULT_CONTEXT_BUDGET,
-                 mcp_auto_approve=()):
+                 mcp_auto_approve=(), tool_log=None):
     # explore 는 reader 와 다른 reasoning 예산을 쓸 수 있다 (미지정 시 reader 와 동일)
     explore_model = model if explore_model is None else explore_model
     # pre-edit 스냅샷 — coder 최초 진입 시 1회 채우고 verify-fail 재시도에도 유지한다. diff 는
@@ -81,6 +82,7 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
     pre_edit: dict = {}
     # explore 위임 상한: 턴당 1회 — reader↔explore 무한 핑퐁을 koda가 캡.
     explore_used = {"n": 0}
+    tool_log = tool_log if tool_log is not None else ToolLog()   # 실제 실행 기록. 검증 증거와 도구 0회 게이트가 쓴다
 
     @tool
     async def explore(question: str) -> str:
@@ -212,12 +214,18 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         if state.get("verdict") == "fail":  # 재시도: 검증 피드백 포함
             task += "\n\n" + load_prompt("coder_retry").format(detail=state.get("verify_detail", ""))
         hist = list(state.get("history") or [])
+        before = len(tool_log.calls)
         res = await astream_agent(agent, hist + [{"role": "user", "content": task}], on_token, config, on_event=on_phase)
         empty_retries = state.get("empty_retries", 0)
         if res.empty:  # 편집을 끝냈는데 최종 요약만 빈 경우가 흔하다 → 재실행 말고 누적 messages 로 요약 복구
             empty_retries += 1
             rerun = hist + [{"role": "user", "content": task + "\n\n" + load_prompt("empty_retry")}]
             res = await _recover_empty(res, agent, rerun, config)
+        elif len(tool_log.calls) == before:
+            # 도구를 하나도 안 쓰고 답만 냈다. 실행 결과를 지어낸 경우가 여기로 온다. 1회만 재촉한다.
+            on_phase("retry:도구 미사용")
+            rerun = hist + [{"role": "user", "content": task + "\n\n" + load_prompt("no_tool_retry")}]
+            res = await astream_agent(agent, rerun, on_token, config, on_event=on_phase)
         retries = state.get("retries", 0) + (1 if state.get("verdict") == "fail" else 0)
         return {"answer": res.answer, "retries": retries,
                 "empty_reason": res.empty_reason, "empty_retries": empty_retries}
@@ -227,8 +235,12 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         # 증거 수집은 결정론이다 — 턴 시작 스냅샷 대비 해시 비교로 변경 목록 + diff 를 만든다
         # (신규 파일 본문 포함). 판단만 LLM 이 한다.
         changed, diff = diff_report(pre_edit.get("snap", {}), snapshot(ws.root))
+        if not tool_log.calls and not changed:
+            # 도구 0회 + 무변경이면 아무 일도 일어나지 않았다. LLM 에게 물을 것도 없다(답변의 주장은 증거가 아니다).
+            return {"verdict": "fail",
+                    "verify_detail": "이 턴에서 실행된 도구가 없고 워크스페이스 변경도 없다. 답변의 수행 주장은 근거가 없다."}
         vtask = load_prompt("verifier_task").format(
-            task=state["task"], answer=state.get("answer", ""),
+            task=state["task"], answer=state.get("answer", ""), observed=tool_log.evidence(),
             changed="\n".join(changed) or "(변경 없음)", diff=diff or "(없음)",
         )
         if state.get("plan_text"):  # 판정 지시는 verifier.md, 여기선 증거 라벨만 붙인다
@@ -332,17 +344,18 @@ async def run_task(
     props_url = base_url.rstrip("/").removesuffix("/v1") + "/props"
     extra_tools = [*mcp_tools, *make_vision_tools(ws, fast_model, props_url)]
     tracer = get_tracer()
+    tool_log = ToolLog()   # 이 턴의 실제 도구 실행 기록 — 검증 증거·히스토리 요약에 쓴다
     graph = _build_graph(reader_model, fast_model, ws, approver, on_token, on_phase, extra_tools,
                          memory_text, store=store, explore_model=explore_model, skills=skills,
                          context_budget=settings.context_budget_tokens,
-                         mcp_auto_approve=settings.mcp_auto_approve_set)
+                         mcp_auto_approve=settings.mcp_auto_approve_set, tool_log=tool_log)
     # trace 하나 = 턴 하나. 이름은 세션 제목, 입력·출력은 질의와 답변 원문이며 graph 실행은 그 아래
     # 자식으로 매달린다. trace_name 이 비어 있으면 답변까지 본 뒤 제목을 짓고(내용이 빈약하면 빈 문자열)
     # 그 전 표시는 질의 앞부분으로 대신한다. run_id(세션 id)는 langfuse Sessions 묶음과
     # .koda/artifacts 상호참조(artifact_ns)에 함께 쓰인다.
     title = trace_name
     fallback_name = " ".join(task.split())[:15] or "koda"
-    config = {"callbacks": [*tracer.callbacks, *(extra_callbacks or [])], "run_name": task[:60],
+    config = {"callbacks": [*tracer.callbacks, tool_log, *(extra_callbacks or [])], "run_name": task[:60],
               "metadata": {"provider": provider, "artifact_ns": artifact_ns}}
     with tracer.turn(title or fallback_name, task, session_id=run_id or "") as turn:
         final = await graph.ainvoke({"task": task, "history": history or []}, config=config)
@@ -362,5 +375,7 @@ async def run_task(
         "empty_reason": final.get("empty_reason", ""),
         "empty_retries": final.get("empty_retries", 0),
         "retries": final.get("retries", 0),
+        "tool_calls": len(tool_log.calls),
+        "tool_summary": tool_log.summary(),
         "trace_url": tracer.trace_url(),
     }

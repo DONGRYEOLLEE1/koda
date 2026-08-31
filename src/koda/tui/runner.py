@@ -133,7 +133,12 @@ class TuiTurnRunner:
             if not session.title and session.title_tries < 2:
                 session.title_tries += 1
                 session.title = result.get("title", "")
-            if not result.get("empty_final"):
+            if result.get("empty_final") and result.get("tool_calls"):
+                # 실제로 도구를 돌린 턴은 최종 응답이 비어도 기록한다. 안 그러면 그 작업이 통째로 사라져 다음 턴이 맥락을 잃는다.
+                session.add_turn(task, f"(응답 없음 · 이 턴에서 실행: {result.get('tool_summary') or '도구'})",
+                                 result["route"], result.get("verdict"))
+                session.save()
+            elif not result.get("empty_final"):
                 # 빈 final 은 히스토리·세션에 저장하지 않는다 — chat 과 동일한 오염 방지.
                 session.add_turn(task, result["final"], result["route"], result.get("verdict"))
                 try:  # 메모리는 턴마다 판정해 저장한다. 판정 실패가 턴을 실패시키지는 않는다.
