@@ -60,7 +60,7 @@ class _FakeTool:
 def _worked_log():
     """도구를 실제로 돌린 턴의 기록. 이게 없으면 '도구 0회 + 무변경' 결정론 게이트가 먼저 fail 을 낸다."""
     log = ToolLog()
-    log.calls.append(("edit_file", "a.py", True))
+    log.calls.append(("edit_file", "a.py", True, "수정함"))
     return log
 
 
@@ -92,8 +92,9 @@ def test_graph_has_plan_node_and_edges():
     assert ("route", "plan") in pairs     # plan_needed=true → plan
     assert ("route", "coder") in pairs    # 단순 편집 → coder 직행
     assert ("plan", "coder") in pairs     # plan → coder 고정 엣지
-    assert ("verify", "plan") in pairs    # verify-fail → plan 재수립 (coder 직행 재시도 폐지)
-    assert ("verify", "coder") not in pairs
+    # verify-fail 재시도는 라우터 판단을 따른다: 복잡 편집이면 plan 재수립, 단순 편집이면 coder 직행
+    assert ("verify", "plan") in pairs
+    assert ("verify", "coder") in pairs
 
 
 def test_graph_has_answer_node_direct_to_end():
@@ -404,14 +405,14 @@ def test_verify_judges_with_observed_tool_evidence(monkeypatch, tmp_path):
 
     monkeypatch.setattr(G, "_judge", fake_judge)
     log = ToolLog()
-    log.calls.append(("run_command", "pkill -f 8791", True))
+    log.calls.append(("run_command", "pkill -f 8791", True, "exit_code=0 · 포트 소멸"))
     g = _build_graph(object(), _EditRouter(), Workspace(tmp_path), lambda n, a: True,
                      lambda t: None, lambda p: None, [], tool_log=log)
     final = asyncio.run(g.ainvoke({"task": "a.txt 를 만들어라", "history": []}))
 
     assert len(seen) >= 1                                   # 무변경이어도 판정을 건너뛰지 않는다
     assert "(변경 없음)" in seen[0]
-    assert "run_command(pkill -f 8791) → 성공" in seen[0]    # 관측된 실행이 증거로 들어간다
+    assert "run_command(pkill -f 8791)" in seen[0] and "성공: exit_code=0 · 포트 소멸" in seen[0]   # 명령과 출력이 함께 증거로 들어간다
     assert "주장" in seen[0]                                 # 답변은 주장으로 라벨링된다
     assert final["verdict"] == "fail"
 
@@ -586,3 +587,30 @@ def test_run_task_probes_vision_on_active_provider(monkeypatch, tmp_path):
     asyncio.run(G.run_task("q", Workspace(tmp_path), lambda n, a: True, lambda t: None,
                            settings=_dummy_settings(), mcps_dir=None, trace_name="t"))
     assert seen == ["http://localhost:8/props"]          # openai_base_url 기준(local 은 :9)
+
+
+def test_verify_fail_retry_follows_router_decision(monkeypatch, tmp_path):
+    """실패 재시도 경로는 라우터의 plan_needed 를 턴 내내 따른다: 단순 편집은 coder 직행, 복잡 편집만 plan 재수립."""
+    async def fake_astream(agent, messages, on_token, config=None, on_event=None):
+        return AgentResult(answer="했다", messages=[object()])
+
+    monkeypatch.setattr(G, "astream_agent", fake_astream)
+
+    async def always_fail(model, vtask, config):
+        return "fail", "확인 불가"
+
+    monkeypatch.setattr(G, "_judge", always_fail)
+
+    for router, plan_expected in ((_EditRouter(), False), (_FakeRouter(), True)):
+        planner_spy, coder_spy = _SpySpec(), _SpySpec()
+        monkeypatch.setitem(G.AGENTS, "planner", planner_spy)
+        monkeypatch.setitem(G.AGENTS, "coder", coder_spy)
+        g = _build_graph(object(), router, Workspace(tmp_path), lambda n, a: True,
+                         lambda t: None, lambda p: None, [], tool_log=_worked_log())
+        final = asyncio.run(g.ainvoke({"task": "작업", "history": []}))
+        assert final["verdict"] == "fail" and final["retries"] == 1      # 재시도는 어느 경로든 1회
+        if plan_expected:
+            assert len(planner_spy.models) == 2                          # 최초 + 실패 후 재수립
+        else:
+            assert planner_spy.models == []                              # 계획이 필요 없던 턴은 plan 을 타지 않는다
+        assert len(coder_spy.models) == 2                                # coder 는 두 경로 모두 2회

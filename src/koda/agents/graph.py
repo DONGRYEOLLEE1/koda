@@ -280,10 +280,11 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
         return {"inspect": "investigator", "answer": "answer"}.get(state["route"], "reader")
 
     def verify_edge(state: _State):
-        # fail 재시도는 coder 재실행이 아니라 plan 재수립부터 한다. retries 증가는 coder 가
-        # 담당하므로 plan 경유에도 정확히 1회만 증가한다.
+        # 라우터의 판단을 턴 내내 유지한다: 복잡 편집으로 본 턴만 plan 을 다시 세우고, 단순 편집은
+        # 실패 피드백을 들고 coder 로 바로 돌아간다(계획이 필요 없던 작업에 재수립은 비용만 든다).
+        # retries 증가는 coder 가 담당하므로 어느 경로든 정확히 1회만 증가한다.
         if state["route"] == "edit" and state["verdict"] == "fail" and state.get("retries", 0) < 1:
-            return "plan"
+            return "plan" if state.get("plan_needed") else "coder"
         return END
 
     g = StateGraph(_State)
@@ -305,7 +306,7 @@ def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase,
     g.add_edge("investigator", END)
     g.add_edge("plan", "coder")
     g.add_edge("coder", "verify")
-    g.add_conditional_edges("verify", verify_edge, {"plan": "plan", END: END})
+    g.add_conditional_edges("verify", verify_edge, {"plan": "plan", "coder": "coder", END: END})
     return g.compile()
 
 
