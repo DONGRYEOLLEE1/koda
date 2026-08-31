@@ -13,6 +13,7 @@ from ..middleware import (
     StepBudgetMiddleware,
     ToolOutputTrimMiddleware,
 )
+from ..config import DEFAULT_CONTEXT_BUDGET
 from ..prompts import load_prompt
 from ..tools import make_all_tools, make_inspect_tools, make_readonly_tools
 from ..tools.artifact import make_artifact_tools
@@ -29,7 +30,7 @@ class AgentSpec:
     response_format: type | None = None
     max_steps: int = 25  # 이 에이전트 1회 실행당 도구 호출 하드 캡 (도구 루프 폭주 방지)
 
-    def system_prompt(self, memory_text: str = "", skills=(), context_budget: int = 64000) -> str:
+    def system_prompt(self, memory_text: str = "", skills=(), context_budget: int = DEFAULT_CONTEXT_BUDGET) -> str:
         """시스템 프롬프트 조립. 캐시 prefix 순서: 정적(프롬프트·예산·스킬) → 메모리 → 날짜(매일 바뀜)."""
         system = load_prompt(self.name)
         # 컨텍스트 예산 소프트 가이드 — 하드 집행은 StepBudget·HistoryTrim 이 하고, 이 문구는 모델 유도용이다.
@@ -55,7 +56,7 @@ class AgentSpec:
         return system
 
     def build(self, model, ws, approver, extra_tools=(), memory_text: str = "", store=None,
-              skills=(), context_budget: int = 64000, mcp_auto_approve=()):
+              skills=(), context_budget: int = DEFAULT_CONTEXT_BUDGET, mcp_auto_approve=()):
         system = self.system_prompt(memory_text, skills, context_budget)
         tools = self.toolset(ws) + list(extra_tools)
         if store is not None:  # 절단된 도구 출력의 원문 재조회 경로

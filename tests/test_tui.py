@@ -1044,6 +1044,7 @@ def test_statusline_context_usage_status_and_model_switch(tmp_path, monkeypatch)
     from koda.tui.model import UsageUpdate
 
     st = ModelSettings(_env_file=None, openai_model="deepseek-v4-flash", deepseek_api_key="dk", context_budget_tokens=10000)
+    assert ModelSettings(_env_file=None).context_budget_tokens == 131_072   # 기본 예산은 131k
     monkeypatch.setattr(A, "select_provider", lambda settings: ("openai", ""))
 
     async def go():
@@ -1051,7 +1052,7 @@ def test_statusline_context_usage_status_and_model_switch(tmp_path, monkeypatch)
                       run_task_fn=None, model_name="deepseek-v4-flash", settings=st)
         async with app.run_test(size=(120, 30)) as pilot:
             line = _static_text(app.query_one("#statusline"))
-            assert line.startswith("deepseek-v4-flash · auto") and "컨텍스트 ░░░░░░░░░░ 0%" in line
+            assert line.startswith("deepseek-v4-flash · yolo") and "컨텍스트 ░░░░░░░░░░ 0%" in line
             assert "대기 중" not in line and "koda" not in line     # 진행 상태는 활동바가 말한다
             app.post_message(UsageUpdate(7000, 500))
             assert await _wait(pilot, lambda: "컨텍스트 ████████░░ 75%" in _static_text(app.query_one("#statusline")))
@@ -1485,7 +1486,7 @@ def test_model_wizard_picks_provider_then_fills_values(tmp_path, monkeypatch):
             await pilot.press(*"ok", "enter")                                             # 키 → 적용
             assert await _wait(pilot, lambda: app.runner.settings.openai_model == "gpt-5.6")
             assert app.runner.settings.openai_api_key == "ok" and app.runner.settings.primary == "openai"
-            assert _static_text(app.query_one("#statusline")).startswith("gpt-5.6 · auto")
+            assert _static_text(app.query_one("#statusline")).startswith("gpt-5.6 · yolo")
             await _submit(pilot, "/model")
             assert await _wait(pilot, lambda: type(app.screen).__name__ == "ModelScreen")
             await pilot.press("enter")                                                    # local 선택: 현재 로컬 값이 채워짐

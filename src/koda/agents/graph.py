@@ -10,7 +10,7 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel
 
 from ..artifacts import ArtifactStore
-from ..config import load_model_settings
+from ..config import DEFAULT_CONTEXT_BUDGET, load_model_settings
 from ..diffscan import diff_report, snapshot
 from ..llm import _no_think, _thinking, astructured, build_model, set_structured_method
 from ..mcp import load_mcp_tools
@@ -72,7 +72,7 @@ def _planner_tools(mcp_tools: list) -> list:
 
 
 def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase, mcp_tools,
-                 memory_text="", store=None, explore_model=None, skills=(), context_budget=64000,
+                 memory_text="", store=None, explore_model=None, skills=(), context_budget=DEFAULT_CONTEXT_BUDGET,
                  mcp_auto_approve=()):
     # explore 는 reader 와 다른 reasoning 예산을 쓸 수 있다 (미지정 시 reader 와 동일)
     explore_model = model if explore_model is None else explore_model

@@ -17,7 +17,7 @@ from textual.widgets import Footer, Markdown, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 
 from ..cli import _err
-from ..config import switch_model
+from ..config import DEFAULT_CONTEXT_BUDGET, switch_model
 from ..gitinfo import git_ref
 from ..llm import select_provider
 from ..mcp import connect_mcp, connect_server, disconnect_server, mcp_dirs
@@ -233,7 +233,7 @@ class KodaTui(App):
         self._active_id = session.id
         self._new_run(session)
         self._model_name = model_name
-        self._mode = "auto" if auto_yes else "manual"  # 승인 모드 뱃지(statusline)
+        self._mode = "yolo" if auto_yes else "manual"   # 승인 모드 뱃지(statusline) — --yolo 자동 승인
         self._ctrl_c_at = 0.0                          # 마지막 Ctrl+C 시각(연타 판정)
         # MCP 는 화면이 뜬 뒤 백그라운드로 붙는다(None 이면 --no-mcp). 결과는 /mcp 화면과 상태줄에 보인다.
         self._mcp_dirs = mcp_dirs
@@ -341,7 +341,7 @@ class KodaTui(App):
 
     @property
     def _ctx_budget(self) -> int:
-        return int(getattr(self._settings, "context_budget_tokens", 64000) or 64000)
+        return int(getattr(self._settings, "context_budget_tokens", DEFAULT_CONTEXT_BUDGET) or DEFAULT_CONTEXT_BUDGET)
 
     @staticmethod
     def _k(n: int) -> str:

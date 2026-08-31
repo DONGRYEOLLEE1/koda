@@ -6,6 +6,9 @@ from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+DEFAULT_CONTEXT_BUDGET = 131_072  # 실효 컨텍스트 예산 기본값(128Ki). 모델이 더 크면 CONTEXT_BUDGET_TOKENS 로 올린다
+
+
 def _env_files(env_file: str | None = None) -> tuple[str, ...]:
     """설정 파일 계층: ~/.config/koda/.env 를 깔고 CWD/.env 가 덮는다(뒤 파일이 우선). 명시값이 있으면 그것만 쓴다."""
     if env_file:
@@ -83,7 +86,7 @@ class ModelSettings(BaseSettings):
     thinking_budget_explore: int = Field(default=512, alias="THINKING_BUDGET_EXPLORE")
 
     # 나가는 요청 프롬프트 토큰 상한 — HistoryTrimMiddleware 가 이 값으로 턴 누적을 절단해 컨텍스트 초과(400)를 막는다. 서버 n_ctx 조정 시 함께 조정.
-    context_budget_tokens: int = Field(default=64000, alias="CONTEXT_BUDGET_TOKENS")
+    context_budget_tokens: int = Field(default=DEFAULT_CONTEXT_BUDGET, alias="CONTEXT_BUDGET_TOKENS")
 
     # 자동 승인할 읽기 전용 MCP 도구 이름(쉼표 구분, opt-in). 쓰기성·SSRF 가능 MCP 는 넣지 마라 — 자동 실행되어 유출 위험이 된다.
     mcp_auto_approve: str = Field(default="", alias="KODA_MCP_AUTO_APPROVE")
