@@ -86,24 +86,47 @@ def test_invalid_primary_rejected():
         ModelSettings(_env_file=None, **{**_FULL, "primary": "banana"})
 
 
-def test_resolve_env_file_priority(tmp_path, monkeypatch):
-    """설정 탐색 우선순위: 명시 인자 > CWD/.env > ~/.config/koda/.env > None (전역 폴백)."""
-    from koda.config import _resolve_env_file
+def test_env_files_layered(tmp_path, monkeypatch):
+    """설정 탐색: 명시 인자는 단독, 아니면 (전역, CWD) 계층으로 겹쳐 읽는다."""
+    from koda.config import _env_files
     monkeypatch.chdir(tmp_path)
     fake_home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(fake_home))       # Path.home() 는 POSIX 에서 HOME 사용
-    # 1) 명시 인자 최우선
-    assert _resolve_env_file("/explicit.env") == "/explicit.env"
-    # 2) 아무것도 없으면 None → 환경변수 폴백 경로
-    assert _resolve_env_file() is None
-    # 3) 전역 설정만 있으면 전역 경로
+    # 1) 명시 인자는 전역과 섞지 않는다
+    assert _env_files("/explicit.env") == ("/explicit.env",)
+    # 2) 아무것도 없으면 빈 튜플 → 환경변수 폴백 경로
+    assert _env_files() == ()
+    # 3) 전역 설정만 있으면 전역 하나
     koda_dir = fake_home / ".config" / "koda"
     koda_dir.mkdir(parents=True)
     (koda_dir / ".env").write_text("PRIMARY=local", encoding="utf-8")
-    assert _resolve_env_file() == str(koda_dir / ".env")
-    # 4) CWD/.env 가 전역보다 우선 (개발 시 기존 동작 유지)
+    assert _env_files() == (str(koda_dir / ".env"),)
+    # 4) 둘 다 있으면 CWD 가 뒤 = 겹칠 때 CWD 가 이긴다
     (tmp_path / ".env").write_text("PRIMARY=local", encoding="utf-8")
-    assert _resolve_env_file() == ".env"
+    assert _env_files() == (str(koda_dir / ".env"), ".env")
+
+
+def test_cwd_env_does_not_hide_global_keys(tmp_path, monkeypatch):
+    """CWD/.env 에 없는 키는 전역 파일에서 채운다. 무관한 .env 하나가 langfuse 추적을 끄던 회귀."""
+    from koda.config import load_langfuse_settings, load_model_settings
+    for k in ("LANGFUSE_HOST", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.chdir(tmp_path)
+    fake_home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(fake_home))
+    koda_dir = fake_home / ".config" / "koda"
+    koda_dir.mkdir(parents=True)
+    (koda_dir / ".env").write_text(
+        "LANGFUSE_PUBLIC_KEY=pk-global\nLANGFUSE_SECRET_KEY=sk-global\nPRIMARY=local\n", encoding="utf-8")
+    # langfuse 키가 없는 남의 .env (다른 프로젝트가 쓰는 파일)
+    (tmp_path / ".env").write_text("OPENAI_API_KEY=sk-project\n", encoding="utf-8")
+    assert load_langfuse_settings().enabled is True
+    s = load_model_settings()
+    assert s.openai_api_key == "sk-project"   # 겹치는 키는 CWD 가 이긴다
+    assert s.primary == "local"               # CWD 에 없는 키는 전역이 채운다
+    # CWD 에 빈 값으로 선언하면 전역 값을 덮는다 (키를 지우는 수단)
+    (tmp_path / ".env").write_text("LANGFUSE_PUBLIC_KEY=\n", encoding="utf-8")
+    assert load_langfuse_settings().enabled is False
 
 
 # --- provider 프로필: 모델명만 바꿔 전환 ---

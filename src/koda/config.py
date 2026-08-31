@@ -6,18 +6,20 @@ from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-def _resolve_env_file(env_file: str | None = None) -> str | None:
-    """설정 파일 탐색: 명시값 > CWD/.env > ~/.config/koda/.env > None(환경변수 폴백). 존재하는 파일만 반환한다."""
+def _env_files(env_file: str | None = None) -> tuple[str, ...]:
+    """설정 파일 계층: ~/.config/koda/.env 를 깔고 CWD/.env 가 덮는다(뒤 파일이 우선). 명시값이 있으면 그것만 쓴다."""
     if env_file:
-        return env_file
-    cwd = Path(".env")
-    if cwd.is_file():
-        return str(cwd)
+        return (env_file,)
+    files = []
     try:
         glob = Path.home() / ".config" / "koda" / ".env"
     except (RuntimeError, OSError):  # 홈 디렉토리 미정의 환경 → 환경변수 경로로
-        return None
-    return str(glob) if glob.is_file() else None
+        glob = None
+    if glob and glob.is_file():
+        files.append(str(glob))
+    if Path(".env").is_file():
+        files.append(".env")
+    return tuple(files)
 
 
 # 모델명으로 유추하는 provider 프로필 — 모델만 바꿔도 base_url·파라미터 계열이 따라온다. 명시한 환경변수가 항상 우선.
@@ -171,10 +173,10 @@ def switch_model(settings: ModelSettings, model: str, provider: str = "", base_u
 
 
 def load_model_settings(env_file: str | None = None) -> ModelSettings:
-    """CLI/런타임 진입점. env_file 미지정 시 CWD/.env → ~/.config/koda/.env 순으로 찾는다."""
-    resolved = _resolve_env_file(env_file)
-    if resolved:
-        return ModelSettings(_env_file=resolved)  # type: ignore[call-arg]
+    """CLI/런타임 진입점. env_file 미지정 시 ~/.config/koda/.env 와 CWD/.env 를 겹쳐 읽는다(환경변수 > CWD > 전역)."""
+    files = _env_files(env_file)
+    if files:
+        return ModelSettings(_env_file=files)  # type: ignore[call-arg]
     return ModelSettings()
 
 
@@ -195,7 +197,7 @@ class LangfuseSettings(BaseSettings):
 
 
 def load_langfuse_settings(env_file: str | None = None) -> LangfuseSettings:
-    resolved = _resolve_env_file(env_file)
-    if resolved:
-        return LangfuseSettings(_env_file=resolved)  # type: ignore[call-arg]
+    files = _env_files(env_file)
+    if files:
+        return LangfuseSettings(_env_file=files)  # type: ignore[call-arg]
     return LangfuseSettings()
