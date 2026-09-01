@@ -288,38 +288,34 @@ def test_write_find_remove_config(tmp_path, monkeypatch):
     assert remove_config("exa", ws) is None
 
 
-def test_quiet_stderr_redirects_children_and_restores(tmp_path):
-    """블록 안에서 뜬 자식의 stderr 는 로그 파일로 가고, 블록을 벗어나면 부모 fd 는 복원된다."""
+def test_stdio_child_stderr_goes_to_log_not_terminal(tmp_path, monkeypatch):
+    """stdio 서버의 stderr 는 로그 파일로 간다. fd 2 는 건드리지 않는다(Textual 이 그 fd 에 화면을 그린다)."""
+    import asyncio
     import os
-    import subprocess
     import sys
 
-    from koda.mcp import quiet_stderr, stderr_log_path
+    from koda.mcp import child_log_path, close_mcp, connect_mcp
 
-    log = stderr_log_path(tmp_path)
-    child = [sys.executable, "-c", "import sys; print('서버 로그', file=sys.stderr)"]
-    saved_fd = os.dup(2)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    noisy = tmp_path / "noisy.py"
+    noisy.write_text("import sys; print('서버가 쏟는 로그', file=sys.stderr, flush=True)\n"
+                     "import time; time.sleep(2)\n", encoding="utf-8")
+    d = tmp_path / "mcps"; d.mkdir()
+    _write(d, "noisy.json", {"mcpServers": {"noisy": {"command": f"{sys.executable} {noisy}"}}})
+    ws = tmp_path / "proj"; ws.mkdir()
+
+    fd2_before = os.fstat(2)
     try:
-        with quiet_stderr(log):
-            subprocess.run(child, check=True)          # 자식은 물려받은 fd 로 로그 파일에 쓴다
-            os.write(2, "부모도 같이 간다\n".encode())   # fd 단위 리다이렉트라 fd 2 쓰기도 로그로 간다
-        assert os.path.samestat(os.fstat(2), os.fstat(saved_fd))   # fd 2 가 원래대로 돌아왔다
+        asyncio.run(connect_mcp([d], timeout=3.0, cwd=ws))
     finally:
-        os.close(saved_fd)
-    written = log.read_text(encoding="utf-8")
-    assert "서버 로그" in written and "부모도 같이 간다" in written
+        close_mcp()
+    assert os.path.samestat(os.fstat(2), fd2_before)          # 앱의 stderr 는 그대로다
+    log = child_log_path(ws)
+    assert log.is_file() and "서버가 쏟는 로그" in log.read_text(encoding="utf-8")
 
 
-def test_quiet_stderr_restores_on_exception(tmp_path):
-    import os
+def test_child_log_path_and_rotation(tmp_path):
+    from koda.mcp import _CHILD_LOG_MAX, child_log_path
 
-    from koda.mcp import quiet_stderr, stderr_log_path
-
-    saved_fd = os.dup(2)
-    try:
-        with pytest.raises(RuntimeError):
-            with quiet_stderr(stderr_log_path(tmp_path)):
-                raise RuntimeError("boom")
-        assert os.path.samestat(os.fstat(2), os.fstat(saved_fd))   # 예외가 나도 되돌린다(트레이스백은 터미널로)
-    finally:
-        os.close(saved_fd)
+    assert child_log_path(tmp_path) == tmp_path / ".koda" / "logs" / "mcp.log"
+    assert _CHILD_LOG_MAX > 0                                  # 열 때 이 크기를 넘으면 비운다

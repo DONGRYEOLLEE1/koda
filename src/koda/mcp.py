@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import atexit
-import contextlib
 import json
 import os
 import sys
@@ -20,30 +19,48 @@ _ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _SECRET_PARAM = re.compile(r"(?i)([?&][\w.\-]*(?:key|token|secret|password|auth)[\w.\-]*=)([^&\s]+)")
 
 
-@contextlib.contextmanager
-def quiet_stderr(log_path: Path):
-    """블록이 도는 동안 fd 2 를 로그 파일로 돌린다.
+_CHILD_LOG_MAX = 4 * 1024 * 1024   # 서버가 수다스러우면 로그가 무한히 자란다. 열 때 이 크기를 넘으면 비운다
+_patched_stdio = False
 
-    stdio MCP 서버(`npx mcp-remote` 등)는 자기 로그를 stderr 로 쏟는데, 어댑터가 자식의 stderr 를
-    koda 의 것으로 물려주기 때문에 TUI 화면 위에 그대로 찍혀 렌더링이 깨진다. 자식은 spawn 시점의
-    fd 를 들고 가므로, 블록을 벗어나 부모 fd 를 되돌려도 자식은 계속 로그 파일에 쓴다.
+
+def child_log_path(cwd: str | Path | None) -> Path:
+    """stdio MCP 서버의 stderr 를 모을 파일. 서버의 작업 디렉터리(=워크스페이스) 아래에 둔다."""
+    base = Path(cwd) if cwd else (koda_home() or Path.home())
+    return base / ".koda" / "logs" / "mcp.log"
+
+
+def _patch_stdio_errlog() -> None:
+    """stdio 서버의 stderr 를 로그 파일로 돌린다.
+
+    어댑터가 `stdio_client(server_params)` 를 errlog 없이 부르는 탓에 자식이 koda 의 stderr 를 그대로
+    물려받는다. Textual 은 바로 그 stderr 에 화면을 그리므로(linux_driver 의 sys.__stderr__) 서버 로그가
+    화면을 덮어 렌더링이 깨진다. fd 2 자체를 돌리면 화면이 파일로 새어 나가므로, 자식에게 넘기는
+    errlog 만 바꾼다.
     """
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    saved = os.dup(2)
-    log = open(log_path, "a", buffering=1, encoding="utf-8", errors="replace")
+    global _patched_stdio
+    if _patched_stdio:
+        return
     try:
-        sys.stderr.flush()
-        os.dup2(log.fileno(), 2)
-        yield log_path
-    finally:
-        sys.stderr.flush()
-        os.dup2(saved, 2)   # 되돌린 뒤 발생하는 예외·트레이스백은 다시 터미널로 간다
-        os.close(saved)
-        log.close()
+        from contextlib import asynccontextmanager
 
+        from langchain_mcp_adapters import sessions as _sessions
 
-def stderr_log_path(workspace: str | Path) -> Path:
-    return Path(workspace).resolve() / ".koda" / "logs" / "stderr.log"
+        original = _sessions.stdio_client
+
+        @asynccontextmanager
+        async def _to_log(server, errlog=None):
+            path = child_log_path(getattr(server, "cwd", None))
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if path.is_file() and path.stat().st_size > _CHILD_LOG_MAX:
+                path.write_text("", encoding="utf-8")
+            with open(path, "a", buffering=1, encoding="utf-8", errors="replace") as log:
+                async with original(server, errlog=log) as ctx:
+                    yield ctx
+
+        _sessions.stdio_client = _to_log
+        _patched_stdio = True
+    except Exception:
+        pass   # 어댑터 구조가 바뀌면 그냥 예전처럼 동작한다(화면이 지저분해질 뿐 기능은 유지)
 
 
 def _env_values() -> dict:
@@ -220,6 +237,7 @@ def mcp_servers(dirs, cwd: str | Path | None = None) -> list[McpServer]:
     """폴더들을 순서대로 읽어 서버 목록을 만든다. 같은 이름은 뒤(프로젝트)가 키 단위로 덮으므로 enabled 한 줄짜리 오버라이드도 정의를 잃지 않는다. stdio 서버의 작업 디렉터리는 설정에 없으면 cwd(워크스페이스)로 둔다."""
     if isinstance(dirs, (str, Path)):
         dirs = [dirs]
+    _patch_stdio_errlog()
     g = _global_dir()
     merged: dict[str, dict] = {}
     sources: dict[str, str] = {}

@@ -8,8 +8,6 @@ from urllib.parse import urlparse
 
 from .mcp import (
     close_mcp,
-    quiet_stderr,
-    stderr_log_path,
     config_path,
     connect_server,
     find_config,
@@ -131,8 +129,7 @@ def _probe(name: str, spec: dict, workspace: str, timeout: float) -> tuple[bool,
         server = mcp_servers([tmp], cwd=workspace)[0]
         if server.error:
             return False, server.error
-        with quiet_stderr(stderr_log_path(workspace)):   # 서버가 stderr 로 쏟는 로그를 화면에 섞지 않는다
-            asyncio.run(connect_server(server, timeout))
+        asyncio.run(connect_server(server, timeout))
         return (not server.error), (server.error or f"도구 {len(server.tools)}개")
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
