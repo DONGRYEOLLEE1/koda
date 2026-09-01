@@ -119,6 +119,15 @@ langgraph `StateGraph` 분기: **router → { answer | reader | investigator →
 ```
 
 - `url` 만 있으면 `streamable_http`, `command` 면 `stdio` 로 자동 채운다.
+- 설정 값의 `${VAR}` 는 `~/.koda/.env`·`CWD/.env`·환경변수에서 채운다(환경변수가 우선). API 키를 JSON 에 평문으로 두지 않기 위한 것이고, 참조한 변수가 없으면 그 서버는 연결하지 않고 `/mcp` 에 `환경변수 미설정: VAR` 로 표시된다. URL 쿼리에 실린 키 값은 `/mcp` 화면에서 `***` 로 가린다.
+
+```jsonc
+// ~/.koda/mcps/exa.json  ·  키는 ~/.koda/.env 의 EXA_API_KEY 에 둔다
+{ "mcpServers": { "exa": { "url": "https://mcp.exa.ai/mcp?exaApiKey=${EXA_API_KEY}" } } }
+// 헤더로 넘기는 서버
+{ "mcpServers": { "hf": { "url": "https://huggingface.co/mcp",
+                          "headers": { "Authorization": "Bearer ${HF_TOKEN}" } } } }
+```
 - 서버별 격리 로드(하나가 죽어도 나머지 유지), 오프라인이면 조용히 건너뛴다.
 - 세션은 프로세스가 사는 동안 서버마다 하나를 열어 둔다. Playwright 처럼 서버 안에 상태(열린 페이지)를 두는 도구도 호출 사이에 상태가 유지되고, stdio 서버의 작업 디렉터리는 워크스페이스라 상대 경로로 저장한 파일이 워크스페이스 안에 떨어진다.
 - 새 MCP 추가 = 파일 하나. 코드 수정 불필요.

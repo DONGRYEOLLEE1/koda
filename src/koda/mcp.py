@@ -3,11 +3,44 @@ from __future__ import annotations
 import asyncio
 import atexit
 import json
+import os
+import re
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .config import koda_home
+from .config import _env_files, koda_home
+
+# 설정 값의 ${VAR} 는 .env·환경변수로 치환한다. API 키를 JSON 에 평문으로 두지 않기 위한 것.
+_ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+# 표시용 마스킹: URL 쿼리의 키·토큰 값은 /mcp 화면에 그대로 내보내지 않는다.
+_SECRET_PARAM = re.compile(r"(?i)([?&][\w.\-]*(?:key|token|secret|password|auth)[\w.\-]*=)([^&\s]+)")
+
+
+def _env_values() -> dict:
+    """치환에 쓸 값. 계층 .env 파일을 깔고 실제 환경변수가 덮는다(설정 로딩과 같은 우선순위)."""
+    from dotenv import dotenv_values
+
+    values: dict = {}
+    for f in _env_files():
+        values.update({k: v for k, v in dotenv_values(f).items() if v is not None})
+    values.update(os.environ)
+    return values
+
+
+def _expand(spec, values: dict):
+    """문자열 값의 ${VAR} 를 치환한다. 없는 변수는 그대로 두어 미설정을 드러낸다."""
+    if isinstance(spec, str):
+        return _ENV_REF.sub(lambda m: values.get(m.group(1), m.group(0)), spec)
+    if isinstance(spec, dict):
+        return {k: _expand(v, values) for k, v in spec.items()}
+    if isinstance(spec, list):
+        return [_expand(v, values) for v in spec]
+    return spec
+
+
+def _unresolved(conn: dict) -> list[str]:
+    return sorted(set(_ENV_REF.findall(json.dumps(conn, ensure_ascii=False))))
 
 
 def _normalize(spec: dict) -> dict:
@@ -47,6 +80,7 @@ def load_mcp_configs(dirs) -> dict:
 def _read_dir(d: Path) -> dict:
     if not d.is_dir():
         return {}
+    values = _env_values()
     conns: dict = {}
     files = sorted(d.glob("*.json")) + sorted(d.glob("*.yaml")) + sorted(d.glob("*.yml"))
     for f in files:
@@ -61,7 +95,7 @@ def _read_dir(d: Path) -> dict:
         for name, spec in ((data or {}).get("mcpServers") or {}).items():
             if not isinstance(spec, dict):
                 continue  # 잘못된 스펙(문자열 등)은 건너뛴다 — 다른 서버 로드에 영향 없음
-            conns[name] = _normalize(spec)
+            conns[name] = _normalize(_expand(spec, values))
     return conns
 
 
@@ -84,9 +118,9 @@ class McpServer:
 
     @property
     def target(self) -> str:
-        """표시용 대상. http 는 URL, stdio 는 명령줄."""
+        """표시용 대상. http 는 URL, stdio 는 명령줄. URL 쿼리에 실린 키 값은 가린다."""
         if self.conn.get("url"):
-            return str(self.conn["url"])
+            return _SECRET_PARAM.sub(r"\1***", str(self.conn["url"]))
         return " ".join([str(self.conn.get("command", "")), *map(str, self.conn.get("args") or [])]).strip()
 
     @property
@@ -106,7 +140,9 @@ def mcp_servers(dirs, cwd: str | Path | None = None) -> list[McpServer]:
         for name, conn in _read_dir(d).items():
             if cwd and conn.get("transport") == "stdio" and not conn.get("cwd"):
                 conn = {**conn, "cwd": str(cwd)}   # 서버가 koda 의 CWD 가 아니라 워크스페이스에서 파일을 쓰게 한다
-            servers[name] = McpServer(name, source, conn)
+            missing = _unresolved(conn)
+            error = f"환경변수 미설정: {', '.join(missing)}" if missing else ""
+            servers[name] = McpServer(name, source, conn, error=error)
     return list(servers.values())
 
 
@@ -175,6 +211,8 @@ async def _serve(server: McpServer, ready: asyncio.Future, stop: asyncio.Event, 
 
 async def _open(server: McpServer, timeout: float) -> None:
     """세션을 (다시) 열고 server.tools 를 채운다. 같은 서버의 열기·닫기는 락으로 순서를 지킨다."""
+    if server.error.startswith("환경변수 미설정"):
+        return   # 설정이 완성되지 않은 서버는 연결을 시도하지 않는다
     async with _host.lock(server):
         await _close_unlocked(server)
         loop = asyncio.get_running_loop()

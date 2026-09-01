@@ -175,3 +175,44 @@ def test_toggle_workers_overlapping_end_in_last_intent(tmp_path, monkeypatch):
     asyncio.run(on_then_off())
     assert server.tools == [] and server not in M._host.servers
     assert len([e for e in log if e[0] == "enter"]) == len([e for e in log if e[0] == "exit"])
+
+
+def test_env_ref_is_expanded_from_environment_and_env_file(tmp_path, monkeypatch):
+    """설정의 ${VAR} 는 환경변수와 계층 .env 로 채운다. API 키를 JSON 에 평문으로 두지 않기 위한 것."""
+    from koda.mcp import mcp_servers
+
+    home = tmp_path / "home"
+    g = home / ".koda" / "mcps"; g.mkdir(parents=True)
+    (home / ".koda" / ".env").write_text("EXA_KEY=from-env-file\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("EXA_KEY", raising=False)
+    monkeypatch.setenv("HF_TOKEN", "from-environ")
+    monkeypatch.chdir(tmp_path)
+    _write(g, "exa.json", {"mcpServers": {"exa": {"url": "https://mcp.exa.ai/mcp?exaApiKey=${EXA_KEY}"}}})
+    _write(g, "hf.json", {"mcpServers": {"hf": {"url": "https://hf/mcp",
+                                                "headers": {"Authorization": "Bearer ${HF_TOKEN}"}}}})
+    servers = {s.name: s for s in mcp_servers([g])}
+    assert servers["exa"].conn["url"].endswith("exaApiKey=from-env-file")     # .env 파일에서
+    assert servers["hf"].conn["headers"]["Authorization"] == "Bearer from-environ"   # 환경변수에서
+    assert not servers["exa"].error and not servers["hf"].error
+    # 표시용 값에는 키가 드러나지 않는다
+    assert servers["exa"].target == "https://mcp.exa.ai/mcp?exaApiKey=***"
+
+
+def test_unresolved_env_ref_marks_server_and_skips_connect(tmp_path, monkeypatch):
+    """참조한 변수가 없으면 연결을 시도하지 않고 무엇이 빠졌는지 알린다."""
+    import asyncio
+
+    from koda.mcp import _open, mcp_servers
+
+    home = tmp_path / "home"
+    g = home / ".koda" / "mcps"; g.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("MISSING_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
+    _write(g, "x.json", {"mcpServers": {"x": {"url": "https://x/mcp?k=${MISSING_KEY}"}}})
+    server = mcp_servers([g])[0]
+    assert server.error == "환경변수 미설정: MISSING_KEY"
+    assert server.active_tools == []
+    asyncio.run(_open(server, 1.0))          # 연결을 건너뛴다(예외·대기 없음)
+    assert server.tools == []
