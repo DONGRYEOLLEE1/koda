@@ -18,6 +18,7 @@ from koda.tui.tool_handler import ToolActivityHandler, tool_target, tool_title
 from koda.tui.widgets import (
     ApprovalModal,
     DiffBlock,
+    McpAddScreen,
     ExploreStep,
     ProcessGroup,
     PromptArea,
@@ -1604,4 +1605,83 @@ def test_non_diff_edit_output_stays_in_step(tmp_path):
             app.post_message(ToolEnd("r1", "실패: old 를 찾지 못했다\n비슷한 줄:", ok=True, name="edit_file"))
             await pilot.pause()
             assert not app.query(DiffBlock)
+    asyncio.run(go())
+
+
+def test_mcp_screen_add_delete_and_persist(tmp_path, monkeypatch):
+    """/mcp 에서 a 로 붙여넣어 추가하고, A 로 설정에 켜짐/꺼짐을 남기고, x 로 삭제한다. 모두 파일에 반영된다."""
+    import json
+
+    import koda.tui.app as A
+    from koda.mcp import McpServer
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    g = tmp_path / "home" / ".koda" / "mcps"; g.mkdir(parents=True)
+    (g / "exa.json").write_text(json.dumps({"mcpServers": {"exa": {"url": "https://mcp.exa.ai/mcp"}}}), encoding="utf-8")
+
+    reloaded = []
+
+    async def fake_connect(dirs, timeout=20.0, cwd=None):
+        reloaded.append(True)
+        from koda.mcp import mcp_servers
+        return mcp_servers(dirs, cwd)
+
+    monkeypatch.setattr(A, "connect_mcp", fake_connect)
+
+    async def go():
+        app = KodaTui(Workspace(tmp_path), Session(tmp_path), Memory(tmp_path), [g], auto_yes=True)
+        async with app.run_test(size=(120, 35)) as pilot:
+            assert await _wait(pilot, lambda: not app._mcp_connecting)
+            assert [s.name for s in app._mcp] == ["exa"]
+            await _submit(pilot, "/mcp")
+            assert await _wait(pilot, lambda: type(app.screen).__name__ == "McpScreen")
+
+            await pilot.press("a")                                    # 추가 화면
+            assert await _wait(pilot, lambda: isinstance(app.screen, McpAddScreen))
+            app.screen.query_one("#mcp_add_input").value = "npx @playwright/mcp@latest"
+            await pilot.press("enter")
+            assert await _wait(pilot, lambda: (g / "playwright.json").exists())
+            saved = json.loads((g / "playwright.json").read_text(encoding="utf-8"))
+            assert saved["mcpServers"]["playwright"]["command"] == "npx @playwright/mcp@latest"
+            assert await _wait(pilot, lambda: {s.name for s in app._mcp} == {"exa", "playwright"})
+            # 화면이 열린 채로 목록이 갱신된다
+            assert await _wait(pilot, lambda: {s.name for s in app.screen._servers} == {"exa", "playwright"})
+
+            app.screen._selected = "exa"
+            await pilot.press("A")
+            assert await _wait(pilot, lambda: json.loads((g / "exa.json").read_text())["mcpServers"]["exa"].get("enabled") is False)
+
+            app.screen._selected = "playwright"                       # 삭제
+            await pilot.press("x")
+            assert await _wait(pilot, lambda: type(app.screen).__name__ == "ConfirmScreen")
+            await pilot.click("#confirm_yes")
+            assert await _wait(pilot, lambda: not (g / "playwright.json").exists())
+            assert reloaded                                            # 변경마다 다시 붙는다
+    asyncio.run(go())
+
+
+def test_mcp_add_rejects_garbage(tmp_path, monkeypatch):
+    import koda.tui.app as A
+    from koda.mcp import McpServer
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    g = tmp_path / "home" / ".koda" / "mcps"; g.mkdir(parents=True)
+
+    async def fake_connect(dirs, timeout=20.0, cwd=None):
+        return []
+
+    monkeypatch.setattr(A, "connect_mcp", fake_connect)
+
+    async def go():
+        app = KodaTui(Workspace(tmp_path), Session(tmp_path), Memory(tmp_path), [g], auto_yes=True)
+        async with app.run_test(size=(120, 35)) as pilot:
+            assert await _wait(pilot, lambda: not app._mcp_connecting)
+            await _submit(pilot, "/mcp")
+            assert await _wait(pilot, lambda: type(app.screen).__name__ == "McpScreen")
+            await pilot.press("a")
+            assert await _wait(pilot, lambda: isinstance(app.screen, McpAddScreen))
+            app.screen.query_one("#mcp_add_input").value = "{망가진 json"
+            await pilot.press("enter")
+            assert await _wait(pilot, lambda: any("설정을 읽지 못했" in n.message for n in app._notifications))
+            assert not list(g.glob("*.json"))                          # 아무 파일도 만들지 않는다
     asyncio.run(go())

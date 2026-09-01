@@ -377,7 +377,19 @@ def main(argv=None) -> int:
     pt = sub.add_parser("tui", parents=[common], help='Textual TUI 조종석 (사람용 · extra 필요: uv tool install "koda[tui]")')
     pt.set_defaults(func=_cmd_tui)
 
-    args = p.parse_args(argv)
+    from .mcpcli import register as _register_mcp
+    _register_mcp(sub)
+
+    # `koda mcp add [이름] -- npx pkg …` 의 `--` 뒤는 통째로 실행 명령이다. argparse 가 첫 토큰을
+    # 위치인자로 삼지 않도록 파싱 전에 잘라 둔다(claude·codex 와 같은 문법).
+    raw = list(sys.argv[1:] if argv is None else argv)
+    after: list[str] = []
+    if "--" in raw:
+        i = raw.index("--")
+        raw, after = raw[:i], raw[i + 1:]
+    args = p.parse_args(raw)
+    if after:
+        args.command = after
     try:
         return args.func(args)
     finally:

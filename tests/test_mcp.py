@@ -231,3 +231,56 @@ def test_stdio_command_string_is_split_into_args(tmp_path):
     assert conns["split"]["args"] == ["-y", "pkg"]          # 이미 나뉜 설정은 그대로
     assert conns["bare"]["args"] == []                       # 인자 없는 명령도 args 를 채운다
     assert conns["quoted"]["args"] == ["-c", "echo hi"]      # 따옴표를 존중한다
+
+
+# --- 설정 쓰기·병합: koda mcp 서브커맨드와 /mcp 화면이 함께 쓰는 계약 ---
+
+def test_partial_override_keeps_definition(tmp_path, monkeypatch):
+    """프로젝트가 enabled 한 줄만 둬도 전역의 url·transport 를 잃지 않는다(키 단위 병합)."""
+    from koda.mcp import mcp_servers
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    g = tmp_path / "home" / ".koda" / "mcps"; g.mkdir(parents=True)
+    ws = tmp_path / "proj"; (ws / "mcps").mkdir(parents=True)
+    _write(g, "exa.json", {"mcpServers": {"exa": {"url": "https://mcp.exa.ai/mcp"}}})
+    _write(ws / "mcps", "exa.json", {"mcpServers": {"exa": {"enabled": False}}})
+    s = mcp_servers(mcp_dirs(ws))[0]
+    assert s.name == "exa" and s.conn["url"] == "https://mcp.exa.ai/mcp"
+    assert s.transport == "http" and s.enabled is False
+    assert s.source == "전역"                       # 정의를 준 곳이 출처다
+    assert "enabled" not in s.conn                  # 어댑터 인자로는 넘기지 않는다
+
+
+def test_disabled_server_is_not_connected(tmp_path, monkeypatch):
+    import asyncio
+
+    import koda.mcp as M
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    d = tmp_path / "home" / ".koda" / "mcps"; d.mkdir(parents=True)
+    _write(d, "a.json", {"mcpServers": {"on": {"url": "https://a"}, "off": {"url": "https://b", "enabled": False}}})
+    tried = []
+
+    async def fake_connect(server, timeout=20.0):
+        tried.append(server.name)
+
+    monkeypatch.setattr(M, "connect_server", fake_connect)
+    names = [s.name for s in asyncio.run(M.connect_mcp([d]))]
+    assert sorted(names) == ["off", "on"] and tried == ["on"]
+
+
+def test_write_find_remove_config(tmp_path, monkeypatch):
+    from koda.mcp import config_path, find_config, remove_config, write_config
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    ws = tmp_path / "proj"; ws.mkdir()
+    user = config_path("exa", "user", ws)
+    proj = config_path("local", "project", ws)
+    assert user == tmp_path / "home" / ".koda" / "mcps" / "exa.json"
+    assert proj == (ws / "mcps" / "local.json").resolve()
+    write_config(user, "exa", {"url": "https://mcp.exa.ai/mcp"})
+    write_config(proj, "local", {"command": "npx thing"})
+    assert find_config("exa", ws) == user and find_config("local", ws) == proj
+    assert find_config("nope", ws) is None
+    assert remove_config("exa", ws) == user and not user.exists()   # 남는 서버가 없으면 파일도 지운다
+    assert remove_config("exa", ws) is None

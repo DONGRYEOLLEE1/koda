@@ -79,7 +79,8 @@ def load_mcp_configs(dirs) -> dict:
         dirs = [dirs]
     conns: dict = {}
     for d in dirs:
-        conns.update(_read_dir(Path(d)))
+        for name, spec in _read_dir(Path(d)).items():
+            conns[name] = _normalize({**conns.get(name, {}), **spec})
     return conns
 
 
@@ -100,9 +101,62 @@ def _read_dir(d: Path) -> dict:
             continue
         for name, spec in ((data or {}).get("mcpServers") or {}).items():
             if not isinstance(spec, dict):
-                continue  # 잘못된 스펙(문자열 등)은 건너뛴다 — 다른 서버 로드에 영향 없음
-            conns[name] = _normalize(_expand(spec, values))
+                continue  # 잘못된 스펙(문자열 등)은 건너뛴다. 다른 서버 로드에 영향 없음
+            # 같은 이름이면 뒤(프로젝트)가 키 단위로 덮는다. enabled 한 줄만 둔 오버라이드가 url·command 를 잃지 않게 한다.
+            conns[name] = _normalize({**conns.get(name, {}), **_expand(spec, values)})
     return conns
+
+
+def config_path(name: str, scope: str = "user", workspace: str | Path = ".", mcps_dir: str | None = None) -> Path:
+    """서버 설정 파일 경로. 파일명은 서버명으로 고정해 목록과 파일이 어긋나지 않게 한다."""
+    dirs = mcp_dirs(workspace, mcps_dir)
+    base = dirs[0] if scope == "user" and len(dirs) > 1 else dirs[-1]
+    return base / f"{name}.json"
+
+
+def find_config(name: str, workspace: str | Path = ".", mcps_dir: str | None = None) -> Path | None:
+    """이 서버를 정의한 파일. 프로젝트가 전역을 덮으므로 뒤에서부터 찾는다."""
+    for d in reversed(mcp_dirs(workspace, mcps_dir)):
+        for f in sorted(Path(d).glob("*.json")) if Path(d).is_dir() else []:
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if name in ((data or {}).get("mcpServers") or {}):
+                return f
+    return None
+
+
+def write_config(path: Path, name: str, spec: dict) -> Path:
+    """서버 하나를 파일에 기록한다. 기존 파일이 있으면 그 서버 항목만 갈아 끼운다."""
+    data = {}
+    if path.is_file():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8")) or {}
+        except ValueError:
+            data = {}
+    servers = data.get("mcpServers") or {}
+    servers[name] = spec
+    data["mcpServers"] = servers
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def remove_config(name: str, workspace: str | Path = ".", mcps_dir: str | None = None) -> Path | None:
+    """서버 항목을 지운다. 파일에 남는 서버가 없으면 파일도 지운다. 정의를 못 찾으면 None."""
+    path = find_config(name, workspace, mcps_dir)
+    if path is None:
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    servers = data.get("mcpServers") or {}
+    servers.pop(name, None)
+    if servers:
+        data["mcpServers"] = servers
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    else:
+        path.unlink()
+    return path
 
 
 @dataclass
@@ -114,7 +168,7 @@ class McpServer:
     conn: dict
     tools: list = field(default_factory=list)
     error: str = ""
-    enabled: bool = True
+    enabled: bool = True   # 설정 파일의 enabled(영구) 를 시작값으로 받고, /mcp 토글이 세션 안에서 바꾼다
     _stop: asyncio.Event | None = field(default=None, repr=False)   # 세션을 붙든 태스크의 종료 신호
     _task: asyncio.Task | None = field(default=None, repr=False)
 
@@ -135,20 +189,30 @@ class McpServer:
 
 
 def mcp_servers(dirs, cwd: str | Path | None = None) -> list[McpServer]:
-    """폴더들을 순서대로 읽어 서버 목록을 만든다. 같은 이름은 뒤(프로젝트)가 이긴다. stdio 서버의 작업 디렉터리는 설정에 없으면 cwd(워크스페이스)로 둔다."""
+    """폴더들을 순서대로 읽어 서버 목록을 만든다. 같은 이름은 뒤(프로젝트)가 키 단위로 덮으므로 enabled 한 줄짜리 오버라이드도 정의를 잃지 않는다. stdio 서버의 작업 디렉터리는 설정에 없으면 cwd(워크스페이스)로 둔다."""
     if isinstance(dirs, (str, Path)):
         dirs = [dirs]
     g = _global_dir()
-    servers: dict[str, McpServer] = {}
+    merged: dict[str, dict] = {}
+    sources: dict[str, str] = {}
     for d in dirs:
         d = Path(d)
         source = "전역" if g and d.resolve() == g.resolve() else "프로젝트"
-        for name, conn in _read_dir(d).items():
-            if cwd and conn.get("transport") == "stdio" and not conn.get("cwd"):
-                conn = {**conn, "cwd": str(cwd)}   # 서버가 koda 의 CWD 가 아니라 워크스페이스에서 파일을 쓰게 한다
-            missing = _unresolved(conn)
-            error = f"환경변수 미설정: {', '.join(missing)}" if missing else ""
-            servers[name] = McpServer(name, source, conn, error=error)
+        for name, spec in _read_dir(d).items():
+            merged[name] = _normalize({**merged.get(name, {}), **spec})
+            if spec.get("url") or spec.get("command"):
+                sources[name] = source      # 정의(url·command)를 준 곳이 출처다. enabled 만 덮은 파일은 출처가 아니다
+            sources.setdefault(name, source)
+    servers: dict[str, McpServer] = {}
+    for name, conn in merged.items():
+        if cwd and conn.get("transport") == "stdio" and not conn.get("cwd"):
+            conn = {**conn, "cwd": str(cwd)}   # 서버가 koda 의 CWD 가 아니라 워크스페이스에서 파일을 쓰게 한다
+        # enabled 는 koda 설정이지 어댑터 인자가 아니다. 서버 상태로 옮기고 conn 에서는 뺀다.
+        conn = dict(conn)
+        enabled = bool(conn.pop("enabled", True))
+        missing = _unresolved(conn)
+        error = f"환경변수 미설정: {', '.join(missing)}" if missing else ""
+        servers[name] = McpServer(name, sources[name], conn, error=error, enabled=enabled)
     return list(servers.values())
 
 
@@ -294,7 +358,8 @@ async def connect_mcp(dirs, timeout: float = 20.0, cwd: str | Path | None = None
     """설정된 모든 서버에 붙는다(서버별 격리·타임아웃). TUI 의 /mcp 화면과 상태줄이 이 목록을 쓴다."""
     servers = mcp_servers(dirs, cwd)
     for s in servers:
-        await connect_server(s, timeout)
+        if s.enabled:            # 설정에서 꺼 둔 서버는 붙지 않는다(프롬프트에서도 빠진다)
+            await connect_server(s, timeout)
     return servers
 
 

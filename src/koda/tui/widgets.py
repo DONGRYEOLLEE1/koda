@@ -299,17 +299,22 @@ def _server_state(server, connecting: bool) -> str:
 
 
 class McpScreen(ModalScreen[None]):
-    """/mcp 서버 관리 화면. 서버 목록에서 r 재연결 · d 켜기/끄기 · ESC 닫기. 강조된 서버의 도구가 아래에 보인다."""
+    """/mcp 서버 관리 화면. a 추가 · x 삭제 · r 재연결 · d 이 세션만 끄기 · D 영구 끄기 · ESC 닫기. 강조된 서버의 도구가 아래에 보인다."""
 
-    BINDINGS = [("escape", "close", "닫기"), ("r", "reconnect", "재연결"), ("d", "toggle", "켜기/끄기")]
+    BINDINGS = [("escape", "close", "닫기"), ("r", "reconnect", "재연결"), ("d", "toggle", "이 세션 켜기/끄기"),
+                ("A", "persist", "영구 켜기/끄기"), ("a", "add", "추가"), ("x", "delete", "삭제")]
 
-    def __init__(self, servers: list, dirs: list, connecting: bool, on_toggle, on_reconnect) -> None:
+    def __init__(self, servers: list, dirs: list, connecting: bool, on_toggle, on_reconnect,
+                 on_add=None, on_delete=None, on_persist=None) -> None:
         super().__init__()
         self._servers = servers
         self._dirs = dirs
         self._connecting = connecting
         self._on_toggle = on_toggle
         self._on_reconnect = on_reconnect
+        self._on_add = on_add
+        self._on_delete = on_delete
+        self._on_persist = on_persist
         self._selected = servers[0].name if servers else None   # 강조 서버. 목록을 다시 그려도 이름으로 유지한다
 
     def _row(self, s) -> Text:
@@ -333,7 +338,7 @@ class McpScreen(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="mcp_dialog"):
-            yield Static("MCP 서버  (r 재연결 · d 켜기/끄기 · ESC 닫기)", id="mcp_title", markup=False)
+            yield Static("MCP 서버  (a 추가 · x 삭제 · r 재연결 · d 이 세션 · A 영구 · ESC 닫기)", id="mcp_title", markup=False)
             if self._servers:
                 yield OptionList(*(Option(self._row(s), id=s.name) for s in self._servers), id="mcp_list")
                 yield Static("", id="mcp_detail", markup=False)
@@ -348,9 +353,13 @@ class McpScreen(ModalScreen[None]):
     def _current(self):
         return next((s for s in self._servers if s.name == self._selected), None)
 
-    def refresh_servers(self, connecting: bool = False) -> None:
-        """연결 결과·토글이 바뀌었을 때 행과 상세를 다시 그린다."""
+    def refresh_servers(self, connecting: bool = False, servers: list | None = None) -> None:
+        """연결 결과·토글이 바뀌었을 때 행과 상세를 다시 그린다. 추가·삭제로 목록 자체가 바뀌면 servers 로 교체한다."""
         self._connecting = connecting
+        if servers is not None:
+            self._servers = servers
+            if self._selected not in [s.name for s in servers]:
+                self._selected = servers[0].name if servers else None
         if not self._servers:
             return
         lst = self.query_one("#mcp_list", OptionList)
@@ -379,6 +388,42 @@ class McpScreen(ModalScreen[None]):
     def action_reconnect(self) -> None:
         if (s := self._current()) is not None:
             self._on_reconnect(s)
+
+    def action_add(self) -> None:
+        if self._on_add:
+            self._on_add()
+
+    def action_delete(self) -> None:
+        if self._on_delete and (s := self._current()) is not None:
+            self._on_delete(s)
+
+    def action_persist(self) -> None:
+        """설정 파일에 켜짐/꺼짐을 기록한다. d 는 이 세션만, A 는 다음 실행에도 남는다."""
+        if self._on_persist and (s := self._current()) is not None:
+            self._on_persist(s)
+
+
+class McpAddScreen(ModalScreen[str | None]):
+    """/mcp 의 a — 문서에서 복사한 설정 스니펫이나 URL·명령을 그대로 붙여 넣는다. Enter 추가, ESC 취소."""
+
+    BINDINGS = [("escape", "cancel", "취소")]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="mcp_add_dialog"):
+            yield Static("MCP 서버 추가  (Enter 추가 · ESC 취소)", id="mcp_add_title", markup=False)
+            yield Static('문서의 {"mcpServers": {…}} 스니펫, 원격 URL, 또는 실행 명령을 붙여 넣으세요.',
+                         id="mcp_add_hint", markup=False)
+            yield Input(placeholder='https://mcp.exa.ai/mcp  ·  npx @playwright/mcp@latest  ·  {"mcpServers":{…}}',
+                        id="mcp_add_input")
+
+    def on_mount(self) -> None:
+        self.query_one("#mcp_add_input", Input).focus()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self.dismiss(event.value.strip() or None)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
 
 
 _PROVIDER_ROWS = (("local", "사내 vLLM · llama.cpp 등 자체 호스팅 (LOCAL_*)"),

@@ -108,6 +108,20 @@ langgraph `StateGraph` 분기: **router → { answer | reader | investigator →
 
 외부 MCP 서버를 `*.json`(또는 `*.yaml`) 파일 하나당 하나씩 두면 일괄 로드해 answer·reader·investigator·coder·planner 에 주입한다. LLM 이 최신 문서·웹검색이 필요하다고 판단하면 스스로 호출한다.
 
+```bash
+koda mcp add --url https://mcp.context7.com/mcp                 # 이름은 URL 에서 추론(context7)
+koda mcp add --json '{"mcpServers":{"exa":{"url":"…"}}}'         # 문서 스니펫 그대로 붙여넣기
+koda mcp add -- npx @playwright/mcp@latest                      # `--` 뒤는 실행 명령(stdio)
+koda mcp add hf --url https://huggingface.co/mcp --header 'Authorization: Bearer ${HF_TOKEN}'
+koda mcp add gh --env 'GITHUB_TOKEN=${GITHUB_TOKEN}' -- npx -y @modelcontextprotocol/server-github
+koda mcp list · remove <이름> · enable|disable <이름> [--here]
+```
+
+- 저장 전에 **실제로 붙여 본다.** 성공하면 `연결 확인: 성공 · 도구 24개`, 실패하면 이유를 보이고 저장하지 않는다(`--force` 로 강행, `--no-probe` 로 생략).
+- 이름을 생략하면 URL 호스트나 패키지명에서 추론한다(`@playwright/mcp` → `playwright`, `mcp-remote https://mcp.linear.app/sse` → `linear`). 파일명은 항상 서버명이라 목록과 파일이 어긋나지 않는다.
+- `--scope user`(기본, `~/.koda/mcps`) · `--scope project`(`<workspace>/mcps`).
+- `disable <이름>` 은 정의된 파일에 `"enabled": false` 를 남겨 다음 실행에도 유지된다. `--here` 를 주면 그 워크스페이스에만 오버라이드를 둔다. 꺼진 서버는 연결도 하지 않아 프롬프트에서도 빠진다.
+
 - **전역** `~/.koda/mcps/` — 모든 워크스페이스에서 잡힌다(exa·context7 같은 범용).
 - **프로젝트** `<workspace>/mcps/` (`--mcps-dir` 로 변경) — 그 프로젝트에만. 같은 서버명이면 전역을 덮어쓴다.
 
@@ -131,7 +145,7 @@ langgraph `StateGraph` 분기: **router → { answer | reader | investigator →
 - 서버별 격리 로드(하나가 죽어도 나머지 유지), 오프라인이면 조용히 건너뛴다.
 - 세션은 프로세스가 사는 동안 서버마다 하나를 열어 둔다. Playwright 처럼 서버 안에 상태(열린 페이지)를 두는 도구도 호출 사이에 상태가 유지되고, stdio 서버의 작업 디렉터리는 워크스페이스라 상대 경로로 저장한 파일이 워크스페이스 안에 떨어진다.
 - 새 MCP 추가 = 파일 하나. 코드 수정 불필요.
-- TUI 는 화면이 뜬 뒤 백그라운드로 서버에 붙는다(시작 로그 없음). 상태줄의 `mcp N` 이 쓸 수 있는 도구 수이고 연결 중엔 `mcp 연결 중`, 실패가 있으면 `(실패 M)` 과 함께 알림이 뜬다. `/mcp` 화면에서 서버별 상태(연결됨·실패·꺼짐)·출처(전역/프로젝트)·전송 방식·도구 목록과 설명을 보고, `r` 로 재연결하거나 `d` 로 이 세션 동안 끌 수 있다. 끈 서버의 도구는 다음 턴부터 빠진다.
+- TUI 는 화면이 뜬 뒤 백그라운드로 서버에 붙는다(시작 로그 없음). 상태줄의 `mcp N` 이 쓸 수 있는 도구 수이고 연결 중엔 `mcp 연결 중`, 실패가 있으면 `(실패 M)` 과 함께 알림이 뜬다. `/mcp` 화면에서 서버별 상태(연결됨·실패·꺼짐)·출처(전역/프로젝트)·전송 방식·도구 목록과 설명을 본다. `a` 로 스니펫·URL·명령을 붙여 넣어 추가하고, `x` 로 삭제하며, `r` 재연결 · `d` 이 세션만 끄기 · `A` 설정 파일에 켜짐/꺼짐 기록을 한다. 추가·삭제는 즉시 반영되어 koda 를 다시 띄울 필요가 없다.
 
 ## 멀티턴과 메모리
 

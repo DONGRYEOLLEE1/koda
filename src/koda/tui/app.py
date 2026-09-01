@@ -20,7 +20,7 @@ from ..cli import _err
 from ..config import DEFAULT_CONTEXT_BUDGET, switch_model
 from ..gitinfo import git_ref
 from ..llm import select_provider
-from ..mcp import connect_mcp, connect_server, disconnect_server, mcp_dirs
+from ..mcp import config_path, connect_mcp, connect_server, disconnect_server, find_config, mcp_dirs, remove_config, write_config
 from ..memory import Memory, parse_remember
 from ..session import COMPACT_THRESHOLD_CHARS, Session
 from ..workspace import Workspace
@@ -49,6 +49,7 @@ from .widgets import (
     DiffBlock,
     ExploreStep,
     InfoScreen,
+    McpAddScreen,
     McpScreen,
     ModelScreen,
     ProcessGroup,
@@ -198,6 +199,10 @@ class KodaTui(App):
     #mcp_list { height: auto; max-height: 10; }
     #mcp_detail { color: $text-muted; margin-top: 1; height: auto; max-height: 14; }
     #mcp_dirs { color: $text-muted; margin-top: 1; }
+    McpAddScreen { align: center middle; }
+    #mcp_add_dialog { width: 90%; max-width: 110; height: auto; border: thick $primary; background: $surface; padding: 1 2; }
+    #mcp_add_title { text-style: bold; margin-bottom: 1; }
+    #mcp_add_hint { color: $text-muted; margin-bottom: 1; }
     InfoScreen { align: center middle; }
     ModelScreen { align: center middle; }
     #model_dialog { width: 80%; max-width: 100; height: auto; border: thick $primary; background: $surface; padding: 1 2; }
@@ -495,7 +500,7 @@ class KodaTui(App):
         if failed:
             self.notify(f"MCP 연결 실패: {', '.join(failed)} (/mcp 로 확인)", severity="warning", timeout=6)
         if isinstance(self.screen, McpScreen):
-            self.screen.refresh_servers(connecting=False)
+            self.screen.refresh_servers(connecting=False, servers=self._mcp)
 
     def _apply_mcp(self) -> None:
         """켜져 있고 연결된 서버의 도구만 다음 턴부터 쓴다(모든 세션 공통)."""
@@ -517,7 +522,73 @@ class KodaTui(App):
             else:
                 reconnect(server)
 
-        self.push_screen(McpScreen(self._mcp, list(self._mcp_dirs or []), self._mcp_connecting, toggle, reconnect))
+        def add() -> None:
+            def added(text) -> None:
+                if text:
+                    self.run_worker(partial(self._add_mcp, text), thread=True, group="mcp")
+
+            self.push_screen(McpAddScreen(), added)
+
+        def delete(server) -> None:
+            def done(ok) -> None:
+                if ok:
+                    self.run_worker(partial(self._delete_mcp, server), thread=True, group="mcp")
+
+            self.push_screen(ConfirmScreen("MCP 서버 삭제", f"'{server.name}' 설정 파일에서 이 서버를 지웁니다.", yes="삭제"), done)
+
+        def persist(server) -> None:
+            self.run_worker(partial(self._persist_mcp, server), thread=True, group="mcp")
+
+        self.push_screen(McpScreen(self._mcp, list(self._mcp_dirs or []), self._mcp_connecting,
+                                   toggle, reconnect, add, delete, persist))
+
+    # --- /mcp 화면의 추가·삭제·영구 토글 (worker thread: 파일 쓰기 + 재연결) ---
+
+    def _reload_mcp(self, note: str) -> None:
+        self.call_from_thread(self.notify, note, timeout=4)
+        if self._mcp_dirs:
+            self._connect_all_mcp(self._mcp_dirs)
+
+    def _add_mcp(self, text: str) -> None:
+        from ..mcpcli import spec_from_text
+
+        parsed = spec_from_text(text)
+        if parsed is None:
+            self.call_from_thread(self.notify, "설정을 읽지 못했습니다. JSON 스니펫·URL·실행 명령 중 하나여야 합니다.",
+                                  severity="warning", timeout=6)
+            return
+        name, spec = parsed
+        try:
+            path = write_config(config_path(name, "user", self._ws.root), name, spec)
+        except OSError as e:
+            self.call_from_thread(self.notify, f"저장 실패: {e}", severity="error", timeout=6)
+            return
+        self._reload_mcp(f"MCP '{name}' 추가됨 · {path}")
+
+    def _delete_mcp(self, server) -> None:
+        try:
+            path = remove_config(server.name, self._ws.root)
+        except OSError as e:
+            self.call_from_thread(self.notify, f"삭제 실패: {e}", severity="error", timeout=6)
+            return
+        if path is None:
+            self.call_from_thread(self.notify, f"설정 파일을 찾지 못했습니다: {server.name}", severity="warning", timeout=5)
+            return
+        self._reload_mcp(f"MCP '{server.name}' 삭제됨")
+
+    def _persist_mcp(self, server) -> None:
+        """d(세션 토글)와 달리 설정 파일에 켜짐/꺼짐을 남긴다. 다음 실행에도 유지된다."""
+        path = find_config(server.name, self._ws.root)
+        if path is None:
+            self.call_from_thread(self.notify, f"설정 파일을 찾지 못했습니다: {server.name}", severity="warning", timeout=5)
+            return
+        import json as _json
+
+        data = _json.loads(path.read_text(encoding="utf-8"))
+        spec = dict(data["mcpServers"][server.name])
+        spec["enabled"] = not server.enabled
+        write_config(path, server.name, spec)
+        self._reload_mcp(f"MCP '{server.name}' {'켬' if spec['enabled'] else '끔'} (설정에 기록)")
 
     def _theme_color(self, name: str) -> str:
         """테마 색상 hex 조회. 라이트/다크 자동 적응."""
