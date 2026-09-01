@@ -20,7 +20,8 @@ from ..cli import _err
 from ..config import DEFAULT_CONTEXT_BUDGET, switch_model
 from ..gitinfo import git_ref
 from ..llm import select_provider
-from ..mcp import config_path, connect_mcp, connect_server, disconnect_server, find_config, mcp_dirs, remove_config, write_config
+from ..mcp import (config_path, connect_mcp, connect_server, disconnect_server, find_config, mcp_dirs,
+                   quiet_stderr, remove_config, stderr_log_path, write_config)
 from ..memory import Memory, parse_remember
 from ..session import COMPACT_THRESHOLD_CHARS, Session
 from ..workspace import Workspace
@@ -1351,8 +1352,14 @@ def run_tui(args) -> int:
         pass
 
     app = KodaTui(ws, session, memory, dirs, auto_yes=args.yolo, model_name=model_name, settings=settings)
-    app.run()
+    # stdio MCP 서버가 stderr 로 쏟는 로그가 화면을 깨뜨리므로 실행 동안 fd 2 를 로그 파일로 돌린다.
+    log = stderr_log_path(ws.root)
+    before = log.stat().st_size if log.is_file() else 0
+    with quiet_stderr(log):
+        app.run()
     final = app.runner.session   # /clear 로 세션이 교체됐을 수 있으므로 최종 세션 기준
     if final.history:
         _err(f"세션 저장됨: {final.id}  (재개: koda 실행 후 /resume {final.id})")
+    if log.is_file() and log.stat().st_size > before:
+        _err(f"외부 프로세스 로그: {log}")
     return 0

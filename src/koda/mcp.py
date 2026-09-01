@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import contextlib
 import json
 import os
+import sys
 import re
 import shlex
 import threading
@@ -16,6 +18,32 @@ from .config import _env_files, koda_home
 _ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 # 표시용 마스킹: URL 쿼리의 키·토큰 값은 /mcp 화면에 그대로 내보내지 않는다.
 _SECRET_PARAM = re.compile(r"(?i)([?&][\w.\-]*(?:key|token|secret|password|auth)[\w.\-]*=)([^&\s]+)")
+
+
+@contextlib.contextmanager
+def quiet_stderr(log_path: Path):
+    """블록이 도는 동안 fd 2 를 로그 파일로 돌린다.
+
+    stdio MCP 서버(`npx mcp-remote` 등)는 자기 로그를 stderr 로 쏟는데, 어댑터가 자식의 stderr 를
+    koda 의 것으로 물려주기 때문에 TUI 화면 위에 그대로 찍혀 렌더링이 깨진다. 자식은 spawn 시점의
+    fd 를 들고 가므로, 블록을 벗어나 부모 fd 를 되돌려도 자식은 계속 로그 파일에 쓴다.
+    """
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    saved = os.dup(2)
+    log = open(log_path, "a", buffering=1, encoding="utf-8", errors="replace")
+    try:
+        sys.stderr.flush()
+        os.dup2(log.fileno(), 2)
+        yield log_path
+    finally:
+        sys.stderr.flush()
+        os.dup2(saved, 2)   # 되돌린 뒤 발생하는 예외·트레이스백은 다시 터미널로 간다
+        os.close(saved)
+        log.close()
+
+
+def stderr_log_path(workspace: str | Path) -> Path:
+    return Path(workspace).resolve() / ".koda" / "logs" / "stderr.log"
 
 
 def _env_values() -> dict:

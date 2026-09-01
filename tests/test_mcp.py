@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from koda.mcp import load_mcp_configs, mcp_dirs
 
 
@@ -284,3 +286,40 @@ def test_write_find_remove_config(tmp_path, monkeypatch):
     assert find_config("nope", ws) is None
     assert remove_config("exa", ws) == user and not user.exists()   # 남는 서버가 없으면 파일도 지운다
     assert remove_config("exa", ws) is None
+
+
+def test_quiet_stderr_redirects_children_and_restores(tmp_path):
+    """블록 안에서 뜬 자식의 stderr 는 로그 파일로 가고, 블록을 벗어나면 부모 fd 는 복원된다."""
+    import os
+    import subprocess
+    import sys
+
+    from koda.mcp import quiet_stderr, stderr_log_path
+
+    log = stderr_log_path(tmp_path)
+    child = [sys.executable, "-c", "import sys; print('서버 로그', file=sys.stderr)"]
+    saved_fd = os.dup(2)
+    try:
+        with quiet_stderr(log):
+            subprocess.run(child, check=True)          # 자식은 물려받은 fd 로 로그 파일에 쓴다
+            os.write(2, "부모도 같이 간다\n".encode())   # fd 단위 리다이렉트라 fd 2 쓰기도 로그로 간다
+        assert os.path.samestat(os.fstat(2), os.fstat(saved_fd))   # fd 2 가 원래대로 돌아왔다
+    finally:
+        os.close(saved_fd)
+    written = log.read_text(encoding="utf-8")
+    assert "서버 로그" in written and "부모도 같이 간다" in written
+
+
+def test_quiet_stderr_restores_on_exception(tmp_path):
+    import os
+
+    from koda.mcp import quiet_stderr, stderr_log_path
+
+    saved_fd = os.dup(2)
+    try:
+        with pytest.raises(RuntimeError):
+            with quiet_stderr(stderr_log_path(tmp_path)):
+                raise RuntimeError("boom")
+        assert os.path.samestat(os.fstat(2), os.fstat(saved_fd))   # 예외가 나도 되돌린다(트레이스백은 터미널로)
+    finally:
+        os.close(saved_fd)
