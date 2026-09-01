@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from collections import Counter
 from functools import partial
@@ -248,6 +249,7 @@ class KodaTui(App):
         self._mcp_dirs = mcp_dirs
         self._mcp: list = []
         self._mcp_connecting = bool(mcp_dirs)
+        self._baseline: int | None = None     # 시스템+메모리+스킬+도구 스키마의 고정 토큰 추정 (MCP 변경 시 무효화)
         self._path_index: list[str] = []      # @경로 후보용 워크스페이스 색인 (3초마다 갱신)
         self._path_index_at = 0.0
         self._picker_dismissed: str | None = None  # Esc 로 닫은 토큰(@경로·/명령). 같은 토큰이면 다시 띄우지 않는다
@@ -360,6 +362,31 @@ class KodaTui(App):
     def _history_chars(session) -> int:
         return sum(len(m.get("content") or "") for m in session.history)
 
+    def _baseline_tokens(self) -> int:
+        """턴마다 프롬프트에 고정으로 실리는 몫: 시스템 프롬프트 + 메모리 + 스킬 + 도구 스키마.
+        토큰 환산은 koda 가 다른 곳에서도 쓰는 문자수/3 추정이며, MCP 도구가 바뀌면 다시 잰다."""
+        if self._baseline is not None:
+            return self._baseline
+        try:
+            from langchain_core.utils.function_calling import convert_to_openai_tool
+
+            from ..agents.specs import AGENTS
+            from ..skills import load_skills
+            from ..tools import make_all_tools
+
+            system = AGENTS["coder"].system_prompt(self._memory.read(), load_skills(self._ws.root), self._ctx_budget)
+            tools = [*make_all_tools(self._ws), *self._mcp_tools]
+            schema = json.dumps([convert_to_openai_tool(x) for x in tools], ensure_ascii=False)
+            self._baseline = (len(system) + len(schema)) // 3
+        except Exception:
+            self._baseline = 0   # 추정 실패는 게이지를 막지 않는다. 관측된 토큰만으로 보인다
+        return self._baseline
+
+    def _ctx_tokens(self, run: SessionRun) -> int:
+        """현재 컨텍스트 점유(토큰). 실제 호출에서 관측한 최대값과 정적 추정 중 큰 쪽을 쓴다.
+        관측값은 그 턴의 도구 출력까지 포함하고, 추정값은 첫 턴 전에도 고정 몫을 보여 준다."""
+        return max(run.ctx_used, self._baseline_tokens() + self._history_chars(run.session) // 3)
+
     def _statusline_text(self) -> Text:
         """모델 · 승인 모드 · 브랜치 · MCP · 컨텍스트 게이지. 진행 상태는 바로 위 활동바가 말하므로 문구로 중복하지 않는다."""
         run = self._active
@@ -370,9 +397,8 @@ class KodaTui(App):
             t.append(f" · ⎇ {branch}", style="dim")
         if self._mcp_dirs:
             t.append(f" · {self._mcp_text()}", style="dim")
-        # 게이지는 대화 히스토리가 압축 임계에 얼마나 다가갔는지를 보여 준다. 턴마다 실제로 차오르고,
-        # 곧 일어날 일(문맥 압축)을 예고한다. 프롬프트 토큰 최대치는 /status 에 둔다.
-        used, budget = self._history_chars(run.session), COMPACT_THRESHOLD_CHARS
+        # 게이지는 프롬프트에 실제로 실리는 전부(시스템·메모리·스킬·도구 스키마·히스토리·도구 출력)를 모델 예산과 견준다.
+        used, budget = self._ctx_tokens(run), self._ctx_budget
         ratio = min(1.0, used / budget) if budget else 0.0
         color = self._theme_color("success") if ratio < 0.5 else self._theme_color("warning") if ratio < 0.8 else self._theme_color("error")
         filled = round(ratio * _GAUGE_CELLS)
@@ -422,8 +448,10 @@ class KodaTui(App):
             f"모델        {model} ({provider or '?'}) · {base_url}",
             f"추론        style={getattr(st, 'reasoning_style', '?')} effort={getattr(st, 'reasoning_effort', '?')} · 구조화={getattr(st, 'structured_method', '?')}"
             + (" · Responses API" if getattr(st, "use_responses_api", False) else ""),
-            f"컨텍스트    대화 {self._k(self._history_chars(s))}/{self._k(COMPACT_THRESHOLD_CHARS)}자 ({self._history_chars(s) / COMPACT_THRESHOLD_CHARS:.0%}, 압축 임계)",
-            f"프롬프트    최대 {self._k(self._active.ctx_used)} / 예산 {self._k(self._ctx_budget)} 토큰 · 세션 누적 입력 {self._k(used_in)} 출력 {self._k(used_out)}",
+            f"컨텍스트    {self._k(self._ctx_tokens(self._active))} / {self._k(self._ctx_budget)} 토큰"
+            + f" · 고정 {self._k(self._baseline_tokens())}(시스템·메모리·스킬·도구 {len(self._mcp_tools) + 10}개)"
+            + f" · 대화 {self._k(self._history_chars(s) // 3)} · 관측 최대 {self._k(self._active.ctx_used)}",
+            f"압축        대화 {self._k(self._history_chars(s))}/{self._k(COMPACT_THRESHOLD_CHARS)}자 ({self._history_chars(s) / COMPACT_THRESHOLD_CHARS:.0%}) · 세션 누적 입력 {self._k(used_in)} 출력 {self._k(used_out)}",
             f"승인        {self._mode}",
             f"MCP         {mcp}",
             f"워크스페이스 {self._ws.root}",
@@ -506,6 +534,7 @@ class KodaTui(App):
     def _apply_mcp(self) -> None:
         """켜져 있고 연결된 서버의 도구만 다음 턴부터 쓴다(모든 세션 공통)."""
         self._mcp_tools = [t for s in self._mcp for t in s.active_tools]
+        self._baseline = None   # 도구 목록이 바뀌면 고정 몫도 바뀐다
         self._refresh_statusline()
 
     async def _cmd_mcp(self, arg: str) -> None:

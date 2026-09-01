@@ -1094,15 +1094,17 @@ def test_slash_command_picker_completes_and_full_command_submits(tmp_path):
 
 
 def test_statusline_context_usage_status_and_model_switch(tmp_path, monkeypatch):
-    # 상태줄은 모델·모드·게이지를 보인다. 게이지는 대화 히스토리가 압축 임계에 다가간 정도이고, 프롬프트 토큰은 /status 에 있다.
+    # 컨텍스트 게이지는 프롬프트에 실리는 전부(시스템·메모리·스킬·도구 스키마·히스토리·도구 출력)를 모델 예산과 견준다.
     import koda.tui.app as A
     from koda.config import ModelSettings
-    from koda.session import COMPACT_THRESHOLD_CHARS
     from koda.tui.model import UsageUpdate
 
     st = ModelSettings(_env_file=None, openai_model="deepseek-v4-flash", deepseek_api_key="dk", context_budget_tokens=10000)
     assert ModelSettings(_env_file=None).context_budget_tokens == 131_072   # 기본 예산은 131k
     monkeypatch.setattr(A, "select_provider", lambda settings: ("openai", ""))
+
+    def pct(app):
+        return int(_static_text(app.query_one("#statusline")).rsplit(" ", 1)[-1].rstrip("%"))
 
     async def go():
         session = Session(tmp_path)
@@ -1110,28 +1112,56 @@ def test_statusline_context_usage_status_and_model_switch(tmp_path, monkeypatch)
                       run_task_fn=None, model_name="deepseek-v4-flash", settings=st)
         async with app.run_test(size=(120, 30)) as pilot:
             line = _static_text(app.query_one("#statusline"))
-            assert line.startswith("deepseek-v4-flash · yolo") and "컨텍스트 ░░░░░░░░░░ 0%" in line
+            assert line.startswith("deepseek-v4-flash · yolo") and "컨텍스트" in line
             assert "대기 중" not in line and "koda" not in line     # 진행 상태는 활동바가 말한다
-            # 대화가 쌓이면 게이지가 오른다 (턴마다 실제로 증가하는 값)
-            session.add_turn("질문", "답" * (COMPACT_THRESHOLD_CHARS // 4), route="read", verdict=None)
+            base = app._baseline_tokens()
+            assert base > 0                                          # 첫 턴 전에도 고정 몫이 잡힌다
+            assert pct(app) == min(100, round(base / 10000 * 100))
+
+            session.add_turn("질문", "답" * 3000, route="read", verdict=None)   # 대화가 쌓이면 오른다
             app._refresh_statusline()
             await pilot.pause()
-            assert "컨텍스트 ███░░░░░░░ 25%" in _static_text(app.query_one("#statusline"))
-            app.post_message(UsageUpdate(7000, 500))                # 토큰 사용량은 게이지를 흔들지 않는다
+            assert pct(app) > round(base / 10000 * 100)
+
+            app.post_message(UsageUpdate(9000, 500))                 # 관측값이 추정보다 크면 그쪽을 쓴다
             await pilot.pause()
-            assert "컨텍스트 ███░░░░░░░ 25%" in _static_text(app.query_one("#statusline"))
+            app._refresh_statusline()
+            assert pct(app) == 95
+
             await _submit(pilot, "/status")
             assert await _wait(pilot, lambda: type(app.screen).__name__ == "InfoScreen")
             body = _static_text(app.screen.query_one("#info_body"))
             assert "deepseek-v4-flash (deepseek)" in body
-            assert "압축 임계" in body and "25%" in body
-            assert "최대 7.5k / 예산 10k 토큰" in body and "세션 누적 입력 7.0k 출력 0.5k" in body
+            assert "9.5k / 10k 토큰" in body and "고정 " in body and "관측 최대 9.5k" in body
+            assert "압축" in body and "세션 누적 입력 9.0k 출력 0.5k" in body
             await pilot.press("escape")
             assert await _wait(pilot, lambda: type(app.screen).__name__ != "InfoScreen")
             await _submit(pilot, "/model gpt-5.6 key=ok")
             assert await _wait(pilot, lambda: app.runner.settings.openai_model == "gpt-5.6")
             assert app.runner.settings.openai_api_key == "ok" and app.runner.settings.use_responses_api is True
             assert _static_text(app.query_one("#statusline")).startswith("gpt-5.6 · yolo")
+    asyncio.run(go())
+
+
+def test_baseline_includes_tool_schemas_and_refreshes_with_mcp(tmp_path):
+    """고정 몫에 도구 스키마가 들어가고, MCP 도구가 붙으면 다시 잰다."""
+    from types import SimpleNamespace
+
+    from langchain_core.tools import tool
+
+    @tool(description="이 도구의 설명은 프롬프트에 그대로 실린다. " + "설명 " * 400)
+    def 아주긴설명도구(query: str) -> str:
+        return ""
+
+    async def go():
+        app = _make_app(tmp_path, None)
+        async with app.run_test() as pilot:
+            base = app._baseline_tokens()
+            assert base > 0
+            app._mcp = [SimpleNamespace(active_tools=[아주긴설명도구], error="", enabled=True)]
+            app._apply_mcp()                       # 도구 목록 변경 → 고정 몫 재계산
+            await pilot.pause()
+            assert app._baseline_tokens() > base + 200
     asyncio.run(go())
 
 
