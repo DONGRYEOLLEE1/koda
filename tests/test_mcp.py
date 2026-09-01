@@ -216,3 +216,18 @@ def test_unresolved_env_ref_marks_server_and_skips_connect(tmp_path, monkeypatch
     assert server.active_tools == []
     asyncio.run(_open(server, 1.0))          # 연결을 건너뛴다(예외·대기 없음)
     assert server.tools == []
+
+
+def test_stdio_command_string_is_split_into_args(tmp_path):
+    """널리 쓰이는 한 줄 표기(`"command": "npx -y pkg url"`)를 command 와 args 로 쪼갠다. 어댑터가 stdio 에 args 를 요구한다."""
+    _write(tmp_path, "a.json", {"mcpServers": {"oneline": {
+        "command": "npx -y mcp-remote https://mcp.tavily.com/mcp/?tavilyApiKey=K"}}})
+    _write(tmp_path, "b.json", {"mcpServers": {"split": {"command": "npx", "args": ["-y", "pkg"]}}})
+    _write(tmp_path, "c.json", {"mcpServers": {"bare": {"command": "my-server"}}})
+    _write(tmp_path, "d.json", {"mcpServers": {"quoted": {"command": 'sh -c "echo hi"'}}})
+    conns = load_mcp_configs(str(tmp_path))
+    assert conns["oneline"]["command"] == "npx"
+    assert conns["oneline"]["args"] == ["-y", "mcp-remote", "https://mcp.tavily.com/mcp/?tavilyApiKey=K"]
+    assert conns["split"]["args"] == ["-y", "pkg"]          # 이미 나뉜 설정은 그대로
+    assert conns["bare"]["args"] == []                       # 인자 없는 명령도 args 를 채운다
+    assert conns["quoted"]["args"] == ["-c", "echo hi"]      # 따옴표를 존중한다

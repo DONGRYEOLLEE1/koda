@@ -118,7 +118,7 @@ langgraph `StateGraph` 분기: **router → { answer | reader | investigator →
 { "mcpServers": { "context7": { "url": "https://mcp.context7.com/mcp" } } }
 ```
 
-- `url` 만 있으면 `streamable_http`, `command` 면 `stdio` 로 자동 채운다.
+- `url` 만 있으면 `streamable_http`, `command` 면 `stdio` 로 자동 채운다. `"command": "npx -y mcp-remote https://…"` 처럼 한 줄로 적은 명령은 실행 파일과 인자로 쪼개 넘긴다.
 - 설정 값의 `${VAR}` 는 `~/.koda/.env`·`CWD/.env`·환경변수에서 채운다(환경변수가 우선). API 키를 JSON 에 평문으로 두지 않기 위한 것이고, 참조한 변수가 없으면 그 서버는 연결하지 않고 `/mcp` 에 `환경변수 미설정: VAR` 로 표시된다. URL 쿼리에 실린 키 값은 `/mcp` 화면에서 `***` 로 가린다.
 
 ```jsonc

@@ -5,6 +5,7 @@ import atexit
 import json
 import os
 import re
+import shlex
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -44,13 +45,18 @@ def _unresolved(conn: dict) -> list[str]:
 
 
 def _normalize(spec: dict) -> dict:
-    """설정 축약형에 transport 를 채운다 (url→streamable_http, command→stdio)."""
+    """설정 축약형을 어댑터가 받는 형태로 채운다. url→streamable_http, command→stdio 이며, 널리 쓰이는 `"command": "npx -y pkg url"` 한 줄 표기는 command 와 args 로 쪼갠다(어댑터가 stdio 에 args 를 요구한다)."""
     spec = dict(spec)
     if "transport" not in spec:
         if "url" in spec:
             spec["transport"] = "streamable_http"
         elif "command" in spec:
             spec["transport"] = "stdio"
+    if spec.get("transport") == "stdio" and isinstance(spec.get("command"), str):
+        parts = shlex.split(spec["command"])
+        if not spec.get("args") and len(parts) > 1:
+            spec["command"], spec["args"] = parts[0], parts[1:]
+        spec.setdefault("args", [])
     return spec
 
 
