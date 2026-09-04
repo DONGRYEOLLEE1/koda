@@ -6,7 +6,13 @@ from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-DEFAULT_CONTEXT_BUDGET = 131_072  # 실효 컨텍스트 예산 기본값(128Ki). 모델이 더 크면 CONTEXT_BUDGET_TOKENS 로 올린다
+# 실효 컨텍스트 예산 기본값. koda 의 구조적 천장(시스템·도구 스키마 약 17k + 압축 후 이력 약 12k + 턴 내부 도구 출력 약 93k)에 맞춘 값이다.
+DEFAULT_CONTEXT_BUDGET = 122_000
+
+
+def budget_scale(context_budget: int) -> float:
+    """기본 예산 대비 배율. 압축 임계·도구 출력 상한 같은 파생 상한이 이 배율로 함께 커진다."""
+    return max(0.25, (context_budget or DEFAULT_CONTEXT_BUDGET) / DEFAULT_CONTEXT_BUDGET)
 
 
 KODA_HOME = ".koda"   # 홈의 전역 설정 폴더. 워크스페이스의 .koda 와 같은 이름을 쓴다
@@ -96,7 +102,7 @@ class ModelSettings(BaseSettings):
     thinking_budget_reader: int = Field(default=1024, alias="THINKING_BUDGET_READER")
     thinking_budget_explore: int = Field(default=512, alias="THINKING_BUDGET_EXPLORE")
 
-    # 나가는 요청 프롬프트 토큰 상한 — HistoryTrimMiddleware 가 이 값으로 턴 누적을 절단해 컨텍스트 초과(400)를 막는다. 서버 n_ctx 조정 시 함께 조정.
+    # 모델이 받는 컨텍스트 예산. HistoryTrimMiddleware 의 프롬프트 상한이자 압축 임계·도구 출력 상한의 기준값이라, 1M 모델은 이 값만 올리면 파생 상한이 함께 커진다.
     context_budget_tokens: int = Field(default=DEFAULT_CONTEXT_BUDGET, alias="CONTEXT_BUDGET_TOKENS")
 
     # 자동 승인할 읽기 전용 MCP 도구 이름(쉼표 구분, opt-in). 쓰기성·SSRF 가능 MCP 는 넣지 마라 — 자동 실행되어 유출 위험이 된다.

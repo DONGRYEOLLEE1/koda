@@ -204,3 +204,19 @@ def test_koda_home_prefers_new_path_and_falls_back(tmp_path, monkeypatch):
     assert koda_home() == legacy                       # 예전 위치만 있으면 그쪽
     (tmp_path / ".koda").mkdir()
     assert koda_home() == tmp_path / ".koda"          # 새 경로가 생기면 새 경로가 이긴다
+
+
+def test_budget_scale_boundaries():
+    """파생 상한의 배율. 기본 예산에서 1.0 이고, 미설정(0)은 기본 예산으로 보며, 아주 작은 예산에서도 하한이 있어 상한이 0 으로 붕괴하지 않는다."""
+    from koda.config import DEFAULT_CONTEXT_BUDGET, budget_scale
+    assert budget_scale(DEFAULT_CONTEXT_BUDGET) == 1.0
+    assert budget_scale(0) == 1.0
+    assert budget_scale(1_000_000) == 1_000_000 / DEFAULT_CONTEXT_BUDGET
+    assert budget_scale(1_000) == 0.25
+
+
+def test_context_budget_env_var_overrides_default(monkeypatch):
+    """1M 모델은 CONTEXT_BUDGET_TOKENS 만 export 하면 된다 — 환경변수가 .env 와 기본값을 이긴다."""
+    from koda.config import ModelSettings
+    monkeypatch.setenv("CONTEXT_BUDGET_TOKENS", "1000000")
+    assert ModelSettings(_env_file=None).context_budget_tokens == 1_000_000

@@ -56,7 +56,7 @@ def test_compaction_noop_when_nothing_old(tmp_path):
     # 거대 단일 턴 — 자를 것이 없으면 합성 요약을 덧붙이지 않는다
     s = Session(tmp_path)
     s.add_turn("q", "x" * 40_000, route="read", verdict=None)
-    assert s.needs_compaction is True and s.old_messages() == []
+    assert s.needs_compaction() is True and s.old_messages() == []
     before = list(s.history)
     s.apply_compaction("요약")
     assert s.history == before                    # no-op
@@ -136,3 +136,19 @@ def test_title_roundtrip_and_summaries(tmp_path):
     s.save()
     assert Session.load(tmp_path, s.id).title == "calc 뺄셈 추가"
     assert Session.summaries(tmp_path)[0]["title"] == "calc 뺄셈 추가"
+
+
+def test_compact_threshold_scales_with_budget():
+    """압축 임계는 컨텍스트 예산에 비례한다. 기본 예산에서는 기존 값 그대로라 동작이 바뀌지 않는다."""
+    from koda.config import DEFAULT_CONTEXT_BUDGET
+    from koda.session import COMPACT_THRESHOLD_CHARS, compact_threshold
+    assert compact_threshold(DEFAULT_CONTEXT_BUDGET) == COMPACT_THRESHOLD_CHARS
+    assert compact_threshold(1_000_000) > COMPACT_THRESHOLD_CHARS * 8
+
+
+def test_needs_compaction_follows_budget(tmp_path):
+    """같은 이력이라도 1M 예산에서는 아직 압축 대상이 아니다 — 1M 모델의 멀티턴 맥락이 조기 요약되지 않는다."""
+    s = Session(tmp_path)
+    s.add_turn("q", "x" * 40_000, route="read", verdict=None)
+    assert s.needs_compaction() is True
+    assert s.needs_compaction(1_000_000) is False

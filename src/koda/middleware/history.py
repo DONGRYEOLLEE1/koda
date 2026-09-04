@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.messages.utils import count_tokens_approximately, trim_messages
@@ -12,14 +14,14 @@ def _msg_text(m) -> str:
     return c if isinstance(c, str) else str(c)
 
 
-def _is_cjk(ch: str) -> bool:
-    return ("぀" <= ch <= "鿿") or ("가" <= ch <= "힣") or ("豈" <= ch <= "﫿")
+# 문자 단위 파이썬 루프는 1M 규모 히스토리에서 호출당 0.2초를 먹는다(정규식은 0.046초). 판정 범위와 결과는 동일하다.
+_CJK_RE = re.compile("[\u3040-\u9fff\uac00-\ud7a3\uf900-\ufaff]")
 
 
 def _count_tokens(messages) -> int:
     """CJK 보정 토큰 추정. count_tokens_approximately 는 한/중/일을 ~2x 과소평가해 트림 누락→400 크래시를 부르므로 real ≈ base + cjk/3 으로 보정한다."""
     base = count_tokens_approximately(messages)
-    cjk = sum(1 for m in messages for ch in _msg_text(m) if _is_cjk(ch))
+    cjk = sum(_CJK_RE.subn("", _msg_text(m))[1] for m in messages)
     return base + cjk // 3
 
 

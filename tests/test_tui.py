@@ -1100,7 +1100,7 @@ def test_statusline_context_usage_status_and_model_switch(tmp_path, monkeypatch)
     from koda.tui.model import UsageUpdate
 
     st = ModelSettings(_env_file=None, openai_model="deepseek-v4-flash", deepseek_api_key="dk", context_budget_tokens=10000)
-    assert ModelSettings(_env_file=None).context_budget_tokens == 131_072   # 기본 예산은 131k
+    assert ModelSettings(_env_file=None).context_budget_tokens == 122_000   # 기본 예산은 koda 의 구조적 천장
     monkeypatch.setattr(A, "select_provider", lambda settings: ("openai", ""))
 
     def pct(app):

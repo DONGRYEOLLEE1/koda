@@ -24,7 +24,7 @@ from ..llm import select_provider
 from ..mcp import (child_log_path, config_path, connect_mcp, connect_server, disconnect_server, find_config,
                    mcp_dirs, remove_config, write_config)
 from ..memory import Memory, parse_remember
-from ..session import COMPACT_THRESHOLD_CHARS, Session
+from ..session import Session, compact_threshold
 from ..workspace import Workspace
 from .paths import index_paths, match_paths
 from .model import (
@@ -451,7 +451,7 @@ class KodaTui(App):
             f"컨텍스트    {self._k(self._ctx_tokens(self._active))} / {self._k(self._ctx_budget)} 토큰"
             + f" · 고정 {self._k(self._baseline_tokens())}(시스템·메모리·스킬·도구 {len(self._mcp_tools) + 10}개)"
             + f" · 대화 {self._k(self._history_chars(s) // 3)} · 관측 최대 {self._k(self._active.ctx_used)}",
-            f"압축        대화 {self._k(self._history_chars(s))}/{self._k(COMPACT_THRESHOLD_CHARS)}자 ({self._history_chars(s) / COMPACT_THRESHOLD_CHARS:.0%}) · 세션 누적 입력 {self._k(used_in)} 출력 {self._k(used_out)}",
+            f"압축        대화 {self._k(self._history_chars(s))}/{self._k(compact_threshold(self._ctx_budget))}자 ({self._history_chars(s) / compact_threshold(self._ctx_budget):.0%}) · 세션 누적 입력 {self._k(used_in)} 출력 {self._k(used_out)}",
             f"승인        {self._mode}",
             f"MCP         {mcp}",
             f"워크스페이스 {self._ws.root}",

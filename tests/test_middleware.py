@@ -283,3 +283,32 @@ def test_history_trim_does_not_annihilate_on_oversized_tail_pair():
 def count_approx(msgs):
     from langchain_core.messages.utils import count_tokens_approximately
     return count_tokens_approximately(msgs)
+
+
+def test_tool_output_cap_scales_with_budget():
+    """도구 출력 상한도 예산에 비례한다. 기본 예산에서는 잘리는 출력이 1M 예산에서는 그대로 통과한다."""
+    from koda.middleware import ToolOutputTrimMiddleware
+
+    payload = "y" * 20_000
+    default = ToolOutputTrimMiddleware().wrap_tool_call(
+        _req("t", {}), lambda r: ToolMessage(content=payload, tool_call_id="t1", name="read_file")
+    )
+    wide = ToolOutputTrimMiddleware(context_budget=1_000_000).wrap_tool_call(
+        _req("t", {}), lambda r: ToolMessage(content=payload, tool_call_id="t1", name="read_file")
+    )
+    assert "절단" in default.content and len(default.content) < 20_000
+    assert wide.content == payload
+
+
+def test_build_passes_context_budget_to_tool_trim(monkeypatch):
+    """예산이 AgentSpec.build 를 거쳐 도구 출력 미들웨어까지 실제로 전달된다."""
+    import koda.agents.specs as S
+    from koda.agents.specs import AGENTS
+    from koda.middleware import ToolOutputTrimMiddleware
+
+    captured = {}
+    monkeypatch.setattr(S, "create_agent",
+                        lambda model, tools, system_prompt, **kw: captured.update(mw=kw["middleware"]) or object())
+    AGENTS["coder"].build(object(), None, lambda n, a: True, context_budget=1_000_000)
+    trim = next(m for m in captured["mw"] if isinstance(m, ToolOutputTrimMiddleware))
+    assert trim._max > 8000 * 8

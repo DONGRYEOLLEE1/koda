@@ -3,17 +3,20 @@ from __future__ import annotations
 from langchain.agents.middleware import AgentMiddleware
 
 from ..artifacts import redact
+from ..config import DEFAULT_CONTEXT_BUDGET, budget_scale
 
 # 오픈웹 벌크 검색/크롤류는 한 번에 수천~수만 자를 뱉어 턴 누적의 주범이라 더 낮은 상한을 적용한다.
 _SEARCH_TOOLS = ("web_search", "crawl", "scrape", "deep_research")
 
 
 class ToolOutputTrimMiddleware(AgentMiddleware):
-    def __init__(self, max_chars: int = 8000, store=None, search_max_chars: int = 3000):
-        """store 가 있으면 절단 전 원문을 저장하고 재조회 안내를 붙인다. search_max_chars 는 벌크 검색/크롤류 전용 상한."""
+    def __init__(self, max_chars: int = 8000, store=None, search_max_chars: int = 3000,
+                 context_budget: int = DEFAULT_CONTEXT_BUDGET):
+        """store 가 있으면 절단 전 원문을 저장하고 재조회 안내를 붙인다. search_max_chars 는 벌크 검색/크롤류 전용 상한이며, 두 상한 모두 context_budget 에 비례해 커진다."""
         super().__init__()
-        self._max = max_chars
-        self._search_max = search_max_chars
+        scale = budget_scale(context_budget)
+        self._max = int(max_chars * scale)
+        self._search_max = int(search_max_chars * scale)
         self._store = store
 
     def _cap_for(self, tool_name: str) -> int:

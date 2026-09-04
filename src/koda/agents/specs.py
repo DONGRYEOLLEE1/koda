@@ -72,7 +72,7 @@ class AgentSpec:
             middleware=[
                 StepBudgetMiddleware(self.max_steps),
                 PermissionMiddleware(approver, self.name, mcp_auto_approve),
-                ToolOutputTrimMiddleware(store=store),
+                ToolOutputTrimMiddleware(store=store, context_budget=context_budget),
                 HistoryTrimMiddleware(max_prompt_tokens=context_budget),
             ],
         )

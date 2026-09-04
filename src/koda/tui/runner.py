@@ -146,7 +146,7 @@ class TuiTurnRunner:
                         post(MemorySaved(kind, note))
                 except Exception as e:
                     post(PhaseEvent(f"메모리 판정 생략({type(e).__name__})"))
-                old = session.old_messages() if session.needs_compaction else []
+                old = session.old_messages() if session.needs_compaction(self._app._ctx_budget) else []
                 if old:
                     post(PhaseEvent("문맥 압축 중…"))
                     summary, new_title = asyncio.run(summarize_history(old, self.settings))

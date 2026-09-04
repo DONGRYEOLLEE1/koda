@@ -235,6 +235,7 @@ def _cmd_chat(args) -> int:
     else:
         approver = _deny_approver
     memory = Memory(ws.root)
+    budget = load_model_settings().context_budget_tokens  # 압축 임계의 기준값 (턴마다 다시 읽지 않는다)
 
     if args.resume:
         try:
@@ -317,7 +318,7 @@ def _cmd_chat(args) -> int:
         except Exception as e:
             _err(f"  메모리 판정 생략({type(e).__name__})")
 
-        old = session.old_messages() if session.needs_compaction else []
+        old = session.old_messages() if session.needs_compaction(budget) else []
         if old:  # 임계 초과 + 자를 오래된 턴이 있을 때만 (압축 = 캐시 prefix 재구성 1회)
             _err("[문맥 압축 중…]")
             summary, new_title = asyncio.run(summarize_history(old))

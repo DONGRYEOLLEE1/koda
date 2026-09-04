@@ -5,12 +5,19 @@ import time
 import uuid
 from pathlib import Path
 
+from .config import DEFAULT_CONTEXT_BUDGET, budget_scale
+
 KODA_DIR = ".koda"
 
 # 점진적 문맥 압축(패턴 5): 히스토리가 임계 초과 시 오래된 턴을 LLM 요약으로 치환.
 # 압축은 프롬프트 prefix 를 깨므로(캐시 미스 1회) 임계 도달 시에만 수행한다.
-COMPACT_THRESHOLD_CHARS = 36_000   # ≈ 12k 토큰 (chars/3 추정)
+COMPACT_THRESHOLD_CHARS = 36_000   # 기본 예산에서의 임계 ≈ 12k 토큰 (chars/3 추정)
 KEEP_RECENT_TURNS = 4              # 최근 4턴(user/assistant 8메시지)은 원본 유지
+
+
+def compact_threshold(context_budget: int = DEFAULT_CONTEXT_BUDGET) -> int:
+    """세션 이력 압축 임계(문자). 컨텍스트 예산에 비례해 커진다."""
+    return int(COMPACT_THRESHOLD_CHARS * budget_scale(context_budget))
 
 
 class Session:
@@ -79,9 +86,9 @@ class Session:
 
     # --- 점진적 문맥 압축 (요약 "생성"은 LLM 몫, koda는 분할·교체만) ---
 
-    @property
-    def needs_compaction(self) -> bool:
-        return sum(len(m["content"]) for m in self.history) > COMPACT_THRESHOLD_CHARS
+    def needs_compaction(self, context_budget: int = DEFAULT_CONTEXT_BUDGET) -> bool:
+        """이력이 압축 임계를 넘었는가. 임계는 컨텍스트 예산에 비례한다."""
+        return sum(len(m["content"]) for m in self.history) > compact_threshold(context_budget)
 
     def _cut_index(self) -> int:
         """압축 경계 인덱스. user/assistant 쌍 경계를 보존한다(홀수 히스토리에서 assistant 고아 방지). 자를 것이 없으면 0."""
