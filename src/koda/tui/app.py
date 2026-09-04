@@ -6,6 +6,7 @@ import time
 from collections import Counter
 from functools import partial
 
+from rich.cells import cell_len
 from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
@@ -65,6 +66,15 @@ from .widgets import (
 _CTRL_C_WINDOW_S = 2.0  # 이 안에 Ctrl+C 를 한 번 더 누르면 종료
 _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"  # rich 'dots' 프레임 — toad/Claude Code 계열 표준 스피너
 _GAUGE_CELLS = 10  # 상태줄 컨텍스트 게이지 칸 수
+_GRID_COLS, _GRID_ROWS = 10, 5   # /context 격자. Claude Code 의 20x10 은 koda 예산 규모에 과하다
+_GRID_CELLS = _GRID_COLS * _GRID_ROWS
+
+
+def _pad(s: str, width: int) -> str:
+    """표시 폭 기준 좌측 정렬. 한글은 두 칸을 차지해 파이썬 문자열 폭 지정으로는 열이 어긋난다."""
+    return s + " " * max(0, width - cell_len(s))
+# /context 범주 색 — 테마 변수라 라이트·다크에 함께 적응한다. 범주 순서와 같은 순서로 쓴다.
+_CTX_COLORS = ("text-primary", "text-secondary", "text-accent", "text-success", "primary", "text-error", "warning")
 
 # TUI 전용 단계 라벨 (CLI 의 대괄호 라벨보다 자연스러운 동사형).
 # 색상은 theme_variables 키 (self._theme_color 로 라이트/다크 적응 조회).
@@ -249,7 +259,7 @@ class KodaTui(App):
         self._mcp_dirs = mcp_dirs
         self._mcp: list = []
         self._mcp_connecting = bool(mcp_dirs)
-        self._baseline: int | None = None     # 시스템+메모리+스킬+도구 스키마의 고정 토큰 추정 (MCP 변경 시 무효화)
+        self._baseline: list | None = None    # 고정 몫(시스템·도구·스킬·메모리)의 범주별 토큰 추정 (MCP 변경 시 무효화)
         self._path_index: list[str] = []      # @경로 후보용 워크스페이스 색인 (3초마다 갱신)
         self._path_index_at = 0.0
         self._picker_dismissed: str | None = None  # Esc 로 닫은 토큰(@경로·/명령). 같은 토큰이면 다시 띄우지 않는다
@@ -267,7 +277,8 @@ class KodaTui(App):
             "/resume": ("저장된 세션 열기: /resume [session-id] (인자 없으면 목록에서 선택)", self._cmd_resume),
             "/rename": ("세션 이름 바꾸기: /rename <이름> (인자 없으면 현재 이름 표시)", self._cmd_rename),
             "/mcp": ("MCP 서버 상태·도구 보기, 재연결·끄기", self._cmd_mcp),
-            "/status": ("세션·모델·컨텍스트·MCP 상태 보기", self._cmd_status),
+            "/status": ("세션·모델·MCP 상태 보기", self._cmd_status),
+            "/context": ("컨텍스트 예산이 어디에 쓰이는지 범주별로 보기", self._cmd_context),
             "/model": ("모델 전환 (대화형). 단축: /model <모델명> [provider=…] [base_url=…] [key=…]", self._cmd_model),
             "/memory": ("메모리 내용 보기", self._cmd_memory),
             "/remember": ("메모리에 저장: /remember [semantic|episodic|procedural] <내용>", self._cmd_remember),
@@ -362,9 +373,10 @@ class KodaTui(App):
     def _history_chars(session) -> int:
         return sum(len(m.get("content") or "") for m in session.history)
 
-    def _baseline_tokens(self) -> int:
-        """턴마다 프롬프트에 고정으로 실리는 몫: 시스템 프롬프트 + 메모리 + 스킬 + 도구 스키마.
-        토큰 환산은 koda 가 다른 곳에서도 쓰는 문자수/3 추정이며, MCP 도구가 바뀌면 다시 잰다."""
+    def _static_rows(self) -> list[tuple[str, int, str, str]]:
+        """턴마다 고정으로 실리는 몫의 범주별 내역 (이름, 토큰, 부가, 연결 커맨드).
+        도구를 가장 많이 쥔 coder 기준이며, 토큰 환산은 koda 가 다른 곳에서도 쓰는 문자수/3 추정이다.
+        시스템 프롬프트를 세 번 조립해 차분으로 스킬·메모리 몫을 가른다(조립 로직을 복제하지 않으려는 것)."""
         if self._baseline is not None:
             return self._baseline
         try:
@@ -374,13 +386,48 @@ class KodaTui(App):
             from ..skills import load_skills
             from ..tools import make_all_tools
 
-            system = AGENTS["coder"].system_prompt(self._memory.read(), load_skills(self._ws.root), self._ctx_budget)
-            tools = [*make_all_tools(self._ws), *self._mcp_tools]
-            schema = json.dumps([convert_to_openai_tool(x) for x in tools], ensure_ascii=False)
-            self._baseline = (len(system) + len(schema)) // 3
+            spec, budget = AGENTS["coder"], self._ctx_budget
+            skills = load_skills(self._ws.root)
+            base = len(spec.system_prompt("", (), budget))
+            with_skills = len(spec.system_prompt("", skills, budget))
+            with_memory = len(spec.system_prompt(self._memory.read(), skills, budget))
+            builtin = make_all_tools(self._ws)
+
+            def schema_chars(tools) -> int:
+                return len(json.dumps([convert_to_openai_tool(x) for x in tools], ensure_ascii=False)) if tools else 0
+
+            items = sum(len(self._memory.items(k)) for k in ("semantic", "episodic", "procedural"))
+            self._baseline = [
+                ("시스템 프롬프트", base // 3, "", ""),
+                ("내장 도구", schema_chars(builtin) // 3, f"{len(builtin)}개", ""),
+                ("MCP 도구", schema_chars(self._mcp_tools) // 3, f"{len(self._mcp_tools)}개", "/mcp"),
+                ("스킬", (with_skills - base) // 3, f"{len(skills)}개" if skills else "없음", ""),
+                ("메모리", (with_memory - with_skills) // 3, f"{items}개 항목", "/memory"),
+            ]
         except Exception:
-            self._baseline = 0   # 추정 실패는 게이지를 막지 않는다. 관측된 토큰만으로 보인다
+            self._baseline = []   # 추정 실패는 게이지를 막지 않는다. 관측된 토큰만으로 보인다
         return self._baseline
+
+    def _baseline_tokens(self) -> int:
+        return sum(tok for _, tok, _, _ in self._static_rows())
+
+    def _context_rows(self, run: SessionRun) -> list[tuple[str, int, str, str]]:
+        """/context 의 범주 목록. 고정 몫에 대화 이력을 더하고, 관측값이 추정을 넘으면 그 차이를 턴 내부 도구 출력으로 세운다.
+        합계가 _ctx_tokens 와 같아져 상태줄 게이지와 어긋나지 않는다(분자를 세션 누적으로 잡아 100%를 넘긴 opencode 사례를 피한다)."""
+        chars = self._history_chars(run.session)
+        left = max(0, compact_threshold(self._ctx_budget) - chars)
+        rows = [*self._static_rows(), ("대화 이력", chars // 3, f"압축까지 {self._k(left)}자", "/compact")]
+        if (extra := run.ctx_used - sum(tok for _, tok, _, _ in rows)) > 0:
+            rows.append(("턴 내부 도구 출력", extra, "관측 기준", ""))
+        return rows
+
+    def _grid_cells(self, rows: list) -> list[int]:
+        """범주별 격자 칸 수. 토큰이 있으면 최소 한 칸을 주고, 반올림 누적 초과분은 큰 범주부터 깎는다."""
+        per = (self._ctx_budget / _GRID_CELLS) or 1
+        cells = [max(1, round(tok / per)) if tok > 0 else 0 for _, tok, _, _ in rows]
+        while sum(cells) > _GRID_CELLS:
+            cells[cells.index(max(cells))] -= 1
+        return cells
 
     def _ctx_tokens(self, run: SessionRun) -> int:
         """현재 컨텍스트 점유(토큰). 실제 호출에서 관측한 최대값과 정적 추정 중 큰 쪽을 쓴다.
@@ -435,29 +482,93 @@ class KodaTui(App):
             return "local", st.local_model, st.local_base_url
         return st.provider_name, st.openai_model, st.openai_base_url
 
+    def _section_text(self, sections: list, footer: str = "") -> Text:
+        """구획 제목·레이블·값으로 나눈 모달 본문. 제목은 강조, 레이블은 흐리게 준다."""
+        muted, accent = "dim", self._theme_color("text-accent")
+        t = Text()
+        for i, (head, rows) in enumerate(sections):
+            t.append("\n" if i else "")
+            t.append(f"{head}\n", style=f"bold {accent}")
+            for label, value in rows:
+                t.append("  " + _pad(label, 14), style=muted)
+                t.append(f"{value}\n")
+        if footer:
+            t.append(f"\n{footer}", style=muted)
+        return t
+
     async def _cmd_status(self, arg: str) -> None:
         st, s = self._settings, self.runner.session
         provider, model, base_url = self._active_model()
-        mcp = ", ".join(f"{x.name}({'꺼짐' if not x.enabled else '실패' if x.error else len(x.tools)})" for x in self._mcp) or ("연결 중" if self._mcp_connecting else "없음")
-        used_in, used_out = self._active.tokens
+        mcp = "  ".join(f"{x.name}({'꺼짐' if not x.enabled else '실패' if x.error else len(x.tools)})" for x in self._mcp) \
+            or ("연결 중" if self._mcp_connecting else "없음")
         open_ids = ", ".join(f"{r.session.id}{'(답변 중)' if r.busy else ''}" for r in self._runs.values())
-        lines = [
-            f"세션        {s.id} · {len(s.turns)}턴" + (f" · {s.title}" if s.title else ""),
-            f"브랜치      {s.branch or '(git 저장소 아님)'}" + (f" · 기준 {s.base_commit}" if s.base_commit else ""),
-            f"열린 세션   {len(self._runs)}개 · {open_ids}",
-            f"모델        {model} ({provider or '?'}) · {base_url}",
-            f"추론        style={getattr(st, 'reasoning_style', '?')} effort={getattr(st, 'reasoning_effort', '?')} · 구조화={getattr(st, 'structured_method', '?')}"
-            + (" · Responses API" if getattr(st, "use_responses_api", False) else ""),
-            f"컨텍스트    {self._k(self._ctx_tokens(self._active))} / {self._k(self._ctx_budget)} 토큰"
-            + f" · 고정 {self._k(self._baseline_tokens())}(시스템·메모리·스킬·도구 {len(self._mcp_tools) + 10}개)"
-            + f" · 대화 {self._k(self._history_chars(s) // 3)} · 관측 최대 {self._k(self._active.ctx_used)}",
-            f"압축        대화 {self._k(self._history_chars(s))}/{self._k(compact_threshold(self._ctx_budget))}자 ({self._history_chars(s) / compact_threshold(self._ctx_budget):.0%}) · 세션 누적 입력 {self._k(used_in)} 출력 {self._k(used_out)}",
-            f"승인        {self._mode}",
-            f"MCP         {mcp}",
-            f"워크스페이스 {self._ws.root}",
-            f"메모리      {sum(len(self._memory.items(k)) for k in ('semantic', 'episodic', 'procedural'))}개 항목",
+        items = sum(len(self._memory.items(k)) for k in ("semantic", "episodic", "procedural"))
+        sections = [
+            ("세션", [
+                ("ID", f"{s.id} · {len(s.turns)}턴"),
+                ("제목", s.title or "(아직 없음)"),
+                ("브랜치", (s.branch or "(git 저장소 아님)") + (f" · 기준 {s.base_commit}" if s.base_commit else "")),
+                ("열린 세션", f"{len(self._runs)}개 · {open_ids}"),
+            ]),
+            ("모델", [
+                ("모델", f"{model} ({provider or '?'})"),
+                ("엔드포인트", base_url or "(미설정)"),
+                ("추론", f"effort={getattr(st, 'reasoning_effort', '?')} · style={getattr(st, 'reasoning_style', '?')}"
+                         f" · 구조화={getattr(st, 'structured_method', '?')}"
+                         + (" · Responses API" if getattr(st, "use_responses_api", False) else "")),
+            ]),
+            ("환경", [
+                ("승인", self._mode),
+                ("MCP", mcp),
+                ("워크스페이스", str(self._ws.root)),
+                ("메모리", f"{items}개 항목"),
+            ]),
         ]
-        self.push_screen(InfoScreen("상태  (ESC 닫기)", "\n".join(lines)))
+        self.push_screen(InfoScreen("상태  (ESC 닫기)",
+                                    self._section_text(sections, "컨텍스트 사용량은 /context 로 본다.")))
+
+    async def _cmd_context(self, arg: str) -> None:
+        """컨텍스트 예산이 어디에 쓰이는지 범주별로 보여준다. 도구를 가장 많이 쥔 coder 기준이다."""
+        run, budget = self._active, self._ctx_budget
+        rows = self._context_rows(run)
+        cells = self._grid_cells(rows)
+        used = sum(tok for _, tok, _, _ in rows)
+        colors = [self._theme_color(c) for c in _CTX_COLORS]
+        dim = muted = "dim"   # 테마의 text-muted 는 "auto 60%" 라 rich Text 스타일로 못 쓴다
+
+        t = Text()
+        t.append(f"  {self._model_name or '모델 미정'}  ", style="bold")
+        t.append(f"{self._k(used)} / {self._k(budget)} 토큰  ", style="bold")
+        t.append(f"({used / budget:.0%})\n\n", style=f"bold {muted}")
+
+        painted = [colors[i % len(colors)] for i, n in enumerate(cells) for _ in range(n)]
+        for r in range(_GRID_ROWS):
+            t.append("  ")
+            for c in range(_GRID_COLS):
+                i = r * _GRID_COLS + c
+                if i < len(painted):
+                    t.append("█", style=painted[i])
+                else:
+                    t.append("░", style=dim)
+            t.append("\n")
+        t.append(f"  한 칸 = {self._k(round(budget / _GRID_CELLS))} 토큰\n\n", style=muted)
+
+        for i, (name, tok, note, cmd) in enumerate(rows):
+            t.append("  █ ", style=colors[i % len(colors)])
+            t.append(_pad(name, 16))
+            t.append(_pad(self._k(tok), 8), style="bold")
+            t.append(_pad(f"{tok / budget:.1%}", 9), style=muted)
+            t.append(_pad(note, 18) if cmd else note, style=muted)
+            t.append(cmd, style=self._theme_color("text-accent"))
+            t.append("\n")
+        free = max(0, budget - used)
+        t.append("  ░ ", style=dim)
+        t.append(_pad("남은 공간", 16))
+        t.append(_pad(self._k(free), 8), style="bold")
+        t.append(f"{free / budget:.1%}", style=muted)
+        observed = f"{self._k(run.ctx_used)} (마지막 LLM 호출 기준)" if run.ctx_used else "아직 없음"
+        t.append(f"\n\n  추정 {self._k(used)} · 관측 최대 {observed}", style=muted)
+        self.push_screen(InfoScreen("컨텍스트  (ESC 닫기)", t))
 
     async def _cmd_model(self, arg: str) -> None:
         # 인자 없음: provider 선택 → 모델명·base_url·키 입력 창. 인자 있음: 한 줄 단축 문법.

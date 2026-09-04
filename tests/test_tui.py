@@ -1097,6 +1097,7 @@ def test_statusline_context_usage_status_and_model_switch(tmp_path, monkeypatch)
     # 컨텍스트 게이지는 프롬프트에 실리는 전부(시스템·메모리·스킬·도구 스키마·히스토리·도구 출력)를 모델 예산과 견준다.
     import koda.tui.app as A
     from koda.config import ModelSettings
+    from koda.tui.app import _GRID_CELLS
     from koda.tui.model import UsageUpdate
 
     st = ModelSettings(_env_file=None, openai_model="deepseek-v4-flash", deepseek_api_key="dk", context_budget_tokens=10000)
@@ -1132,8 +1133,22 @@ def test_statusline_context_usage_status_and_model_switch(tmp_path, monkeypatch)
             assert await _wait(pilot, lambda: type(app.screen).__name__ == "InfoScreen")
             body = _static_text(app.screen.query_one("#info_body"))
             assert "deepseek-v4-flash (deepseek)" in body
-            assert "9.5k / 10k 토큰" in body and "고정 " in body and "관측 최대 9.5k" in body
-            assert "압축" in body and "세션 누적 입력 9.0k 출력 0.5k" in body
+            assert "세션" in body and "모델" in body and "환경" in body      # 구획으로 나뉜다
+            # 컨텍스트·압축은 /context 로 옮겼다
+            assert "9.5k / 10k 토큰" not in body and "압축까지" not in body
+            assert "/context" in body                                        # 안내가 남는다
+            await pilot.press("escape")
+            assert await _wait(pilot, lambda: type(app.screen).__name__ != "InfoScreen")
+
+            await _submit(pilot, "/context")                                 # 범주별 내역은 /context 가 맡는다
+            assert await _wait(pilot, lambda: type(app.screen).__name__ == "InfoScreen")
+            ctx = _static_text(app.screen.query_one("#info_body"))
+            assert "9.5k / 10k 토큰" in ctx and "관측 최대 9.5k" in ctx
+            for name in ("시스템 프롬프트", "내장 도구", "MCP 도구", "스킬", "메모리", "대화 이력", "남은 공간"):
+                assert name in ctx
+            assert ctx.count("█") + ctx.count("░") >= _GRID_CELLS            # 10x5 격자
+            assert "한 칸 = " in ctx
+            assert "/mcp" in ctx and "/compact" in ctx                       # 줄일 곳을 커맨드로 안내한다
             await pilot.press("escape")
             assert await _wait(pilot, lambda: type(app.screen).__name__ != "InfoScreen")
             await _submit(pilot, "/model gpt-5.6 key=ok")
@@ -1714,4 +1729,49 @@ def test_mcp_add_rejects_garbage(tmp_path, monkeypatch):
             await pilot.press("enter")
             assert await _wait(pilot, lambda: any("설정을 읽지 못했" in n.message for n in app._notifications))
             assert not list(g.glob("*.json"))                          # 아무 파일도 만들지 않는다
+    asyncio.run(go())
+
+
+def test_context_grid_allocation(tmp_path):
+    """격자 배분: 토큰이 있으면 최소 한 칸, 총합은 격자 칸 수를 넘지 않는다. 칸당 토큰은 예산에 비례한다."""
+    from koda.config import ModelSettings
+    from koda.tui.app import _GRID_CELLS
+
+    async def go():
+        st = ModelSettings(_env_file=None, openai_model="deepseek-v4-flash", deepseek_api_key="dk",
+                           context_budget_tokens=1_000_000)
+        session = Session(tmp_path)
+        app = KodaTui(Workspace(tmp_path), session, Memory(tmp_path), None, auto_yes=True,
+                      run_task_fn=None, model_name="m", settings=st)
+        async with app.run_test() as pilot:
+            rows = app._context_rows(app._active)
+            cells = app._grid_cells(rows)
+            assert len(cells) == len(rows)
+            assert sum(cells) <= _GRID_CELLS
+            # 1M 예산에서는 모든 범주가 칸당 토큰(20k)보다 작지만 사라지지 않는다
+            assert all(n >= 1 for n, (_, tok, _, _) in zip(cells, rows) if tok > 0)
+            assert app._ctx_budget / _GRID_CELLS == 20_000
+
+            app._settings = ModelSettings(_env_file=None, openai_model="deepseek-v4-flash",
+                                          deepseek_api_key="dk", context_budget_tokens=122_000)
+            app._baseline = None
+            assert app._grid_cells(app._context_rows(app._active))                 # 예산이 줄어도 배분은 성립
+            await pilot.pause()
+    asyncio.run(go())
+
+
+def test_context_rows_total_matches_gauge(tmp_path):
+    """/context 범주 합계가 상태줄 게이지의 분자와 같다. 두 화면이 다른 값을 말하면 안 된다."""
+    from koda.tui.model import UsageUpdate
+
+    async def go():
+        session = Session(tmp_path)
+        app = _make_app(tmp_path, None, session=session)
+        async with app.run_test() as pilot:
+            session.add_turn("질문", "답" * 2000, route="read", verdict=None)
+            app.post_message(UsageUpdate(90_000, 500))     # 관측이 추정을 크게 넘는 경우
+            await pilot.pause()
+            rows = app._context_rows(app._active)
+            assert sum(tok for _, tok, _, _ in rows) == app._ctx_tokens(app._active)
+            assert any(name == "턴 내부 도구 출력" for name, _, _, _ in rows)
     asyncio.run(go())

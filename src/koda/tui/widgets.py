@@ -512,11 +512,11 @@ class ModelScreen(ModalScreen[dict | None]):
 
 
 class InfoScreen(ModalScreen[None]):
-    """제목과 본문 한 덩어리를 보여 주는 읽기 전용 모달(/status). ESC 로 닫는다."""
+    """제목과 본문 한 덩어리를 보여 주는 읽기 전용 모달(/status·/context). body 는 평문이거나 서식 있는 Text 다. ESC 로 닫는다."""
 
     BINDINGS = [("escape", "close", "닫기")]
 
-    def __init__(self, title: str, body: str) -> None:
+    def __init__(self, title: str, body: "str | Text") -> None:
         super().__init__()
         self._title = title
         self._body = body
