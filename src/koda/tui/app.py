@@ -66,6 +66,21 @@ from .widgets import (
 _CTRL_C_WINDOW_S = 2.0  # 이 안에 Ctrl+C 를 한 번 더 누르면 종료
 _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"  # rich 'dots' 프레임 — toad/Claude Code 계열 표준 스피너
 _GAUGE_CELLS = 10  # 상태줄 컨텍스트 게이지 칸 수
+_EIGHTHS = "▏▎▍▌▋▊▉"   # 1/8~7/8 부분 블록 — 같은 칸 수로 게이지 해상도를 8배 올린다
+_SEP = " │ "           # 상태바 구획 구분자
+_NARROW = 84           # 이 폭 미만이면 "컨텍스트" 라벨을 접는다 (라벨 포함 우측 폭이 약 40칸)
+_TIGHT = 66            # 이 폭 미만이면 브랜치까지 접는다
+_BRANCH_MAX = 14       # 상태바 브랜치 표시 길이
+
+
+def _gauge(ratio: float, cells: int = _GAUGE_CELLS) -> str:
+    """비율 막대. 마지막 칸을 8분할해 낮은 비율도 0칸으로 사라지지 않게 한다."""
+    full, rest = divmod(round(max(0.0, min(1.0, ratio)) * cells * 8), 8)
+    if full >= cells:
+        return "█" * cells
+    return ("█" * full + (_EIGHTHS[rest - 1] if rest else "")).ljust(cells, "░")
+
+
 _GRID_COLS, _GRID_ROWS = 10, 5   # /context 격자. Claude Code 의 20x10 은 koda 예산 규모에 과하다
 _GRID_CELLS = _GRID_COLS * _GRID_ROWS
 
@@ -190,7 +205,9 @@ class KodaTui(App):
     #prompt { height: auto; max-height: 10; }
     #path_picker { height: auto; max-height: 12; border: none; background: $panel; padding: 0 1; }
     #activity { height: 1; padding: 0 1; }
-    #statusline { height: 1; background: $panel; color: $text-muted; padding: 0 1; }
+    #statusline { height: 1; background: $panel; padding: 0 1; }
+    #status_left { width: 1fr; height: 1; color: $text-muted; }
+    #status_right { width: auto; height: 1; color: $text-muted; text-align: right; }
     .user-turn { color: $accent; text-style: bold; margin: 1 0 0 0; }
     .diff-block { margin: 0 0 1 0; padding: 0 0 0 2; }
     .turn-footer { color: $text-muted; margin: 0 0 1 0; }
@@ -323,7 +340,9 @@ class KodaTui(App):
                 with Vertical(id="conv_stack"):
                     yield self._active.conv
                 yield Static("", id="activity", markup=False)
-                yield Static(self._statusline_text(), id="statusline", markup=False)
+                with Horizontal(id="statusline"):
+                    yield Static(self._status_left(), id="status_left", markup=False)
+                    yield Static(self._status_right(), id="status_right", markup=False)
                 yield OptionList(id="path_picker")
                 yield PromptArea(id="prompt", tab_behavior="focus",
                                  placeholder="요청 입력…  (Alt+Enter·Ctrl+J 줄바꿈 · /help 명령 · Ctrl+Q 종료)")
@@ -434,34 +453,53 @@ class KodaTui(App):
         관측값은 그 턴의 도구 출력까지 포함하고, 추정값은 첫 턴 전에도 고정 몫을 보여 준다."""
         return max(run.ctx_used, self._baseline_tokens() + self._history_chars(run.session) // 3)
 
-    def _statusline_text(self) -> Text:
-        """모델 · 승인 모드 · 브랜치 · MCP · 컨텍스트 게이지. 진행 상태는 바로 위 활동바가 말하므로 문구로 중복하지 않는다."""
-        run = self._active
+    def _bar_width(self) -> int:
+        """상태바 자신의 폭. 세션 패널이 열려 있으면 앱 폭보다 30칸쯤 좁으므로 앱 폭으로 재면 넘친다."""
+        try:
+            return self.query_one("#statusline").size.width or self.size.width
+        except Exception:
+            return self.size.width   # compose 중에는 아직 위젯이 없다
+
+    def _status_left(self) -> Text:
+        """정체성: 어떤 모델이 어떤 승인 모드로 어느 브랜치에서 도는가."""
         t = Text()
         t.append(self._model_name or "모델 미정", style="bold")
-        t.append(f" · {self._mode}", style="dim")
-        if branch := run.session.branch:
-            t.append(f" · ⎇ {branch}", style="dim")
+        t.append(_SEP, style="dim")
+        # yolo 는 모든 도구를 자동 승인한다. 회색으로 묻히면 안 되는 정보다.
+        t.append(self._mode, style=self._theme_color("warning") if self._mode == "yolo" else "dim")
+        if (branch := self._active.session.branch) and self._bar_width() >= _TIGHT:
+            t.append(_SEP, style="dim")
+            t.append("⎇ " + (branch if len(branch) <= _BRANCH_MAX else branch[:_BRANCH_MAX - 1] + "…"), style="dim")
+        return t
+
+    def _status_right(self) -> Text:
+        """자원: 쓸 수 있는 도구와 남은 컨텍스트. 오른쪽 끝에 고정돼 눈이 찾는 자리가 흔들리지 않는다."""
+        run, wide = self._active, self._bar_width() >= _NARROW
+        t = Text()
         if self._mcp_dirs:
-            t.append(f" · {self._mcp_text()}", style="dim")
+            if self._mcp_connecting:
+                t.append("mcp 연결 중", style="dim")
+            else:
+                t.append(f"mcp {len(self._mcp_tools)}", style="dim")
+                if failed := sum(1 for s in self._mcp if s.error and s.enabled):
+                    t.append(f"  실패 {failed}", style=self._theme_color("error"))
+            t.append(_SEP, style="dim")
         # 게이지는 프롬프트에 실제로 실리는 전부(시스템·메모리·스킬·도구 스키마·히스토리·도구 출력)를 모델 예산과 견준다.
         used, budget = self._ctx_tokens(run), self._ctx_budget
         ratio = min(1.0, used / budget) if budget else 0.0
         color = self._theme_color("success") if ratio < 0.5 else self._theme_color("warning") if ratio < 0.8 else self._theme_color("error")
-        filled = round(ratio * _GAUGE_CELLS)
-        t.append("  컨텍스트 ", style="dim")
-        t.append("█" * filled + "░" * (_GAUGE_CELLS - filled), style=color)
-        t.append(f" {ratio:.0%}", style=f"bold {color}")
+        if wide:
+            t.append("컨텍스트 ", style="dim")
+        t.append(_gauge(ratio), style=color)
+        t.append(f" {ratio:>3.0%}", style=f"bold {color}")
         return t
 
-    def _mcp_text(self) -> str:
-        if self._mcp_connecting:
-            return "mcp 연결 중"
-        failed = sum(1 for s in self._mcp if s.error and s.enabled)
-        return f"mcp {len(self._mcp_tools)}" + (f" (실패 {failed})" if failed else "")
-
     def _refresh_statusline(self) -> None:
-        self.query_one("#statusline", Static).update(self._statusline_text())
+        self.query_one("#status_left", Static).update(self._status_left())
+        self.query_one("#status_right", Static).update(self._status_right())
+
+    def on_resize(self, _event) -> None:
+        self._refresh_statusline()   # 폭이 바뀌면 접히는 항목이 달라진다
 
     @on(UsageUpdate)
     def _on_usage(self, msg: UsageUpdate) -> None:
