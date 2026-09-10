@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from koda.mcp import load_mcp_configs, mcp_dirs
+from koda.mcp import connect_mcp, load_mcp_configs, mcp_dirs, mcp_servers
 
 
 def _write(d, name, obj):
@@ -319,3 +319,44 @@ def test_child_log_path_and_rotation(tmp_path):
 
     assert child_log_path(tmp_path) == tmp_path / ".koda" / "logs" / "mcp.log"
     assert _CHILD_LOG_MAX > 0                                  # 열 때 이 크기를 넘으면 비운다
+
+
+def test_broken_config_file_is_surfaced_not_swallowed(tmp_path):
+    # 쉼표 하나에 서버가 사라지는데 아무 표시가 없었다 (#78). 파일명 그대로 error 항목에 올린다.
+    (tmp_path / "good.json").write_text(
+        '{"mcpServers": {"good": {"url": "https://ok.example/mcp"}}}', encoding="utf-8")
+    (tmp_path / "bad.json").write_text(
+        '{"mcpServers": {"broken": {"url": "https://y.example/mcp"}, }}', encoding="utf-8")
+    servers = {s.name: s for s in mcp_servers([tmp_path])}
+    assert servers["good"].error == ""              # 정상 파일은 영향받지 않는다
+    assert "형식 오류" in servers["bad.json"].error   # 서버명을 알 수 없으니 고칠 파일을 가리킨다
+    assert servers["bad.json"].active_tools == []
+
+
+def test_config_without_mcp_servers_key_is_reported(tmp_path):
+    # mcpServers 래퍼를 빠뜨린 파일도 조용히 사라지면 안 된다
+    (tmp_path / "nowrapper.json").write_text('{"url": "https://x.example/mcp"}', encoding="utf-8")
+    servers = {s.name: s for s in mcp_servers([tmp_path])}
+    assert "형식 오류" in servers["nowrapper.json"].error
+
+
+def test_config_error_survives_connect(tmp_path):
+    # 연결을 시도하면 성공 경로가 error 를 지워 도구 0개인 정상 서버처럼 보였다.
+    # 설정 단계 오류는 연결로 해소되지 않으므로 시도하지 않고 그대로 남긴다.
+    import asyncio
+    (tmp_path / "needsvar.json").write_text(
+        '{"mcpServers": {"needsvar": {"url": "https://x.example/mcp?key=${NO_SUCH_VAR_XYZ}"}}}',
+        encoding="utf-8")
+    (tmp_path / "bad.json").write_text('{"mcpServers": {"b": {}, }}', encoding="utf-8")
+    servers = {s.name: s for s in asyncio.run(connect_mcp([tmp_path], timeout=2.0))}
+    assert servers["needsvar"].error.startswith("환경변수 미설정")
+    assert servers["bad.json"].error.startswith("형식 오류")
+
+
+def test_load_mcp_configs_keeps_dict_signature(tmp_path):
+    # 깨진 파일을 함께 다루게 됐어도 이 함수의 반환은 서버 설정 dict 그대로다(mcpcli 가 쓴다)
+    (tmp_path / "good.json").write_text(
+        '{"mcpServers": {"good": {"url": "https://ok.example/mcp"}}}', encoding="utf-8")
+    (tmp_path / "bad.json").write_text("{", encoding="utf-8")
+    conns = load_mcp_configs(str(tmp_path))
+    assert list(conns) == ["good"]

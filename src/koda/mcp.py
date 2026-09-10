@@ -85,6 +85,15 @@ def _expand(spec, values: dict):
     return spec
 
 
+# 연결로 해소되지 않는 설정 단계 오류. 연결을 시도하지 않고 그대로 보여 준다 — 시도하면
+# connect_server 가 성공 처리로 error 를 지워, 도구 0개인 정상 서버처럼 보인다.
+_CONFIG_ERRORS = ("환경변수 미설정", "형식 오류")
+
+
+def is_config_error(error: str) -> bool:
+    return error.startswith(_CONFIG_ERRORS)
+
+
 def _unresolved(conn: dict) -> list[str]:
     return sorted(set(_ENV_REF.findall(json.dumps(conn, ensure_ascii=False))))
 
@@ -124,16 +133,18 @@ def load_mcp_configs(dirs) -> dict:
         dirs = [dirs]
     conns: dict = {}
     for d in dirs:
-        for name, spec in _read_dir(Path(d)).items():
+        for name, spec in _read_dir(Path(d))[0].items():
             conns[name] = _normalize({**conns.get(name, {}), **spec})
     return conns
 
 
-def _read_dir(d: Path) -> dict:
+def _read_dir(d: Path) -> tuple[dict, dict]:
+    """(서버 설정, 읽지 못한 파일). 깨진 파일을 조용히 버리면 쉼표 하나에 서버가 사라져도 아무 표시가 없다(#78)."""
     if not d.is_dir():
-        return {}
+        return {}, {}
     values = _env_values()
     conns: dict = {}
+    broken: dict[str, str] = {}
     files = sorted(d.glob("*.json")) + sorted(d.glob("*.yaml")) + sorted(d.glob("*.yml"))
     for f in files:
         try:
@@ -142,14 +153,18 @@ def _read_dir(d: Path) -> dict:
             else:
                 import yaml  # yaml 파일을 쓸 때만 필요(선택적)
                 data = yaml.safe_load(f.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception as e:
+            broken[f.name] = f"형식 오류: {type(e).__name__}: {e}"[:160]
+            continue
+        if not isinstance(data, dict) or not (data.get("mcpServers") or {}):
+            broken[f.name] = "형식 오류: mcpServers 항목이 없다"
             continue
         for name, spec in ((data or {}).get("mcpServers") or {}).items():
             if not isinstance(spec, dict):
                 continue  # 잘못된 스펙(문자열 등)은 건너뛴다. 다른 서버 로드에 영향 없음
             # 같은 이름이면 뒤(프로젝트)가 키 단위로 덮는다. enabled 한 줄만 둔 오버라이드가 url·command 를 잃지 않게 한다.
             conns[name] = _normalize({**conns.get(name, {}), **_expand(spec, values)})
-    return conns
+    return conns, broken
 
 
 def config_path(name: str, scope: str = "user", workspace: str | Path = ".", mcps_dir: str | None = None) -> Path:
@@ -241,14 +256,20 @@ def mcp_servers(dirs, cwd: str | Path | None = None) -> list[McpServer]:
     g = _global_dir()
     merged: dict[str, dict] = {}
     sources: dict[str, str] = {}
+    broken: dict[str, tuple[str, str]] = {}
     for d in dirs:
         d = Path(d)
         source = "전역" if g and d.resolve() == g.resolve() else "프로젝트"
-        for name, spec in _read_dir(d).items():
+        conns, bad = _read_dir(d)
+        for name, spec in conns.items():
             merged[name] = _normalize({**merged.get(name, {}), **spec})
             if spec.get("url") or spec.get("command"):
                 sources[name] = source      # 정의(url·command)를 준 곳이 출처다. enabled 만 덮은 파일은 출처가 아니다
             sources.setdefault(name, source)
+        # 읽지 못한 파일은 파일명 그대로 항목에 올린다 — 서버명을 알 수 없으니 고칠 파일을 가리킨다.
+        # 서버명과 겹치지 않도록 확장자를 포함한 파일명을 쓴다.
+        for fname, why in bad.items():
+            broken[fname] = (source, why)
     servers: dict[str, McpServer] = {}
     for name, conn in merged.items():
         if cwd and conn.get("transport") == "stdio" and not conn.get("cwd"):
@@ -259,6 +280,8 @@ def mcp_servers(dirs, cwd: str | Path | None = None) -> list[McpServer]:
         missing = _unresolved(conn)
         error = f"환경변수 미설정: {', '.join(missing)}" if missing else ""
         servers[name] = McpServer(name, sources[name], conn, error=error, enabled=enabled)
+    for fname, (source, why) in broken.items():
+        servers.setdefault(fname, McpServer(fname, source, {}, error=why))
     return list(servers.values())
 
 
@@ -327,7 +350,7 @@ async def _serve(server: McpServer, ready: asyncio.Future, stop: asyncio.Event, 
 
 async def _open(server: McpServer, timeout: float) -> None:
     """세션을 (다시) 열고 server.tools 를 채운다. 같은 서버의 열기·닫기는 락으로 순서를 지킨다."""
-    if server.error.startswith("환경변수 미설정"):
+    if is_config_error(server.error):
         return   # 설정이 완성되지 않은 서버는 연결을 시도하지 않는다
     async with _host.lock(server):
         await _close_unlocked(server)
@@ -377,6 +400,8 @@ def _describe(e: BaseException) -> str:
 
 async def connect_server(server: McpServer, timeout: float = 20.0) -> McpServer:
     """서버 하나에 붙어 세션을 열어 두고 도구 목록을 받는다. 실패는 error 에 남기고 예외를 내지 않는다."""
+    if is_config_error(server.error):
+        return server   # 연결로 해소되지 않는다. 시도하면 아래 성공 경로가 error 를 지운다.
     try:
         import langchain_mcp_adapters  # noqa: F401  선택적 의존성 확인
     except ImportError as e:
