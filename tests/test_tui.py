@@ -1499,9 +1499,18 @@ def test_panel_approval_glyph_is_yellow_not_error(tmp_path):
         async with app.run_test(size=(120, 30)) as pilot:
             await _submit(pilot, "테스트 실행해줘")
             assert await _wait(pilot, lambda: app._active.state == "approval")
-            row = app.query_one("#sp_list").get_option_at_index(0).prompt
-            assert row.plain.startswith("◐ ") and "승인 대기" in row.plain
+            # 패널은 모달 아래 기본 화면에 있다. 모달이 먼저 뜨면 app.query_one 은 모달을 뒤지므로
+            # 기본 화면에서 찾고, 상태 전환과 패널 갱신 시점이 달라 행이 바뀔 때까지 기다린다.
+            base = app.screen_stack[0]
+            def _row():
+                return base.query_one("#sp_list").get_option_at_index(0).prompt
+            assert await _wait(pilot, lambda: _row().plain.startswith("◐ "))
+            row = _row()
+            assert "승인 대기" in row.plain
             assert any("yellow" in str(sp.style) for sp in row.spans) and not any("red" in str(sp.style) for sp in row.spans)
+            # 승인 버튼은 모달 안에 있다 — 모달이 실제로 떠야 클릭이 닿는다. 기다리지 않으면 클릭이
+            # 빗나가 턴이 끝나지 않고, approval_timeout 만큼 매달린 뒤에야 실패한다.
+            assert await _wait(pilot, lambda: isinstance(app.screen, ApprovalModal))
             await pilot.click("#approve")
             assert await _wait(pilot, _turn_done(app))
     asyncio.run(go())

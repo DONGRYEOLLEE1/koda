@@ -58,7 +58,7 @@ koda chat --workspace . --yolo
 
 ```bash
 uv sync && uv tool install -e ".[tui]"   # editable 설치 — 코드 수정이 재설치 없이 반영된다
-uv run pytest --ignore=tests/test_live_llm.py
+uv run python -m pytest --ignore=tests/test_live_llm.py
 docker compose up -d
 ```
 

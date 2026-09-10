@@ -1,0 +1,26 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: uv 설치
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # .python-version 을 따른다. tui extra 를 넣어야 textual 을 쓰는 TUI 테스트가 돈다.
+      - name: 의존성 동기화
+        run: uv sync --extra tui
+
+      # test_live_llm.py 는 실제 LLM 엔드포인트를 호출하므로 CI 에서 제외한다.
+      # `uv run pytest` 는 콘솔 스크립트를 찾지 못하는 경우가 있어 python -m 으로 부른다.
+      - name: 테스트
+        run: uv run python -m pytest --ignore=tests/test_live_llm.py -q
