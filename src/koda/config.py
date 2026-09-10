@@ -10,6 +10,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # 실효 컨텍스트 예산 기본값. koda 의 구조적 천장(시스템·도구 스키마 약 17k + 압축 후 이력 약 12k + 턴 내부 도구 출력 약 93k)에 맞춘 값이다.
 DEFAULT_CONTEXT_BUDGET = 122_000
 
+# 모델이 한 번에 생성할 수 있는 출력 토큰(llm.py 가 요청에 싣는 max_tokens). 프롬프트 상한을 잡을 때
+# 이만큼은 비워 둬야 한다 — 프롬프트가 컨텍스트를 다 채우면 응답을 생성할 자리가 남지 않는다.
+MAX_OUTPUT_TOKENS = 4096
+
 
 def budget_scale(context_budget: int) -> float:
     """기본 예산 대비 배율. 압축 임계·도구 출력 상한 같은 파생 상한이 이 배율로 함께 커진다."""

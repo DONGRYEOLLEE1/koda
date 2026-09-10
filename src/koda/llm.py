@@ -4,7 +4,7 @@ import httpx
 from langchain_core.messages import AIMessageChunk
 from langchain_openai import ChatOpenAI
 
-from .config import ModelSettings
+from .config import MAX_OUTPUT_TOKENS, ModelSettings
 
 
 class ReasoningChatOpenAI(ChatOpenAI):
@@ -69,7 +69,8 @@ def build_model(settings: ModelSettings):
         model, base, key,
         temperature=0,
         # 폭주 차단용 넉넉한 상한 — 짧은 캡은 정상 추론까지 잘라 빈 판정을 냈으므로 반드시 넉넉하게 유지한다.
-        max_tokens=4096,
+        # HistoryTrim 이 프롬프트 상한을 잡을 때 이 값만큼 출력 자리를 비워 둔다.
+        max_tokens=MAX_OUTPUT_TOKENS,
         use_responses_api=settings.use_responses_api if provider == "openai" else False,
     )
     return chat, provider, reason

@@ -312,3 +312,88 @@ def test_build_passes_context_budget_to_tool_trim(monkeypatch):
     AGENTS["coder"].build(object(), None, lambda n, a: True, context_budget=1_000_000)
     trim = next(m for m in captured["mw"] if isinstance(m, ToolOutputTrimMiddleware))
     assert trim._max > 8000 * 8
+
+
+# --- 도구 스키마 실측 예약 (#91) ---
+
+
+def _fake_mcp_tools(n: int) -> list:
+    """MCP 서버가 붙였을 법한 도구 n 개. 설명이 긴 실제 MCP 도구를 흉내낸다."""
+    from langchain_core.tools import StructuredTool
+    from pydantic import BaseModel, Field
+
+    class _Args(BaseModel):
+        query: str = Field(description="검색할 질의. 구체적인 키워드와 맥락을 함께 넣으면 정확도가 올라간다.")
+        limit: int = Field(default=10, description="반환할 결과 개수 상한. 크게 잡으면 컨텍스트를 많이 쓴다.")
+
+    return [
+        StructuredTool.from_function(
+            func=lambda query, limit=10: "",
+            name=f"external_search_{i}",
+            description="외부 서비스에서 문서를 검색해 관련 스니펫과 출처 URL 을 반환한다. "
+                        "최신 정보가 필요하거나 학습 지식이 낡았을 때 쓴다.",
+            args_schema=_Args,
+        )
+        for i in range(n)
+    ]
+
+
+def test_tool_schema_tokens_measures_actual_tools():
+    from koda.middleware.history import tool_schema_tokens
+
+    assert tool_schema_tokens([]) == 0                       # 도구 없는 answer 경로는 예약도 0
+    few, many = tool_schema_tokens(_fake_mcp_tools(4)), tool_schema_tokens(_fake_mcp_tools(40))
+    assert few > 0 and many > few * 5                        # 도구 수에 비례해 커진다
+
+
+def test_tool_schema_tokens_exceeds_old_fixed_reserve():
+    # 고정 4,000 예약이 빗나가는 지점을 고정한다 — MCP 를 여럿 붙이면 실제 스키마가 그 값을 넘는다
+    from koda.middleware.history import DEFAULT_TOOLS_RESERVE, tool_schema_tokens
+
+    assert tool_schema_tokens(_fake_mcp_tools(74)) > DEFAULT_TOOLS_RESERVE
+
+
+def test_tool_schema_tokens_falls_back_when_unconvertible():
+    from koda.middleware.history import tool_schema_tokens
+
+    assert tool_schema_tokens([object()], default=1234) == 1234   # 변환 실패는 폴백값
+
+
+def test_history_trim_reserves_tool_schema_and_output_room():
+    # 예산 = 상한 − system − (도구 스키마 + 출력 자리). 예약이 커지면 messages 예산이 줄어든다.
+    from koda.middleware import HistoryTrimMiddleware
+
+    msgs = _agent_history(15, 3000)      # 약 11k 토큰
+    kept = {}
+    for label, reserve in (("small", 0), ("large", 15_000)):
+        mw = HistoryTrimMiddleware(max_prompt_tokens=20_000, tools_reserve=reserve, output_reserve=0)
+        seen = {}
+        mw.wrap_model_call(_FakeModelReq(msgs, system_message="sys"),
+                           lambda r: seen.setdefault("req", r))
+        kept[label] = seen["req"].messages
+    assert len(kept["large"]) < len(kept["small"])   # 스키마 몫이 크면 이력이 더 잘린다
+    assert _no_orphans(kept["large"])                # 잘려도 tool 쌍 무결성은 지킨다
+
+
+def test_history_trim_output_reserve_is_subtracted():
+    from koda.config import MAX_OUTPUT_TOKENS
+    from koda.middleware import HistoryTrimMiddleware
+
+    msgs = _agent_history(15, 3000)
+    seen_with, seen_without = {}, {}
+    HistoryTrimMiddleware(max_prompt_tokens=12_000, tools_reserve=0, output_reserve=MAX_OUTPUT_TOKENS) \
+        .wrap_model_call(_FakeModelReq(msgs, system_message="sys"), lambda r: seen_with.setdefault("req", r))
+    HistoryTrimMiddleware(max_prompt_tokens=12_000, tools_reserve=0, output_reserve=0) \
+        .wrap_model_call(_FakeModelReq(msgs, system_message="sys"), lambda r: seen_without.setdefault("req", r))
+    # 출력 자리를 비워 두면 프롬프트에 허용되는 이력이 그만큼 줄어든다
+    assert len(seen_with["req"].messages) < len(seen_without["req"].messages)
+
+
+def test_agent_build_passes_measured_reserve(make_workspace):
+    # specs.build 가 실제 도구 목록을 재서 넘기는지 — coder(도구 많음) > answer(도구 없음)
+    from koda.agents.specs import AGENTS
+    from koda.middleware.history import tool_schema_tokens
+    from koda.tools import make_all_tools
+
+    ws = make_workspace({"a.txt": "x"})
+    assert tool_schema_tokens(make_all_tools(ws)) > tool_schema_tokens(AGENTS["answer"].toolset(ws))

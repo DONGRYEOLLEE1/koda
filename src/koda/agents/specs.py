@@ -14,6 +14,7 @@ from ..middleware import (
     ToolOutputTrimMiddleware,
 )
 from ..config import DEFAULT_CONTEXT_BUDGET
+from ..middleware.history import tool_schema_tokens
 from ..prompts import load_prompt
 from ..tools import make_all_tools, make_inspect_tools, make_readonly_tools
 from ..tools.artifact import make_artifact_tools
@@ -73,7 +74,9 @@ class AgentSpec:
                 StepBudgetMiddleware(self.max_steps),
                 PermissionMiddleware(approver, self.name, mcp_auto_approve),
                 ToolOutputTrimMiddleware(store=store, context_budget=context_budget),
-                HistoryTrimMiddleware(max_prompt_tokens=context_budget),
+                # 도구 스키마는 MCP 를 붙이면 고정 예약값을 크게 넘는다 — 여기서 실제 목록을 재서 넘긴다.
+                HistoryTrimMiddleware(max_prompt_tokens=context_budget,
+                                      tools_reserve=tool_schema_tokens(tools)),
             ],
         )
 
