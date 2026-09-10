@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from pydantic import AliasChoices, Field, field_validator
@@ -63,6 +64,24 @@ def infer_provider(model: str) -> str | None:
     return None
 
 
+# 프로필이 채우는 파생 값. provider 가 바뀌면 비워서 새 프로필로 다시 채운다.
+_PROFILE_FIELDS = {"openai_base_url": "", "reasoning_style": "", "structured_method": "", "use_responses_api": None}
+
+# 필드 → 그 값을 줄 수 있는 환경변수 이름. 값이 파일에서 왔는지 환경변수에서 왔는지 가르는 데 쓴다.
+_ALIASES = {
+    "openai_model": ("MODEL", "OPENAI_MODEL_NAME"),
+    "openai_base_url": ("OPENAI_BASE_URL",),
+    "reasoning_style": ("REASONING_STYLE",),
+    "structured_method": ("STRUCTURED_METHOD",),
+    "use_responses_api": ("OPENAI_USE_RESPONSES_API",),
+}
+
+
+def _env_given(*names: str) -> bool:
+    """이 설정 키가 프로세스 환경변수로 직접 주어졌는가. .env 파일에서만 온 값과 구분한다."""
+    return any(n in os.environ for n in names)
+
+
 class ModelSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -119,10 +138,35 @@ class ModelSettings(BaseSettings):
             raise ValueError("base_url 은 http:// 또는 https:// 로 시작해야 합니다")
         return v
 
+    def _profile_is_stale(self, provider: str | None) -> bool:
+        """파일에 남은 파생 값이 지금 모델과 어긋나는가.
+
+        `MODEL` 은 환경변수가 `.env` 를 이기는데 `OPENAI_BASE_URL` 은 파일 값이 그대로 남아, 모델과
+        엔드포인트가 어긋난 채 결합되던 문제를 가른다(#93). 넷을 모두 만족할 때만 참이다: 모델을
+        환경변수로 줬고, base_url 은 파일에서만 왔고, 그 값이 **알려진 provider 프로필의 주소**이며,
+        지금 모델의 프로필 주소와 다르다. 어느 프로필에도 없는 주소는 자체 호스팅이므로 존중한다.
+        """
+        if not _env_given(*_ALIASES["openai_model"]) or _env_given(*_ALIASES["openai_base_url"]):
+            return False
+        known = {p["base_url"] for p in PROVIDER_PROFILES.values()}
+        current = (self.openai_base_url or "").rstrip("/")
+        if current not in {k.rstrip("/") for k in known}:
+            return False
+        target = PROVIDER_PROFILES.get(provider or "", {}).get("base_url", "")
+        return current != target.rstrip("/")
+
     def model_post_init(self, __context) -> None:
         """비워 둔 값을 모델명 프로필로 채운다. 명시한 값은 그대로 둔다."""
         provider = infer_provider(self.openai_model)
         prof = PROVIDER_PROFILES.get(provider or "", {})
+        if self._profile_is_stale(provider):
+            # 이전 provider 의 잔재를 비워 아래 채우기가 새 프로필로 다시 채우게 한다. base_url 만
+            # 갈아치우면 structured_method 는 옛 값이 남아, DeepSeek 주소에 DeepSeek 이 거절하는
+            # json_schema 를 보내는 식으로 더 나쁜 조합이 된다. 환경변수로 명시한 값은 건드리지 않는다.
+            for field, empty in _PROFILE_FIELDS.items():
+                if not _env_given(*_ALIASES[field]):
+                    setattr(self, field, empty)
+            prof = PROVIDER_PROFILES.get(provider or "", {})
         if not self.openai_base_url:
             self.openai_base_url = prof.get("base_url", PROVIDER_PROFILES["deepseek"]["base_url"])
         if not self.reasoning_style:
@@ -160,8 +204,6 @@ class ModelSettings(BaseSettings):
         return v
 
 
-# 프로필이 채우는 파생 값. provider 가 바뀌면 비워서 새 프로필로 다시 채운다.
-_PROFILE_FIELDS = {"openai_base_url": "", "reasoning_style": "", "structured_method": "", "use_responses_api": None}
 
 
 def switch_model(settings: ModelSettings, model: str, provider: str = "", base_url: str = "", api_key: str = "") -> ModelSettings:

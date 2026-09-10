@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from koda.config import ModelSettings
+from koda.config import ModelSettings, load_model_settings
 
 _ENV_KEYS = [
     "PRIMARY", "LOCAL_API_KEY", "LOCAL_OPENAI_BASE_URL", "LOCAL_MODEL_NAME",
@@ -220,3 +220,48 @@ def test_context_budget_env_var_overrides_default(monkeypatch):
     from koda.config import ModelSettings
     monkeypatch.setenv("CONTEXT_BUDGET_TOKENS", "1000000")
     assert ModelSettings(_env_file=None).context_budget_tokens == 1_000_000
+
+
+def _isolated_cwd(tmp_path, monkeypatch, env_body: str):
+    """`.env` 하나만 있는 작업 디렉터리. 전역 ~/.koda/.env 가 끼어들지 않도록 HOME 도 비운다."""
+    (tmp_path / ".env").write_text(env_body, encoding="utf-8")
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(tmp_path)
+
+
+def test_env_model_repulls_profile_over_stale_env_file(tmp_path, monkeypatch):
+    # MODEL 은 환경변수가 .env 를 이기는데 OPENAI_BASE_URL 만 파일 값으로 남으면 모델과 엔드포인트가
+    # 어긋난 채 결합된다 (#93). 파일 값이 다른 provider 의 프로필 주소라면 새 프로필로 다시 채운다.
+    _isolated_cwd(tmp_path, monkeypatch, "OPENAI_BASE_URL=https://api.deepseek.com\n")
+    monkeypatch.setenv("MODEL", "gpt-5.6-terra")
+    s = load_model_settings()
+    assert s.openai_base_url == "https://api.openai.com/v1"
+    # base_url 만 갈아치우면 구조화 방식이 옛 값으로 남아 더 나쁜 조합이 된다 — 파생 값도 함께 따라온다
+    assert s.structured_method == "json_schema"
+    assert s.use_responses_api is True
+
+
+def test_env_file_base_url_kept_when_model_not_overridden(tmp_path, monkeypatch):
+    # MODEL 을 바꾸지 않았으면 파일 값은 그대로 쓴다 (기존 동작 보존)
+    _isolated_cwd(tmp_path, monkeypatch, "OPENAI_BASE_URL=https://api.deepseek.com\n")
+    s = load_model_settings()
+    assert s.openai_base_url == "https://api.deepseek.com"
+    assert s.structured_method == "function_calling"
+
+
+def test_self_hosted_base_url_survives_model_switch(tmp_path, monkeypatch):
+    # 어느 프로필에도 없는 주소는 자체 호스팅이므로 MODEL 을 바꿔도 존중한다
+    _isolated_cwd(tmp_path, monkeypatch, "OPENAI_BASE_URL=https://vllm.internal/v1\n")
+    monkeypatch.setenv("MODEL", "gpt-5.6-terra")
+    s = load_model_settings()
+    assert s.openai_base_url == "https://vllm.internal/v1"
+
+
+def test_explicit_env_base_url_beats_profile_repull(tmp_path, monkeypatch):
+    # base_url 을 환경변수로 명시했으면 프로필이 개입하지 않는다
+    _isolated_cwd(tmp_path, monkeypatch, "OPENAI_BASE_URL=https://api.deepseek.com\n")
+    monkeypatch.setenv("MODEL", "gpt-5.6-terra")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://my-proxy/v1")
+    assert load_model_settings().openai_base_url == "https://my-proxy/v1"
