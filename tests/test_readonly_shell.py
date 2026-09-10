@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from koda.tools.readonly_shell import make_readonly_shell_tools
+import os
+from pathlib import Path
+
+from koda.tools.readonly_shell import _readonly_env, _ro_binds, make_readonly_shell_tools
 
 
 def _run(ws, command):
@@ -31,3 +34,51 @@ def test_no_exception_leaks(make_workspace):
     ws = make_workspace({"a.txt": "x"})
     for c in ("", "rm -rf .", "ls", "nonexistcmd-xyz", "cat a.txt | wc -l", "cat /tmp/\x00t"):
         assert isinstance(_run(ws, c), str), repr(c)
+
+
+def test_env_inherits_path_and_home(make_workspace, monkeypatch):
+    # PATH·HOME 을 갈아치우면 조사 경로가 사용자와 다른 환경을 관측해, 설치된 도구를 '없음' 으로
+    # 로그인된 계정을 '로그인 안 됨' 으로 보고한다 (#96)
+    ws = make_workspace({"a.txt": "x"})
+    monkeypatch.setenv("PATH", "/opt/homebrew/bin:/usr/bin:/bin")
+    env = _readonly_env(ws)
+    assert env["PATH"] == "/opt/homebrew/bin:/usr/bin:/bin"
+    assert env["HOME"] == str(Path.home())
+    assert env["HOME"] != str(ws.root)
+
+
+def test_tool_outside_system_dirs_is_found(make_workspace, tmp_path, monkeypatch):
+    # PATH 계승의 실제 효과 — 시스템 기본 경로(/usr/bin:/bin:/usr/sbin:/sbin) 밖에 설치된
+    # 바이너리(gh·uv·node 처럼 Homebrew·nvm 경로에 있는 것들)가 조사 셸에서 잡혀야 한다
+    bindir = tmp_path / "custom-bin"
+    bindir.mkdir()
+    fake = bindir / "koda-fake-tool"
+    fake.write_text("#!/bin/sh\necho FAKE-OK\n", encoding="utf-8")
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
+    ws = make_workspace({"a.txt": "x"})
+    out = _run(ws, "koda-fake-tool")
+    assert "FAKE-OK" in out and "command not found" not in out
+
+
+def test_credentials_still_blocked_with_real_home(make_workspace, monkeypatch):
+    # HOME 을 계승해도 자격증명 경로는 조사 경로에서 여전히 하드 차단이다 (confirm 등급까지 차단)
+    ws = make_workspace({"a.txt": "x"})
+    monkeypatch.setenv("HOME", str(Path.home()))
+    for c in ("cat ~/.ssh/id_rsa", "cat ~/.aws/credentials", "ls ~/.gnupg", "cat ~/.env"):
+        assert "거부됨" in _run(ws, c), c
+
+
+def test_ro_binds_skips_missing_and_nested(tmp_path):
+    # bwrap 은 없는 경로를 바인드하면 실패하고, 상위를 이미 들였으면 하위는 중복 마운트다
+    (tmp_path / "usr" / "local" / "bin").mkdir(parents=True)
+    (tmp_path / "opt").mkdir()
+    args = _ro_binds([
+        str(tmp_path / "usr"),
+        str(tmp_path / "usr" / "local" / "bin"),   # /usr 하위 → 건너뜀
+        str(tmp_path / "opt"),
+        str(tmp_path / "does-not-exist"),          # 없음 → 건너뜀
+    ])
+    assert args.count("--ro-bind") == 2
+    assert str(tmp_path / "opt") in args
+    assert str(tmp_path / "usr" / "local" / "bin") not in args
