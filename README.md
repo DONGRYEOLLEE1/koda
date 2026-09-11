@@ -9,6 +9,8 @@
 - **멀티턴·메모리** — 세션 저장/재개, 영구 메모리 주입, 히스토리 문맥 압축, llama.cpp 프롬프트 캐시(멀티턴 84~87% 히트).
 - **스트리밍·추적** — TTY 는 Rich 마크다운 실시간 렌더, langfuse 로 툴·모델 IO + 단계별 토큰 추적.
 
+문서는 [`docs/`](docs/README.md) 에 모여 있다. 처음이라면 [온보딩 가이드](docs/onboarding.md) 부터 본다. 모델 설정은 [`docs/providers/`](docs/providers/README.md), 외부 도구 연결은 [`docs/mcp/`](docs/mcp/README.md) 에 있다.
+
 ## 요구사항
 
 - Python ≥ 3.13, [uv](https://docs.astral.sh/uv/)
@@ -30,7 +32,7 @@ koda                              # TUI 진입 (= koda tui)
 - 화면 왼쪽 세션 패널의 머리글은 현재 워크스페이스 이름(`📁 build-harness`)이고, 그 아래에 세션들이 `제목 + 마지막 답변 시각` 으로 보인다. 시각은 그 세션이 마지막으로 답변을 받은 때로 고정되며 목록도 그 순서라, 세션을 오가거나 이름을 바꿔도 순서가 흔들리지 않는다. 행 앞 글리프는 병렬 에이전트 TUI 들의 관례를 따른다. 보고 있는 세션은 초록 `●`, 답변 중은 청록 스피너와 `답변 중`, 승인 대기는 노란 `◐`, 마지막 턴이 실패한 세션은 빨간 `✕` 와 `실패`, 나머지는 회색 `○` 다. 두 번째 줄에는 그 세션이 작업한 git 브랜치와 마지막 답변 시각이 함께 보인다. 목록에서 Enter 로 전환하고, `n` 새 세션, `d` 삭제(확인 모달, 보고 있는 세션과 답변 중인 세션은 불가), `Ctrl+B` 로 접고 펼친다. 터미널이 100열보다 좁으면 접힌 채 시작한다.
 - 세션은 서로 독립적으로 돈다. 한 세션이 답변하는 동안 패널로 다른 세션을 열어 바로 질의할 수 있고, 배경 세션의 답변은 자기 대화 영역에 계속 쌓이다가 끝나면 알림이 뜬다. 답변 중인 세션에서는 그 턴이 끝날 때까지 입력창이 잠기므로, 전환은 패널(`Ctrl+B` → ↑↓ → Enter)로 한다. 배경 세션이 위험 도구 승인을 요청하면 화면을 가로채지 않고 패널에 `승인 대기` 로 표시했다가 그 세션을 열 때 묻는다.
 - 세션에는 작업한 git 브랜치와 시작 시점의 커밋이 함께 기록된다(`/status` 로 확인). 세션 제목은 첫 실질 턴이 끝난 뒤 질의와 답변을 보고 LLM 이 10~15자로 짓는다. 인사말처럼 내용이 빈약하면 다음 실질 턴에서 한 번 더 시도하고(세션당 최대 2회), 그때까지는 첫 질의 앞부분이 임시로 보인다. 문맥 압축이 일어나면 압축 요약이 제목을 함께 갱신하며, `/rename <이름>` 으로 직접 바꾼 제목은 자동 갱신이 덮지 않는다.
-- 입력창 위 상태줄은 `모델 · 승인 모드(yolo·manual) · ⎇ 브랜치 · mcp N · 컨텍스트 게이지` 다. 게이지는 **프롬프트에 실제로 실리는 전부**(시스템 프롬프트·메모리·스킬·도구 스키마·대화 히스토리·그 턴의 도구 출력)를 `CONTEXT_BUDGET_TOKENS`(기본 131k)와 견준다. 첫 턴 전에는 고정 몫을 정적으로 추정해 보이고, 턴이 돌면 실제 관측 토큰 중 최대값을 쓴다. 절반을 넘으면 노랑, 80% 를 넘으면 빨강이다. MCP 도구를 많이 붙이면 스키마만으로 게이지가 크게 오르므로(도구 74개면 약 60k 토큰) 안 쓰는 서버는 `koda mcp disable` 로 꺼 두는 편이 좋다. 내역은 `/status` 에서 고정·대화·관측 최대로 나눠 볼 수 있다. 진행 상태는 바로 위 활동바(스피너·단계·경과)가 말하므로 상태줄에 문구로 겹쳐 쓰지 않는다.
+- 입력창 위 상태줄은 `모델 · 승인 모드(yolo·manual) · ⎇ 브랜치 · mcp N · 컨텍스트 게이지` 다. 게이지는 **프롬프트에 실제로 실리는 전부**(시스템 프롬프트·메모리·스킬·도구 스키마·대화 히스토리·그 턴의 도구 출력)를 `CONTEXT_BUDGET_TOKENS`(기본 122k)와 견준다. 첫 턴 전에는 고정 몫을 정적으로 추정해 보이고, 턴이 돌면 실제 관측 토큰 중 최대값을 쓴다. 절반을 넘으면 노랑, 80% 를 넘으면 빨강이다. MCP 도구를 많이 붙이면 스키마만으로 게이지가 크게 오르므로(도구 74개면 약 60k 토큰) 안 쓰는 서버는 `koda mcp disable` 로 꺼 두는 편이 좋다. 내역은 `/context` 에서 범주별(시스템 프롬프트·도구·MCP·메모리·대화 이력·턴 내부 도구 출력)로 나눠 볼 수 있다. 진행 상태는 바로 위 활동바(스피너·단계·경과)가 말하므로 상태줄에 문구로 겹쳐 쓰지 않는다.
 - 입력창에서 `/` 를 치면 슬래시 명령 후보가 설명과 함께 뜨고 이어서 치는 글자에 맞춰 좁혀진다. ↑↓ 로 고르고 Tab/Enter 로 채우며, 명령을 다 치면 후보가 사라져 Enter 가 그대로 실행한다.
 - 입력창에서 `@` 를 치면 워크스페이스의 파일·폴더 후보가 최대 5건 뜨고, 이어서 치는 글자에 맞춰 바로 갱신된다(경로 접두 → 파일명 접두 → 부분 일치 → 순서 부분열 순). ↑↓ 로 고르고 Tab/Enter 로 채우며, 폴더를 고르면 `폴더/` 까지 채워지고 하위 후보가 이어진다. Esc 로 닫는다.
 - `Ctrl+C` 는 단계형이다. 답변 중에 한 번 누르면 그 턴을 중단하고(부분 답변은 히스토리에 남기지 않음), 2초 안에 한 번 더 누르면 세션을 저장하고 종료한다. 대기 중에는 첫 번째가 종료 예고, 두 번째가 종료다. `Ctrl+Q` 는 바로 저장 후 종료.
@@ -39,7 +41,7 @@ koda                              # TUI 진입 (= koda tui)
 - 편집 도구(`edit_file`·`multi_edit`·`patch_file`)가 만든 diff 는 과정 그룹 밖 대화에 색상 그대로 붙는다. 결과이므로 턴이 끝나 과정이 접혀도 남고, 펼치는 클릭 없이 바로 보인다.
 - 답변 전 과정(사고·툴 호출)은 흐린 한 줄 스텝으로 `과정` 그룹 안에 쌓인다. 연속된 읽기·검색·조사는 `⏺ 탐색 · a.py, b.py 읽음 · "add" 검색` 한 줄로 합쳐지고, 모델이 사고 내용(`reasoning_content`)을 따로 주면(vLLM·DeepSeek) `∙ 첫 문장` 으로 보인다. 턴이 끝나면 그룹이 `▸ 과정 · 사고 N · 탐색 N · 편집 N · Ns` 로 접히며, 클릭하면 다시 펼쳐 각 스텝의 출력 전체를 볼 수 있다(접힌 상태에서는 드래그 선택이 되지 않는다).
 
-**모델 전환·로컬 모델** — 모델명으로 provider 를 유추해 base_url·reasoning·구조화 출력 방식을 맞추므로 `MODEL` 과 키만 바꾸면 된다. 회사별 환경변수 블록과 주의사항은 [`providers/`](providers/README.md) 에 있다. 환경변수로 넘기거나 `CWD/.env` · `~/.koda/.env` 에 둔다(환경변수가 파일보다 우선). 전체 항목은 `.env.example`.
+**모델 전환·로컬 모델** — 모델명으로 provider 를 유추해 base_url·reasoning·구조화 출력 방식을 맞추므로 `MODEL` 과 키만 바꾸면 된다. 회사별 환경변수 블록과 주의사항은 [`docs/providers/`](docs/providers/README.md) 에 있다. 환경변수로 넘기거나 `CWD/.env` · `~/.koda/.env` 에 둔다(환경변수가 파일보다 우선). 전체 항목은 `.env.example`.
 
 ```bash
 export MODEL=gpt-5.6-terra OPENAI_API_KEY=sk-...                                   # OpenAI 로 전환 (base_url 자동)
@@ -57,21 +59,22 @@ koda chat --workspace . --yolo
 **개발** — 레포에서.
 
 ```bash
-uv sync && uv tool install -e ".[tui]"   # editable 설치 — 코드 수정이 재설치 없이 반영된다
+uv sync --extra tui                      # --extra tui 를 빼면 textual 이 지워져 TUI 테스트가 깨진다
+uv tool install -e ".[tui]"              # editable 설치 — 코드 수정이 재설치 없이 반영된다
 uv run python -m pytest --ignore=tests/test_live_llm.py
 docker compose up -d
 ```
 
 ## 엔드포인트 호환
 
-모델명 접두로 프로필을 골라 아래 값을 채운다. 어느 칸이든 같은 이름의 환경변수를 주면 그 값이 우선한다. 실측 기준(2026-08). provider 별 환경변수 블록·문제 해결은 [`providers/<이름>.md`](providers/README.md).
+모델명 접두로 프로필을 골라 아래 값을 채운다. 어느 칸이든 같은 이름의 환경변수를 주면 그 값이 우선한다. 실측 기준(2026-08). provider 별 환경변수 블록·문제 해결은 [`docs/providers/<이름>.md`](docs/providers/README.md).
 
 | provider | 모델명 (`MODEL`) | base_url | 키 | API 형태 | reasoning (`REASONING_STYLE`) | 구조화 출력 (`STRUCTURED_METHOD`) | 비고 |
 |---|---|---|---|---|---|---|---|
 | **OpenAI** | `gpt-*`, `o1/o3/o4*`, `chatgpt-*` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | Responses | `effort` → `reasoning_effort` | `json_schema` | Chat Completions 는 도구 + `reasoning_effort≠none` 을 400 으로 거절해 Responses API 로 보낸다. reasoning 파라미터를 모르는 gpt-4o 류는 `REASONING_STYLE=off` |
 | **DeepSeek** (기본) | `deepseek-*` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` (없으면 `OPENAI_API_KEY` 겸용) | Chat Completions | `effort` → `reasoning_effort` | `function_calling` | `json_schema` 거절. reasoning 파라미터를 안 보내면 thinking 이 켜진 채라 강제 `tool_choice` 를 거절하므로 `off` 로 두지 말 것. `/anthropic` 경로는 Anthropic SDK 용이라 쓰지 않는다 |
 | **llama.cpp** (로컬) | 임의 (`LOCAL_MODEL_NAME`) | `LOCAL_OPENAI_BASE_URL` (기본 `http://localhost:8080/v1`) | `LOCAL_API_KEY` | Chat Completions | `qwen` → `chat_template_kwargs.enable_thinking` + `thinking_budget_tokens` | `json_schema` (문법 강제) | `PRIMARY=local` 로 우선시키고, 죽어 있으면 API 로 폴백. 서버는 `--reasoning-budget` 없이 띄워야 요청별 예산이 먹는다 |
-| **사내 vLLM** (LiteLLM 게이트웨이) | `LOCAL_MODEL_NAME=qwen3.8-27b` | `http://127.0.0.1:4000/v1` (WSL 안) · `http://llm-gateway.example.com:4000/v1` | `LOCAL_API_KEY` (Virtual Key) | Chat Completions | `effort` (`REASONING_EFFORT` 는 low·medium·xhigh 만) | `function_calling`·`json_schema` 둘 다 | `PRIMARY=local`. 상세는 [providers/inner-vllm.md](providers/inner-vllm.md) |
+| **사내 vLLM** (LiteLLM 게이트웨이) | `LOCAL_MODEL_NAME=qwen3.8-27b` | `http://127.0.0.1:4000/v1` (WSL 안) · `http://llm-gateway.example.com:4000/v1` | `LOCAL_API_KEY` (Virtual Key) | Chat Completions | `effort` (`REASONING_EFFORT` 는 low·medium·xhigh 만) | `function_calling`·`json_schema` 둘 다 | `PRIMARY=local`. 상세는 [docs/providers/inner-vllm.md](docs/providers/inner-vllm.md) |
 | **자체 호스팅·기타 OpenAI 호환** (vLLM 등) | 임의 | `OPENAI_BASE_URL` 명시 | `OPENAI_API_KEY` | Chat Completions | 명시 (기본 `effort`) | 명시 (기본 `function_calling`, 탐색은 `auto`) | 유추되지 않는 모델명은 이 행으로 떨어진다. 파라미터를 거절하면 `off`·`auto` 로 조정 |
 | **Anthropic** | — | — | — | — | — | — | OpenAI 호환 API 가 아니라 미지원(별도 어댑터 필요) |
 
@@ -93,7 +96,7 @@ langgraph `StateGraph` 분기: **router → { answer | reader | investigator →
 
 - **읽기 (무승인)** — `read_file`(줄번호+범위 발췌), `list_files`, `search_text`(캡+glob), `run_readonly_command`(조사용 read-only 셸, 파이프·글롭 일괄 탐색), `explore`(위임 탐색), `read_artifact`, `analyze_image`, `skill`.
 - **변경 (승인 게이트)** — `write_file` · `edit_file`(replace_all) · `multi_edit`(전체 롤백) · `patch_file`(라인패치, 앵커 검증) · `create_dir` · `delete_path`, `run_command`(명령 실행).
-- **MCP** — `mcps/*.json` 로드, 기본 전부 승인. 읽기 전용은 `KODA_MCP_AUTO_APPROVE` 로 opt-in 자동승인.
+- **MCP** — 전역 `~/.koda/mcps/`·프로젝트 `<workspace>/mcps/` 의 설정을 로드, 기본 전부 승인. 읽기 전용은 `KODA_MCP_AUTO_APPROVE` 로 opt-in 자동승인. 상세는 [`docs/mcp/`](docs/mcp/README.md).
 
 편집은 원자적(실행비트 보존)이고, 큰 도구 출력은 8k 에서 트림하되 원문을 `.koda/artifacts/`에 보존(시크릿 redaction)해 `read_artifact` 로 재조회한다 — 증거는 잃지 않고 컨텍스트만 아낀다.
 
@@ -106,47 +109,19 @@ langgraph `StateGraph` 분기: **router → { answer | reader | investigator →
 
 ## MCP 확장
 
-외부 MCP 서버를 `*.json`(또는 `*.yaml`) 파일 하나당 하나씩 두면 일괄 로드해 answer·reader·investigator·coder·planner 에 주입한다. LLM 이 최신 문서·웹검색이 필요하다고 판단하면 스스로 호출한다.
+외부 MCP 서버(웹 검색·최신 문서 조회·브라우저 등)를 붙이면 그 도구를 에이전트가 판단해 쓴다. 코드 수정 없이 설정 파일 하나로 붙는다.
 
 ```bash
-koda mcp add --url https://mcp.context7.com/mcp                 # 이름은 URL 에서 추론(context7)
-koda mcp add --json '{"mcpServers":{"exa":{"url":"…"}}}'         # 문서 스니펫 그대로 붙여넣기
-koda mcp add -- npx @playwright/mcp@latest                      # `--` 뒤는 실행 명령(stdio)
-koda mcp add hf --url https://huggingface.co/mcp --header 'Authorization: Bearer ${HF_TOKEN}'
-koda mcp add gh --env 'GITHUB_TOKEN=${GITHUB_TOKEN}' -- npx -y @modelcontextprotocol/server-github
+koda mcp add --url https://mcp.context7.com/mcp      # 기본은 전역(~/.koda/mcps). 저장 전에 실제로 붙여 본다
+koda mcp add -- npx -y @playwright/mcp@latest        # `--` 뒤는 실행 명령(stdio)
 koda mcp list · remove <이름> · enable|disable <이름> [--here]
 ```
 
-- 저장 전에 **실제로 붙여 본다.** 성공하면 `연결 확인: 성공 · 도구 24개`, 실패하면 이유를 보이고 저장하지 않는다(`--force` 로 강행, `--no-probe` 로 생략).
-- 이름을 생략하면 URL 호스트나 패키지명에서 추론한다(`@playwright/mcp` → `playwright`, `mcp-remote https://mcp.linear.app/sse` → `linear`). 파일명은 항상 서버명이라 목록과 파일이 어긋나지 않는다.
-- `--scope user`(기본, `~/.koda/mcps`) · `--scope project`(`<workspace>/mcps`).
-- `disable <이름>` 은 정의된 파일에 `"enabled": false` 를 남겨 다음 실행에도 유지된다. `--here` 를 주면 그 워크스페이스에만 오버라이드를 둔다. 꺼진 서버는 연결도 하지 않아 프롬프트에서도 빠진다.
+- **전역** `~/.koda/mcps/` 는 모든 워크스페이스에서, **프로젝트** `<workspace>/mcps/`(`--scope project`)는 그 워크스페이스에서만 잡힌다. 같은 서버명이면 프로젝트가 덮는다.
+- 키는 `${VAR}` 로 참조하고 `~/.koda/.env` 에 둔다. 도구 스키마는 모든 호출의 프롬프트에 실리므로 안 쓰는 서버는 꺼 둔다.
+- 깨진 설정 파일은 조용히 버리지 않고 `/mcp`·`koda mcp list` 에 파일명과 `형식 오류` 로 표시한다.
 
-- **전역** `~/.koda/mcps/` — 모든 워크스페이스에서 잡힌다(exa·context7 같은 범용).
-- **프로젝트** `<workspace>/mcps/` (`--mcps-dir` 로 변경) — 그 프로젝트에만. 같은 서버명이면 전역을 덮어쓴다.
-
-```jsonc
-// ~/.koda/mcps/exa.json — 웹 검색
-{ "mcpServers": { "exa": { "url": "https://mcp.exa.ai/mcp" } } }
-// ~/.koda/mcps/context7.json — 최신 라이브러리 문서
-{ "mcpServers": { "context7": { "url": "https://mcp.context7.com/mcp" } } }
-```
-
-- `url` 만 있으면 `streamable_http`, `command` 면 `stdio` 로 자동 채운다. `"command": "npx -y mcp-remote https://…"` 처럼 한 줄로 적은 명령은 실행 파일과 인자로 쪼개 넘긴다.
-- 설정 값의 `${VAR}` 는 `~/.koda/.env`·`CWD/.env`·환경변수에서 채운다(환경변수가 우선). API 키를 JSON 에 평문으로 두지 않기 위한 것이고, 참조한 변수가 없으면 그 서버는 연결하지 않고 `/mcp` 에 `환경변수 미설정: VAR` 로 표시된다. URL 쿼리에 실린 키 값은 `/mcp` 화면에서 `***` 로 가린다.
-
-```jsonc
-// ~/.koda/mcps/exa.json  ·  키는 ~/.koda/.env 의 EXA_API_KEY 에 둔다
-{ "mcpServers": { "exa": { "url": "https://mcp.exa.ai/mcp?exaApiKey=${EXA_API_KEY}" } } }
-// 헤더로 넘기는 서버
-{ "mcpServers": { "hf": { "url": "https://huggingface.co/mcp",
-                          "headers": { "Authorization": "Bearer ${HF_TOKEN}" } } } }
-```
-- 서버별 격리 로드(하나가 죽어도 나머지 유지), 오프라인이면 조용히 건너뛴다.
-- 세션은 프로세스가 사는 동안 서버마다 하나를 열어 둔다. Playwright 처럼 서버 안에 상태(열린 페이지)를 두는 도구도 호출 사이에 상태가 유지되고, stdio 서버의 작업 디렉터리는 워크스페이스라 상대 경로로 저장한 파일이 워크스페이스 안에 떨어진다.
-- 새 MCP 추가 = 파일 하나. 코드 수정 불필요.
-- stdio 서버(`npx mcp-remote` 등)가 stderr 로 쏟는 로그는 `<workspace>/.koda/logs/mcp.log` 로 간다. 그대로 두면 koda 의 stderr 를 물려받아 화면을 덮는데, Textual 이 바로 그 stderr 에 화면을 그리기 때문이다. 자식에게 넘기는 로그 대상만 바꾸므로 koda 자체의 출력·오류는 영향을 받지 않으며, 로그가 4MB 를 넘으면 연결할 때 비운다.
-- TUI 는 화면이 뜬 뒤 백그라운드로 서버에 붙는다(시작 로그 없음). 상태줄의 `mcp N` 이 쓸 수 있는 도구 수이고 연결 중엔 `mcp 연결 중`, 실패가 있으면 `(실패 M)` 과 함께 알림이 뜬다. `/mcp` 화면에서 서버별 상태(연결됨·실패·꺼짐)·출처(전역/프로젝트)·전송 방식·도구 목록과 설명을 본다. `a` 로 스니펫·URL·명령을 붙여 넣어 추가하고, `x` 로 삭제하며, `r` 재연결 · `d` 이 세션만 끄기 · `A` 설정 파일에 켜짐/꺼짐 기록을 한다. 추가·삭제는 즉시 반영되어 koda 를 다시 띄울 필요가 없다.
+등록 방식·키 다루기·자동 승인·동작 방식·문제 해결은 [`docs/mcp/`](docs/mcp/README.md) 에 있다.
 
 ## 멀티턴과 메모리
 
