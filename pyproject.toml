@@ -1,7 +1,7 @@
 [project]
 name = "koda"
 version = "0.1.0"
-description = "로컬 LLM 기반 coding-agent koda"
+description = "A LangGraph coding agent that routes each request to the narrowest path and checks edits against diff and tool-log evidence"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
