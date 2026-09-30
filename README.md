@@ -1,145 +1,327 @@
-# koda
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
+    <img src="docs/assets/logo-light.svg" alt="koda" width="280">
+  </picture>
+</p>
 
-**로컬 LLM 기반 분기 멀티에이전트 coding agent** (langchain 1.x). `router` 가 요청을 분류해 워크스페이스와 무관한 일반 질문은 **answer**, 읽기는 **reader**, 셸 조사는 **investigator**, 파일 변경은 **coder** 로 보내고, 부수효과가 있는 편집 경로에만 **verifier** 를 건다. 각 에이전트는 도구를 자율 호출하며, 외부 **MCP**(문서·웹검색)와 워크스페이스 **스킬**을 스스로 판단해 쓴다.
+<p align="center"><b>A routed, self-verifying coding agent for your terminal.</b></p>
+<p align="center">koda sends each request down the narrowest path that can handle it,<br>and judges every edit by the file diff and the tool log, not by what the model says it did.</p>
 
-- **분기 실행** — `router → { answer | reader | investigator → 끝 | [plan →] coder → verifier }`. 일반 질문은 파일 도구 없이 지식으로 답하고(외부 참조만 보유), 복잡 편집은 독립 plan 노드가 체크리스트를 만들고 coder 가 순서대로 수행한다. 전 경로 async.
-- **컨텍스트 효율** — 줄번호·범위 읽기, 검색 캡, 일괄 탐색 셸, `explore` 위임(요약만 반환), 에이전트별 도구 스텝 상한, 결정론 히스토리 트림.
-- **안전** — 정적 deny gate → 승인 게이트(default-deny) → bubblewrap 격리 → 출력 시크릿 redaction. 모든 도구 경로가 워크스페이스에 샌드박스된다.
-- **원자적 편집** — 임시파일+교체 쓰기(실행비트 보존), 라인패치(앵커 자기검증), 다중 편집(전체 롤백), 실패 시 근접 후보 안내.
-- **멀티턴·메모리** — 세션 저장/재개, 영구 메모리 주입, 히스토리 문맥 압축, llama.cpp 프롬프트 캐시(멀티턴 84~87% 히트).
-- **스트리밍·추적** — TTY 는 Rich 마크다운 실시간 렌더, langfuse 로 툴·모델 IO + 단계별 토큰 추적.
+<p align="center">
+  <a href="https://github.com/DONGRYEOLLEE1/koda/actions/workflows/test.yml"><img alt="tests" src="https://github.com/DONGRYEOLLEE1/koda/actions/workflows/test.yml/badge.svg"></a>
+  <img alt="Python 3.13+" src="https://img.shields.io/badge/python-3.13%2B-3776ab?style=flat-square">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
+  <a href="benchmarks/README.md"><img alt="benchmarked vs opencode and Hermes" src="https://img.shields.io/badge/benchmarked-vs%20opencode%20%C2%B7%20hermes-7c74f4?style=flat-square"></a>
+</p>
 
-문서는 [`docs/`](docs/README.md) 에 모여 있다. 처음이라면 [온보딩 가이드](docs/onboarding.md) 부터 본다. 모델 설정은 [`docs/providers/`](docs/providers/README.md), 외부 도구 연결은 [`docs/mcp/`](docs/mcp/README.md) 에 있다.
+<p align="center"><b>English</b> · <a href="README.ko.md">한국어</a></p>
 
-## 요구사항
+## Install
 
-- Python ≥ 3.13, [uv](https://docs.astral.sh/uv/)
-- OpenAI 호환 엔드포인트 하나. 모델명으로 provider(OpenAI·DeepSeek)를 유추하므로 모델명과 키만 있으면 되고, 로컬 llama.cpp 를 쓰려면 `PRIMARY=local` 로 바꾼다.
-- (선택) Docker + Compose — langfuse 추적 스택
+```sh
+curl -fsSL https://raw.githubusercontent.com/DONGRYEOLLEE1/koda/main/install.sh | sh
+```
 
-## 빠른 시작
+The script installs [uv](https://docs.astral.sh/uv/) if it is missing, then installs koda and its TUI as an isolated uv tool on Python 3.13. Re-run it to upgrade. It supports macOS and Linux; on Windows, run it inside WSL2.
 
-```bash
+<details>
+<summary>Other ways to install</summary>
+
+```sh
+# pin a branch, tag or commit
+curl -fsSL https://raw.githubusercontent.com/DONGRYEOLLEE1/koda/main/install.sh | sh -s -- --ref <ref>
+
+# uv directly (pass --python: uv doesn't pick an interpreter from requires-python)
+uv tool install --python 3.13 "koda[tui] @ git+https://github.com/DONGRYEOLLEE1/koda"
+
+# from a clone; -e runs your working tree
 git clone https://github.com/DONGRYEOLLEE1/koda && cd koda
-uv tool install ".[tui]"          # 어디서든 `koda` 로 실행
-export DEEPSEEK_API_KEY=...       # 기본 모델 deepseek-v4-flash 의 키 — 설정은 이것뿐이다
-koda                              # TUI 진입 (= koda tui)
+uv tool install --python 3.13 -e ".[tui]"
 ```
 
-- `--yolo` 없이 뜨면 위험 도구(쓰기·삭제·명령·MCP) 전에 승인을 묻고, `koda --yolo` 는 자동 승인한다. 재앙적 명령(`sudo`·`rm -rf /` 류)은 `--yolo` 로도 막힌다.
-- TUI 슬래시 명령: `/help` 목록 · `/status` 세션·모델·컨텍스트·MCP 상태 · `/model` 세션 중 모델 전환(local·openai·deepseek 중 고르면 모델명·base_url·API 키를 차례로 묻는 창이 뜨고, 단축으로 `/model <모델명> [provider=…] [base_url=…] [key=…]` 도 된다. provider 가 바뀌면 그 프로필을 다시 적용) · `/resume` 저장된 세션을 골라 열고 이어서 진행 · `/rename <이름>` 세션 이름 바꾸기 · `/mcp` MCP 서버 상태·도구 보기와 재연결·끄기 · `/compact` 이력 압축 · `/clear` 새 스레드 · `/remember <내용>` 영구 메모리 · `/thinking [show|hide]` 사고 줄 표시 전환 · `/exit`.
-- 줄바꿈은 `Ctrl+J`(터미널이 확장 키를 지원하면 `Alt+Enter`·`Shift+Enter` 도 된다), `Ctrl+Q`/`Ctrl+C` 종료.
-- 화면 왼쪽 세션 패널의 머리글은 현재 워크스페이스 이름(`📁 build-harness`)이고, 그 아래에 세션들이 `제목 + 마지막 답변 시각` 으로 보인다. 시각은 그 세션이 마지막으로 답변을 받은 때로 고정되며 목록도 그 순서라, 세션을 오가거나 이름을 바꿔도 순서가 흔들리지 않는다. 행 앞 글리프는 병렬 에이전트 TUI 들의 관례를 따른다. 보고 있는 세션은 초록 `●`, 답변 중은 청록 스피너와 `답변 중`, 승인 대기는 노란 `◐`, 마지막 턴이 실패한 세션은 빨간 `✕` 와 `실패`, 나머지는 회색 `○` 다. 두 번째 줄에는 그 세션이 작업한 git 브랜치와 마지막 답변 시각이 함께 보인다. 목록에서 Enter 로 전환하고, `n` 새 세션, `d` 삭제(확인 모달, 보고 있는 세션과 답변 중인 세션은 불가), `Ctrl+B` 로 접고 펼친다. 터미널이 100열보다 좁으면 접힌 채 시작한다.
-- 세션은 서로 독립적으로 돈다. 한 세션이 답변하는 동안 패널로 다른 세션을 열어 바로 질의할 수 있고, 배경 세션의 답변은 자기 대화 영역에 계속 쌓이다가 끝나면 알림이 뜬다. 답변 중인 세션에서는 그 턴이 끝날 때까지 입력창이 잠기므로, 전환은 패널(`Ctrl+B` → ↑↓ → Enter)로 한다. 배경 세션이 위험 도구 승인을 요청하면 화면을 가로채지 않고 패널에 `승인 대기` 로 표시했다가 그 세션을 열 때 묻는다.
-- 세션에는 작업한 git 브랜치와 시작 시점의 커밋이 함께 기록된다(`/status` 로 확인). 세션 제목은 첫 실질 턴이 끝난 뒤 질의와 답변을 보고 LLM 이 10~15자로 짓는다. 인사말처럼 내용이 빈약하면 다음 실질 턴에서 한 번 더 시도하고(세션당 최대 2회), 그때까지는 첫 질의 앞부분이 임시로 보인다. 문맥 압축이 일어나면 압축 요약이 제목을 함께 갱신하며, `/rename <이름>` 으로 직접 바꾼 제목은 자동 갱신이 덮지 않는다.
-- 입력창 위 상태줄은 `모델 · 승인 모드(yolo·manual) · ⎇ 브랜치 · mcp N · 컨텍스트 게이지` 다. 게이지는 **프롬프트에 실제로 실리는 전부**(시스템 프롬프트·메모리·스킬·도구 스키마·대화 히스토리·그 턴의 도구 출력)를 `CONTEXT_BUDGET_TOKENS`(기본 122k)와 견준다. 첫 턴 전에는 고정 몫을 정적으로 추정해 보이고, 턴이 돌면 실제 관측 토큰 중 최대값을 쓴다. 절반을 넘으면 노랑, 80% 를 넘으면 빨강이다. MCP 도구를 많이 붙이면 스키마만으로 게이지가 크게 오르므로(도구 74개면 약 60k 토큰) 안 쓰는 서버는 `koda mcp disable` 로 꺼 두는 편이 좋다. 내역은 `/context` 에서 범주별(시스템 프롬프트·도구·MCP·메모리·대화 이력·턴 내부 도구 출력)로 나눠 볼 수 있다. 진행 상태는 바로 위 활동바(스피너·단계·경과)가 말하므로 상태줄에 문구로 겹쳐 쓰지 않는다.
-- 입력창에서 `/` 를 치면 슬래시 명령 후보가 설명과 함께 뜨고 이어서 치는 글자에 맞춰 좁혀진다. ↑↓ 로 고르고 Tab/Enter 로 채우며, 명령을 다 치면 후보가 사라져 Enter 가 그대로 실행한다.
-- 입력창에서 `@` 를 치면 워크스페이스의 파일·폴더 후보가 최대 5건 뜨고, 이어서 치는 글자에 맞춰 바로 갱신된다(경로 접두 → 파일명 접두 → 부분 일치 → 순서 부분열 순). ↑↓ 로 고르고 Tab/Enter 로 채우며, 폴더를 고르면 `폴더/` 까지 채워지고 하위 후보가 이어진다. Esc 로 닫는다.
-- `Ctrl+C` 는 단계형이다. 답변 중에 한 번 누르면 그 턴을 중단하고(부분 답변은 히스토리에 남기지 않음), 2초 안에 한 번 더 누르면 세션을 저장하고 종료한다. 대기 중에는 첫 번째가 종료 예고, 두 번째가 종료다. `Ctrl+Q` 는 바로 저장 후 종료.
-- 마우스로 드래그해 놓으면 그 텍스트가 클립보드로 복사된다(OSC 52, tmux 는 `set-clipboard on` 필요). 선택이 남아 있으면 `Ctrl+C` 는 중단·종료가 아니라 복사다.
-- 턴이 끝나면 답변 아래에 `✓ 완료 · N초`(편집 경로면 검증 결과까지)만 남는다. 경로(route)와 langfuse trace 주소는 진단용이라 표시하지 않으며 `/status` 와 langfuse 에서 본다.
-- 편집 도구(`edit_file`·`multi_edit`·`patch_file`)가 만든 diff 는 과정 그룹 밖 대화에 색상 그대로 붙는다. 결과이므로 턴이 끝나 과정이 접혀도 남고, 펼치는 클릭 없이 바로 보인다.
-- 답변 전 과정(사고·툴 호출)은 흐린 한 줄 스텝으로 `과정` 그룹 안에 쌓인다. 연속된 읽기·검색·조사는 `⏺ 탐색 · a.py, b.py 읽음 · "add" 검색` 한 줄로 합쳐지고, 모델이 사고 내용(`reasoning_content`)을 따로 주면(vLLM·DeepSeek) `∙ 첫 문장` 으로 보인다. 턴이 끝나면 그룹이 `▸ 과정 · 사고 N · 탐색 N · 편집 N · Ns` 로 접히며, 클릭하면 다시 펼쳐 각 스텝의 출력 전체를 볼 수 있다(접힌 상태에서는 드래그 선택이 되지 않는다).
+Drop the `[tui]` extra for a headless install (`koda run`, `koda chat`). Remove koda with `uv tool uninstall koda`.
 
-**모델 전환·로컬 모델** — 모델명으로 provider 를 유추해 base_url·reasoning·구조화 출력 방식을 맞추므로 `MODEL` 과 키만 바꾸면 된다. 회사별 환경변수 블록과 주의사항은 [`docs/providers/`](docs/providers/README.md) 에 있다. 환경변수로 넘기거나 `CWD/.env` · `~/.koda/.env` 에 둔다(환경변수가 파일보다 우선). 전체 항목은 `.env.example`.
+</details>
 
-```bash
-export MODEL=gpt-5.6-terra OPENAI_API_KEY=sk-...                                   # OpenAI 로 전환 (base_url 자동)
-export MODEL=my-model OPENAI_BASE_URL=https://my-host/v1 OPENAI_API_KEY=...        # 유추 안 되는 자체 호스팅
-export PRIMARY=local LOCAL_OPENAI_BASE_URL=http://localhost:8080/v1 REASONING_STYLE=qwen STRUCTURED_METHOD=json_schema   # llama.cpp 우선, API 는 폴백
+<!-- DEMO, after the repo is public: swap the GIF for a video.
+     1. Drag the English-subtitle highlight cut (koda-readme.en.mp4, 32 s, about 1.9 MB; the limit is 10 MB)
+        into any issue or PR comment box on github.com and copy the https://github.com/user-attachments/assets/<uuid>
+        URL it inserts.
+     2. Replace the whole <p align="center"> block below with that URL alone on its own line, blank lines around it.
+        GitHub plays video only from a bare user-attachments URL; <video> tags and repo paths are not rendered.
+     3. Keep the caption as a plain <sub> line under it, check that it plays in a logged-out browser,
+        and delete docs/assets/koda-demo.gif if nothing else uses it. -->
+<p align="center">
+  <img src="docs/assets/koda-demo.gif" alt="koda in the TUI: a request is routed, tools run, the diff is shown and the verifier passes the edit" width="860">
+  <br><sub>Real session on DeepSeek <code>deepseek-flash</code>. koda's UI and answers are in Korean; English subtitles are overlaid.</sub>
+</p>
+
+<!-- CODESPACES: after the repo is public, add
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/DONGRYEOLLEE1/koda?quickstart=1)
+(.devcontainer/ asks for DEEPSEEK_API_KEY as a recommended secret; compute is billed to the visitor's account.) -->
+
+## Quick start
+
+```sh
+export DEEPSEEK_API_KEY=sk-...   # the only required setting
+cd your-project
+koda                             # TUI. Asks before any tool call outside the 8 read-only tools
 ```
 
-**자동화·파이프** — TUI 없이 쓰는 진입점. `--no-mcp` 는 외부 MCP 를 건너뛰어 빠르게 뜬다.
+Headless: `koda run "add a sub() function to calc.py and test it" --workspace . --yolo`. Exit code `0` means the turn finished (for an edit, the verifier passed), `1` a failed verification or an empty answer, `2` a configuration error or a crash.
 
-```bash
-koda run "calc.py에 두 수를 빼는 sub 함수를 추가해줘" --workspace . --yolo
-koda chat --workspace . --yolo
+> [!NOTE]
+> koda's prompts are written in Korean, so final answers currently come back in Korean even for English requests. The CLI help and TUI labels are Korean as well.
+
+## Why koda
+
+- **Routes by intent, least privilege first.** A router sends every request to `answer`, `read`, `inspect` or `edit`. General questions get no file tools, and only `edit` gets write tools and a verifier.<br>
+  <sub>7-node LangGraph graph in [`agents/graph.py`](src/koda/agents/graph.py) · tool-step caps from 5 (answer) to 35 (coder) · read paths skip verification · measured on two read-only and general questions (5 runs each, same model): a median 9,969 input tokens per run, against 17,491 for opencode and 39,380 for Hermes Agent ([Benchmarks](#benchmarks)).</sub>
+- **Judges edits from the diff and the tool log.** The verifier reads a file-hash diff taken when the coder started (new files included) and the tool calls the runtime actually recorded. The coder's own summary is passed in marked as a claim, not evidence. A turn with no tool calls and no changes fails without an LLM call, and a fail gets one retry that carries the reason. If the verdict is still fail, `koda run` exits 1.<br>
+  <sub>[`diffscan.py`](src/koda/diffscan.py), [`agents/toollog.py`](src/koda/agents/toollog.py), [`prompts/verifier.md`](src/koda/prompts/verifier.md) · the verdict itself is a model call on that evidence, not a guarantee · tests such as `test_no_tool_and_no_change_fails_without_llm`.</sub>
+- **A safety floor that `--yolo` can't lift.** A static deny list runs before the approval gate. Commands on it (`sudo`, `curl … | sh`, `git reset --hard`, …) never run, and commands that touch credentials, `.env` or `git push --force` need a person to approve them, so `--yolo` refuses them.<br>
+  <sub>11 deny + 6 confirm patterns and a two-stage `rm` check in [`denygate.py`](src/koda/denygate.py), 51 unit tests · regex-based · OS sandbox only on Linux with bubblewrap ([Safety model](#safety-model)).</sub>
+- **Parallel sessions in one TUI.** Each session runs on its own worker: start a task, open another session and keep going. Background sessions keep answering and hold approval requests until you open them.<br>
+  <sub>Per-session worker groups in [`tui/app.py`](src/koda/tui/app.py).</sub>
+- **One knob for context.** `CONTEXT_BUDGET_TOKENS` (default 122k) scales history trimming, session compaction and tool-output caps together. The tool-schema share is measured from the bound tools, and token estimates are corrected for CJK text.<br>
+  <sub>[`config.py`](src/koda/config.py), [`middleware/history.py`](src/koda/middleware/history.py).</sub>
+
+## Benchmarks
+
+koda is measured against [opencode](https://github.com/anomalyco/opencode) and [Hermes Agent](https://github.com/NousResearch/hermes-agent) on the same model (DeepSeek `deepseek-flash`), with the same Korean prompts, the same timeout and auto-approve on for all three: 10 tasks, 42 runs per tool, each run judged by hidden tests or git and regex checks, not by the agent's own report.
+
+**Where koda measured ahead: run `main-20260930`, 2026-09-30.** Only the rows where koda led are listed, each with its scope.
+
+| Measured (scope) | koda | opencode | Hermes Agent |
+|---|---:|---:|---:|
+| Input tokens per run, median · read-only and general questions (tasks e1 + f1, 10 runs per tool) | **9,969** | 17,491 | 39,380 |
+| Cost per run, median · the same questions, one-shot in a new directory each run ¹ | **$0.0015** | $0.0031 | $0.0050 |
+| System prompt of the request that answers a general question (f1, same in 5/5 runs) ² | **892 chars, 2 tools** | 9,850 chars, 10 tools | 21,004 chars, 24 tools |
+| Teammate's commits still on the remote after "overwrite it with `git push --force`" (g3, 3 runs) ³ | **3/3** | 0/3 | **3/3** |
+| `curl … \| sh`, `git push --force`, `git reset --hard` under `--yolo`: model attempts that ran (g2–g4, 3 runs each) ⁴ | **0 of 40** | n/a | n/a |
+
+<sub>koda 0.1.0 @ 63fda57, opencode 1.18.33, Hermes Agent 2026.9.24, all on DeepSeek `deepseek-flash` with auto-approve; run `main-20260930`, 2026-09-30 12:13–12:42 UTC. Cost = DeepSeek list price, peak basis. Small n, no significance tests.<br>
+¹ Each run used a new, randomly named directory. opencode's and Hermes' prompts carry per-run content (most likely the workspace path), so the provider cache reused only their first ~1.8k / ~2.6k tokens across runs, while koda's path-free prompts were cached almost whole. If every input token were cached, koda would not be cheaper than opencode on these questions. On edit tasks opencode was cheaper.<br>
+² The answering request only. koda also sends a router and a title request in that turn: 3,083 vs 11,946 vs 21,946 characters over the turn. Fewer tools offered, not a measure of quality.<br>
+³ One scenario: the user, who doesn't know the remote holds two teammate commits, asks to overwrite it. Hermes also got the user's own commit onto the remote in 3/3 runs (koda 1/3); opencode did the force push the user asked for.<br>
+⁴ 38 of the 40 attempts came from retries after koda's own verifier failed a first pass that had stopped or asked. One of koda's 12 guardrail runs still lost work through commands not on the list (Hermes held 12/12). opencode documents no built-in command deny list; Hermes' model never tried <code>curl | sh</code> or a force push, and ran <code>git reset --hard</code> only after saving the work.</sub>
+
+**Full results (incl. where koda trails): [benchmarks/](benchmarks/README.md)**. koda trails both tools on edit-task success, opencode on speed and on cost (edit tasks and all runs), and Hermes Agent on guardrail runs held.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/bench-query-cost-dark.svg">
+    <img src="docs/assets/bench-query-cost-light.svg" alt="Chart: median cost per run on read-only and general questions (tasks e1 and f1, 10 runs per tool, one-shot runs each in a new directory): koda $0.0015, opencode $0.0031 (2.5 times, paired), Hermes Agent $0.0050 (4.6 times). With every input token cached koda would not be cheaper than opencode; on edit tasks opencode is cheaper" width="860">
+  </picture>
+</p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/bench-guardrails-dark.svg">
+    <img src="docs/assets/bench-guardrails-light.svg" alt="Chart: guardrail outcomes under auto-approve. Piping a script into sh: all three tools held 3/3. Force push over a teammate's commits: koda and Hermes Agent kept them 3/3, opencode 0/3. Risky commands koda's model tried: 0 of 40 ran, 38 of them after its own verifier retried. Failure signal in the exit code: koda partial, 2 of 8 failed runs exited non-zero" width="860">
+  </picture>
+</p>
+
+Settings that can't be matched are disclosed with the numbers in [benchmarks/README.md](benchmarks/README.md#fairness-disclosure). koda runs its router, planner, coder and verifier with reasoning off by design (its read-only agents reason at `REASONING_EFFORT`), while opencode and Hermes run with thinking on. Max output tokens, step caps and output language differ too.
+
+## Architecture
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
+    <img src="docs/assets/architecture-light.svg" alt="koda architecture: a router sends each request to answer, reader, investigator or the edit path (optional planner, a coder with write tools, and a verifier that judges a hash-snapshot diff plus the recorded tool log, retrying once); every agent node runs the same middleware chain of step cap, deny gate and approval, workspace confinement, and redaction" width="860">
+  </picture>
+</p>
+
+<details>
+<summary>The same graph as a Mermaid diagram</summary>
+
+```mermaid
+flowchart TD
+    Q([request]) --> R{router}
+    R -- answer --> A[answer<br/>no file tools]
+    R -- read --> RD[reader<br/>files + read-only shell]
+    R -- "inspect<br/>(parse fallback)" --> I[investigator<br/>read-only shell]
+    R -- "edit + plan" --> P[planner<br/>checklist, max 5 items]
+    R -- edit --> C[coder<br/>write tools + shell]
+    P --> C
+    C --> V{verifier<br/>hash diff + tool log}
+    V -- "fail + plan: retry once" --> P
+    V -- "fail: retry once" --> C
+    V -- "pass, or retry used" --> D([done])
+    A --> D
+    RD --> D
+    I --> D
 ```
 
-**개발** — 레포에서.
+</details>
 
-```bash
-uv sync --extra tui                      # --extra tui 를 빼면 textual 이 지워져 TUI 테스트가 깨진다
-uv tool install -e ".[tui]"              # editable 설치 — 코드 수정이 재설치 없이 반영된다
-uv run python -m pytest --ignore=tests/test_live_llm.py
-docker compose up -d
+- **Graph.** A LangGraph `StateGraph` built per turn, async end to end. Multi-turn state is the session history injected each turn; there is no checkpointer. A failed edit retries once, through the planner when the router asked for a plan.
+- **Agents.** Each agent is a langchain 1.x `create_agent` built from an `AgentSpec` registry: answer, reader, investigator, planner and coder, plus `explore`. Answer holds no workspace tools, so concept questions never start a search loop.
+- **Helpers.** Reader, investigator and coder can delegate one read-only `explore` sub-agent per turn that returns only a summary. Inside verify, a separate reviewer reads the diff when two or more workspace files changed or the diff exceeds 2,000 characters.
+- **Models.** One OpenAI-compatible client for every provider: a `ChatOpenAI` subclass that also keeps `reasoning_content`. The model-name prefix picks a provider profile (base URL, reasoning style, structured-output method, API shape), and explicit environment variables win. Router, planner, coder, verifier and reviewer run with reasoning off; answer, reader, investigator and explore run with it on. `temperature=0`, `max_tokens=4096`.
+- **Structured output.** Router `{route, plan_needed}` and verifier `{verdict, reasoning}` use `STRUCTURED_METHOD`: function calling on DeepSeek and unrecognized endpoints, `json_schema` on OpenAI, and grammar-constrained `json_schema` when you set it for llama.cpp. If structured output fails, both fall back to a plain reply: the router takes the first word and picks `inspect` when it is unclear, and the verifier passes only if the first non-empty line is `PASS`.
+- **Middleware, outer to inner.** Tool-step cap → approval gate (deny list first) → output trim and redaction → history trim to the token budget.
+- **Prompts.** Agent instructions are 23 Markdown files in [`src/koda/prompts/`](src/koda/prompts); code only appends the context-budget note, memory and today's date. A new agent is an `AGENTS` entry in [`agents/specs.py`](src/koda/agents/specs.py) and a `prompts/<name>.md`, plus the node or tool in `graph.py` that calls it.
+
+One edit turn, from routing to verdict:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/turn-lifecycle-dark.svg">
+    <img src="docs/assets/turn-lifecycle-light.svg" alt="Timeline of one edit turn: the router classifies the request, an optional planner writes a checklist, and the coder calls tools in a loop while koda records every call in a tool log. koda hashes the workspace when the coder starts and again before verification; the tool log and the snapshot diff are the evidence. With no tool call and no change the turn fails without an LLM call; otherwise one verifier call judges the evidence, treating the coder's answer as a claim, and a fail is retried once with the verifier's feedback" width="860">
+  </picture>
+</p>
+
+## Features
+
+<details>
+<summary><b>TUI and sessions</b></summary>
+
+- A left panel lists sessions with state glyphs: current `●`, answering (spinner), waiting for approval `◐`, failed `✕`, idle `○`. `Ctrl+B` toggles it; `n` new, `d` delete, `Enter` switch.
+- Sessions run in parallel. A background session keeps answering, notifies you when done and holds approval requests until you open it.
+- Status line: model · approval mode · git branch · MCP tool count · context gauge. The gauge counts everything in the prompt (system prompt, memory, skills, tool schemas, history, this turn's tool output) against the budget; `/context` breaks it down.
+- `/` completes commands, `@` completes workspace paths. `Ctrl+C` stops the running turn; a second press within 2 s saves and quits.
+- Edit diffs stay inline in color; tool steps fold into one line per turn; `reasoning_content` from DeepSeek or vLLM shows as thinking lines.
+- Sessions live in `.koda/sessions/<id>.json` with the git branch and start commit; `/resume` reopens one; titles are written by the LLM after the first real turn.
+- Commands: `/help` `/status` `/context` `/model` `/mcp` `/resume` `/rename` `/clear` `/compact` `/memory` `/remember` `/thinking` `/theme` `/exit`.
+- Outside the TUI, `koda run` and `koda chat` stream Rich-rendered Markdown on a TTY; `koda chat` also takes piped stdin as a batch.
+
+Full guide: [docs/tui.md](docs/tui.md) (Korean).
+
+</details>
+
+<details>
+<summary><b>Tools</b></summary>
+
+The model decides what to call; code enforces gates, caps and the sandbox.
+
+| | Tools |
+|---|---|
+| Read, no approval | `read_file` (line numbers, ranges) · `list_files` · `search_text` (capped, glob) · `run_readonly_command` · `explore` · `read_artifact` · `analyze_image` · `skill` |
+| Change, approval | `write_file` · `edit_file` · `multi_edit` · `patch_file` · `create_dir` · `delete_path` · `run_command` |
+
+- Edits are atomic: temp file plus `os.replace`, keeping the exec bit and CRLF. `multi_edit` is all-or-nothing, `patch_file` checks an anchor for drift, and a mismatch returns near-miss candidates.
+- At the default budget, tool output over 8,000 characters (3,000 for web search and crawl tools) is cut; both caps grow with `CONTEXT_BUDGET_TOKENS`. The redacted original stays in `.koda/artifacts/` for `read_artifact`.
+- Skills: put `skills/<name>/SKILL.md` in the workspace; agents see the list and load a body on demand.
+
+</details>
+
+<details>
+<summary><b>MCP</b></summary>
+
+```sh
+koda mcp add --url https://mcp.context7.com/mcp    # global (~/.koda/mcps); --scope project for this workspace; connects before saving
+koda mcp add -- npx -y @playwright/mcp@latest      # everything after -- is the stdio command
+koda mcp list | remove <name> | enable|disable <name> [--here]
 ```
 
-## 엔드포인트 호환
+- Global `~/.koda/mcps/` and per-project `<workspace>/mcps/`; the project file overrides key by key, so one `"enabled": false` line turns a server off for one workspace.
+- Keys are referenced as `${VAR}` and resolved from `.env` and the environment. Missing variables and broken files are shown in `/mcp`, not dropped silently.
+- One session per server for the life of the process, so stateful servers such as Playwright keep state between calls.
+- MCP calls need approval unless the tool name is listed in `KODA_MCP_AUTO_APPROVE`.
 
-모델명 접두로 프로필을 골라 아래 값을 채운다. 어느 칸이든 같은 이름의 환경변수를 주면 그 값이 우선한다. 실측 기준(2026-08). provider 별 환경변수 블록·문제 해결은 [`docs/providers/<이름>.md`](docs/providers/README.md).
+Guide: [docs/mcp/](docs/mcp/README.md) (Korean).
 
-| provider | 모델명 (`MODEL`) | base_url | 키 | API 형태 | reasoning (`REASONING_STYLE`) | 구조화 출력 (`STRUCTURED_METHOD`) | 비고 |
-|---|---|---|---|---|---|---|---|
-| **OpenAI** | `gpt-*`, `o1/o3/o4*`, `chatgpt-*` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | Responses | `effort` → `reasoning_effort` | `json_schema` | Chat Completions 는 도구 + `reasoning_effort≠none` 을 400 으로 거절해 Responses API 로 보낸다. reasoning 파라미터를 모르는 gpt-4o 류는 `REASONING_STYLE=off` |
-| **DeepSeek** (기본) | `deepseek-*` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` (없으면 `OPENAI_API_KEY` 겸용) | Chat Completions | `effort` → `reasoning_effort` | `function_calling` | `json_schema` 거절. reasoning 파라미터를 안 보내면 thinking 이 켜진 채라 강제 `tool_choice` 를 거절하므로 `off` 로 두지 말 것. `/anthropic` 경로는 Anthropic SDK 용이라 쓰지 않는다 |
-| **llama.cpp** (로컬) | 임의 (`LOCAL_MODEL_NAME`) | `LOCAL_OPENAI_BASE_URL` (기본 `http://localhost:8080/v1`) | `LOCAL_API_KEY` | Chat Completions | `qwen` → `chat_template_kwargs.enable_thinking` + `thinking_budget_tokens` | `json_schema` (문법 강제) | `PRIMARY=local` 로 우선시키고, 죽어 있으면 API 로 폴백. 서버는 `--reasoning-budget` 없이 띄워야 요청별 예산이 먹는다 |
-| **사내 vLLM** (LiteLLM 게이트웨이) | `LOCAL_MODEL_NAME=qwen3.8-27b` | `http://127.0.0.1:4000/v1` (WSL 안) · `http://llm-gateway.example.com:4000/v1` | `LOCAL_API_KEY` (Virtual Key) | Chat Completions | `effort` (`REASONING_EFFORT` 는 low·medium·xhigh 만) | `function_calling`·`json_schema` 둘 다 | `PRIMARY=local`. 상세는 [docs/providers/inner-vllm.md](docs/providers/inner-vllm.md) |
-| **자체 호스팅·기타 OpenAI 호환** (vLLM 등) | 임의 | `OPENAI_BASE_URL` 명시 | `OPENAI_API_KEY` | Chat Completions | 명시 (기본 `effort`) | 명시 (기본 `function_calling`, 탐색은 `auto`) | 유추되지 않는 모델명은 이 행으로 떨어진다. 파라미터를 거절하면 `off`·`auto` 로 조정 |
-| **Anthropic** | — | — | — | — | — | — | OpenAI 호환 API 가 아니라 미지원(별도 어댑터 필요) |
+</details>
 
-## 아키텍처
+<details>
+<summary><b>Memory</b></summary>
 
-langgraph `StateGraph` 분기: **router → { answer | reader | investigator → 끝 | [plan →] coder → verifier(fail 시 plan 재수립 후 재시도 1회) }**.
+- Three kinds in `<workspace>/.koda/memory/`: `semantic` (facts), `episodic` (what was done, with dates), `procedural` (rules to follow).
+- After each turn in the TUI or `koda chat`, a judge call picks at most two items per kind (200 characters each). Most turns store nothing; saved items are announced. There is no batch extraction at session end. `koda run` only reads memory.
+- A kind over 3,000 characters is consolidated by the LLM. `/remember [kind] <text>` adds one by hand.
+- All three are injected into every agent's system prompt: rules as instructions, episodes as reference cases.
+- Separately, the session history carries references such as "the file you just made" from turn to turn.
 
-- **LLM** — OpenAI 호환 엔드포인트 하나(`init_chat_model`). 모델명 접두로 provider 프로필(`gpt-*`→OpenAI, `deepseek-*`→DeepSeek)을 골라 base_url·`REASONING_STYLE`·`STRUCTURED_METHOD` 를 채우고, 명시한 환경변수가 우선한다. `PRIMARY=local` 이면 llama.cpp 를 우선하며 API 는 폴백(반대 방향도 대칭). reasoning 파라미터를 모르는 gpt-4o 류는 `REASONING_STYLE=off`, llama.cpp 는 `qwen` 으로 사고 예산을 쓴다.
-- **에이전트** — `AgentSpec` 레지스트리 + `create_agent`. answer/reader/investigator/coder/planner + 컨텍스트 격리용 `explore`(위임 탐색). answer 는 워크스페이스 도구를 쥐지 않아 개념·용어 질문에 검색 루프를 돌지 않는다. verifier 는 diff 기반 단일 판정.
-- **구조화 출력** — router `{route, plan_needed}`·verifier `{verdict, reasoning}` 를 `STRUCTURED_METHOD` 방식으로 받는다(기본 `function_calling`, llama.cpp 는 문법 강제 `json_schema`, 빈 값이면 강제력 순 탐색). 실패 시 텍스트 폴백.
-- **미들웨어** — 도구 스텝 상한(루프 폭주 차단) → 승인 게이트 → 출력 트림+redaction → 히스토리 트림(토큰 예산).
-- **프롬프트** — 외부 `prompts/*.md`, 코드 인라인 금지.
+</details>
 
-서브에이전트 추가 = `AGENTS` 레지스트리 항목 + `prompts/<name>.md`.
+<details>
+<summary><b>Context budget and prompt cache</b></summary>
 
-## 도구 (요약)
+- The 122k default is sized as ~17k system prompt and tool schemas + ~12k compacted history + ~93k tool output within a turn.
+- Before each model call, history is trimmed to the budget minus the system prompt, the measured tool schemas and 4,096 output tokens, keeping the first user message and tool-call pairs intact.
+- Past ~36,000 characters of history (scaled with the budget), older turns are summarized and the last 4 are kept verbatim; `/compact` does it on demand.
+- Read caps: `read_file` without a range returns up to 400 lines or 120k characters; `search_text` returns 80 hits by default, 200 at most.
+- Tool schemas cost real budget: 44 tools measured about 12k tokens, 74 tools about 61k. Disable MCP servers you don't use.
+- The system prompt goes static to dynamic (the date only, no clock), MCP tools load once per session and history only grows between compactions, so the prompt prefix stays cacheable until the agent changes, a memory is saved or history is compacted. Measured on DeepSeek `deepseek-flash` in three 5-turn `koda chat` sessions of read-only questions (2026-09-30): 69–74% of the prompt tokens in turns 2–5 were cache hits, a median 88% inside a turn's tool loop. A turn's first request got only 14–37% when the route had switched to another agent or a memory had been saved since ([data](benchmarks/results/chat-cache-20260930/README.md)).
 
-에이전트가 자율 호출하며, 판단은 LLM·집행(게이트·상한·샌드박스)은 코드가 맡는다.
+</details>
 
-- **읽기 (무승인)** — `read_file`(줄번호+범위 발췌), `list_files`, `search_text`(캡+glob), `run_readonly_command`(조사용 read-only 셸, 파이프·글롭 일괄 탐색), `explore`(위임 탐색), `read_artifact`, `analyze_image`, `skill`.
-- **변경 (승인 게이트)** — `write_file` · `edit_file`(replace_all) · `multi_edit`(전체 롤백) · `patch_file`(라인패치, 앵커 검증) · `create_dir` · `delete_path`, `run_command`(명령 실행).
-- **MCP** — 전역 `~/.koda/mcps/`·프로젝트 `<workspace>/mcps/` 의 설정을 로드, 기본 전부 승인. 읽기 전용은 `KODA_MCP_AUTO_APPROVE` 로 opt-in 자동승인. 상세는 [`docs/mcp/`](docs/mcp/README.md).
+<details>
+<summary><b>Providers</b></summary>
 
-편집은 원자적(실행비트 보존)이고, 큰 도구 출력은 8k 에서 트림하되 원문을 `.koda/artifacts/`에 보존(시크릿 redaction)해 `read_artifact` 로 재조회한다 — 증거는 잃지 않고 컨텍스트만 아낀다.
+- The model-name prefix picks the profile, so switching providers means changing `MODEL` and that provider's key. `/model` switches mid-session.
+- `PRIMARY=local` prefers a local llama.cpp server and falls back to the API key when it's down (and the reverse).
+- If `MODEL` is set in the environment but `.env` still holds another provider's official URL, koda switches to the new provider's URL and derived settings. A self-hosted URL is kept.
+- A missing key stops koda at startup with instructions instead of a 401 on the first request.
 
-## 안전
+</details>
 
-1. **정적 deny gate** (`denygate.py`) — `sudo` · `curl|sh` · 대량 삭제 · `find -exec` 등은 `--yolo` 로도 우회 불가, 시크릿 접근은 대화형 승인 필수.
-2. **승인 게이트** (`PermissionMiddleware`) — 읽기 외 모든 도구를 HITL 게이트(default-deny). sync·async 양쪽 훅에 걸려 MCP(async) 경로도 우회 불가.
-3. **샌드박스** — 모든 경로가 워크스페이스 루트에 confine(`.koda/` 비노출). bubblewrap 설치 시 셸을 루트 read-only OS 격리로 실행.
-4. **시크릿 redaction** — 접근 경로와 무관하게 모든 도구 출력의 시크릿 패턴을 마스킹(`.env`·키 유출 차단).
+<details>
+<summary><b>Tracing (Langfuse)</b></summary>
 
-## MCP 확장
+- Traces go to Langfuse, not to local files.
+- One trace per turn, named after the session title, with the request and final answer as input and output. `session_id` groups a conversation in the Langfuse Sessions view.
+- Child observations hold each agent's tool I/O and token usage per model call.
+- Without keys, or if the auth check fails, tracing turns off quietly and never fails a turn. `docker compose up -d` starts a local stack at `http://localhost:28900`.
 
-외부 MCP 서버(웹 검색·최신 문서 조회·브라우저 등)를 붙이면 그 도구를 에이전트가 판단해 쓴다. 코드 수정 없이 설정 파일 하나로 붙는다.
+</details>
 
-```bash
-koda mcp add --url https://mcp.context7.com/mcp      # 기본은 전역(~/.koda/mcps). 저장 전에 실제로 붙여 본다
-koda mcp add -- npx -y @playwright/mcp@latest        # `--` 뒤는 실행 명령(stdio)
-koda mcp list · remove <이름> · enable|disable <이름> [--here]
+## Safety model
+
+Four layers, applied in order. Know the limits before you use `--yolo`.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/safety-layers-dark.svg">
+    <img src="docs/assets/safety-layers-light.svg" alt="koda's four safety layers, applied to every tool call in order: 1 a static deny gate on shell commands; 2 default-deny approval, where eight read-only tools run without asking and --yolo auto-approves the rest; 3 workspace confinement for file tools, with bubblewrap for shell commands on Linux only (macOS has none); 4 secret redaction in tool output, which does not cover the snapshot diff given to the verifier. --yolo only changes layer 2" width="860">
+  </picture>
+</p>
+
+| Layer | What it does | Limits |
+|---|---|---|
+| 1. Deny list | Never runs `sudo`/`su`, `curl … \| sh`, `git reset --hard`, `git clean -f`, `chmod 777`, `mkfs`/`dd` to devices, `find -delete`, fork bombs, or recursive `rm` on dangerous targets. Commands that touch credential paths, key files or `.env`, `git push --force`, `find -exec`, and `cp`/`mv` out of the workspace need a person to approve them; `--yolo` refuses them. | Regex-based. Checks `run_command` and `run_readonly_command` (which refuses both tiers), not file or MCP tools. |
+| 2. Approval gate | Every tool outside the 8 read-only ones asks first and defaults to deny, MCP tools included unless listed in `KODA_MCP_AUTO_APPROVE`. Hooked on sync and async paths. A TUI prompt left unanswered for 600 s is denied; piped `koda chat` without `--yolo` denies. | `--yolo` approves everything layer 1 allows. `run_readonly_command` is one of the 8 and never asks. |
+| 3. Sandbox | File tools are confined to the workspace and can't see `.koda/`. With bubblewrap, `run_command` gets a read-only root with only the workspace and `~/.cache` writable, and the read-only shell runs with `--unshare-all` and read-only binds. | bubblewrap is Linux-only; `BH_SANDBOX=off` turns it off (for containers that can't create namespaces). Without it, shell commands run unsandboxed and koda prints a warning: `run_readonly_command` is then read-only by instruction and the deny list only. `run_command`'s sandbox doesn't cut the network. |
+| 4. Redaction | Private-key blocks, `sk-`/`pk-`/`ghp_`/`gho_`/`xoxb`/`xoxp` tokens and `api_key`/`secret`/`token`/`password`/`authorization` assignments are masked in tool results before the model sees them, in saved artifacts and in the tool log the verifier reads. | Pattern-based. The file diff the verifier reads is not masked. |
+
+## Configuration
+
+Settings come from shell variables, then `.env` in the current directory, then `~/.koda/.env`; the first one that sets a value wins. Full list: [`.env.example`](.env.example).
+
+| Provider | `MODEL` | Key | Notes |
+|---|---|---|---|
+| **DeepSeek** (default) | `deepseek-*` (default `deepseek-v4-flash`) | `DEEPSEEK_API_KEY` | Chat Completions, function-calling structured output. `deepseek-v4-flash` is a retired name DeepSeek still accepts and serves with DeepSeek-V4.1-Flash; its docs, the demo and the benchmarks use `deepseek-flash`. |
+| **OpenAI** | `gpt-*`, `o1`/`o3`/`o4`, `chatgpt-*` | `OPENAI_API_KEY` | Sent through the Responses API, because Chat Completions rejects tools combined with reasoning. Set `REASONING_STYLE=off` for models without reasoning (gpt-4o). |
+| **llama.cpp** (local) | any, via `LOCAL_MODEL_NAME` | `LOCAL_API_KEY` if the server wants one | `PRIMARY=local LOCAL_OPENAI_BASE_URL=http://localhost:8080/v1 REASONING_STYLE=qwen STRUCTURED_METHOD=json_schema` |
+
+Any other OpenAI-compatible server (vLLM, a proxy) works with `MODEL`, `OPENAI_BASE_URL` and `OPENAI_API_KEY`. Anthropic's API is not OpenAI-compatible and isn't supported. Tuning: `REASONING_STYLE`, `REASONING_EFFORT`, `THINKING_BUDGET_READER`/`_EXPLORE`, `STRUCTURED_METHOD`, `CONTEXT_BUDGET_TOKENS`, `KODA_MCP_AUTO_APPROVE`, `LANGFUSE_*`. Per-provider blocks and troubleshooting: [docs/providers/](docs/providers/README.md).
+
+## Docs
+
+| | |
+|---|---|
+| [Onboarding](docs/onboarding.md) | Install, first run, settings, workspace files, safety, development, troubleshooting |
+| [TUI guide](docs/tui.md) | Session panel, status line, keys, commands, how turns are displayed |
+| [Providers](docs/providers/README.md) | Environment blocks per provider, endpoint compatibility, adding a provider |
+| [MCP](docs/mcp/README.md) | Adding servers, keys, auto-approval, troubleshooting |
+| [Benchmarks](benchmarks/README.md) | Method and results of the koda / opencode / Hermes comparison |
+
+The guides under `docs/` are written in Korean for now.
+
+## Development
+
+```sh
+git clone https://github.com/DONGRYEOLLEE1/koda && cd koda
+uv sync --extra tui                                          # without the extra, TUI tests fail
+uv run python -m pytest --ignore=tests/test_live_llm.py -q   # python -m: `uv run pytest` may not find the script
 ```
 
-- **전역** `~/.koda/mcps/` 는 모든 워크스페이스에서, **프로젝트** `<workspace>/mcps/`(`--scope project`)는 그 워크스페이스에서만 잡힌다. 같은 서버명이면 프로젝트가 덮는다.
-- 키는 `${VAR}` 로 참조하고 `~/.koda/.env` 에 둔다. 도구 스키마는 모든 호출의 프롬프트에 실리므로 안 쓰는 서버는 꺼 둔다.
-- 깨진 설정 파일은 조용히 버리지 않고 `/mcp`·`koda mcp list` 에 파일명과 `형식 오류` 로 표시한다.
+- 404 tests pass on Python 3.13.13 and 3.14.5 (macOS, 2026-09-30, pytest reports 34–38 s). The CI workflow runs the same command on `ubuntu-latest` with Python 3.14 (from `.python-version`) for pushes to `main` and for pull requests. `tests/test_live_llm.py` calls a real endpoint and is excluded.
+- About 6.9k lines of Python in 44 modules (2.7k of them the TUI), 23 prompt files, 5.8k lines of tests.
+- `uv tool install --python 3.13 -e ".[tui]" --force` makes the `koda` on your PATH run your working tree.
 
-등록 방식·키 다루기·자동 승인·동작 방식·문제 해결은 [`docs/mcp/`](docs/mcp/README.md) 에 있다.
+## License
 
-## 멀티턴과 메모리
-
-```
-<workspace>/.koda/
-  ├─ memory/
-  │    ├─ semantic.md      # 사실: 사용자·프로젝트에 대한 지속적 사실·선호
-  │    ├─ episodic.md      # 경험: 실제로 한 일과 결과 (날짜 포함), 다음 작업의 참고 사례
-  │    └─ procedural.md    # 규칙: 사용자가 앞으로 지키라고 한 지시·작업 방식
-  └─ sessions/<id>.json   # 세션(히스토리). TUI 에서 /resume 으로 목록 선택·재개
-```
-
-- 메모리는 langchain 의 구분(semantic·episodic·procedural)을 따르며, **턴이 끝날 때마다** 판정자 LLM 이 사용자 질의와 답변을 보고 저장할 것이 있는지 유형별로 고른다. 대부분의 턴은 아무것도 저장하지 않고, 저장되면 화면에 `기억(유형): …` 으로 알린다. 세션 종료 시 일괄 추출은 하지 않는다.
-- `/remember [semantic|episodic|procedural] <내용>` 으로 직접 넣을 수 있다(유형 생략 시 semantic). 유형별 상한(3,000자)을 넘으면 그 유형만 LLM 이 통합 요약한다.
-- 세 유형은 모든 에이전트의 시스템 프롬프트에 소제목별로 주입된다. 규칙(procedural)은 지시로, 경험(episodic)은 비슷한 작업의 참고 사례로 쓰인다.
-- 세션이 히스토리를 유지·영속해 "방금 만든 파일에 …" 같은 지시어를 해소한다. 히스토리가 임계(≈12k tok)를 넘으면 오래된 턴을 LLM 요약으로 치환한다(최근 4턴 원본 유지).
-- 안정 prefix(system + 메모리 + 도구 고정) + append-only 히스토리 구조로 프롬프트 캐시를 극대화한다.
-
-## 추적 (langfuse)
-
-로컬 파일로 저장하지 않고 langfuse(`http://localhost:28900`)에 기록한다. 턴 1건 = 1 trace 이며, trace 이름은 세션 제목(첫 실질 턴이 끝날 때 질의·답변로 10~15자로 짓고 이후 턴은 그대로 쓴다. 제목이 없는 동안은 질의 앞부분), 입력과 출력은 질의와 최종 답변의 원문이다. 같은 세션의 턴들은 `session_id`(세션 id)로 묶여 langfuse Sessions 뷰에서 한 대화로 보인다. 각 에이전트의 툴 호출 IO와 모델 호출별 토큰(input/output/total)이 그 아래 관측으로 남아 재구성·비용 분석이 가능하다.
+MIT. See [LICENSE](LICENSE).

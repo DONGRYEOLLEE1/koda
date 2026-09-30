@@ -1,0 +1,29 @@
+// One-click trial in GitHub Codespaces: https://codespaces.new/DONGRYEOLLEE1/koda?quickstart=1
+// The visitor brings their own DeepSeek key (asked for below as a recommended secret)
+// and the codespace is billed to the visitor's account.
+{
+  "name": "koda",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.13-bookworm",
+  "hostRequirements": { "cpus": 2 },
+
+  "secrets": {
+    "DEEPSEEK_API_KEY": {
+      "description": "DeepSeek API key for koda's default model. Leave it empty to set OPENAI_API_KEY + MODEL yourself later.",
+      "documentationUrl": "https://platform.deepseek.com/api_keys"
+    }
+  },
+
+  // uv installs koda (with the TUI) from this checkout, editable, so changes to the
+  // source run immediately. bubblewrap is deliberately not installed: koda enables
+  // its shell sandbox whenever bwrap is on PATH, and unprivileged containers often
+  // can't create the namespaces bwrap needs.
+  "postCreateCommand": "curl -LsSf https://astral.sh/uv/install.sh | sh && \"$HOME/.local/bin/uv\" tool install --force --python 3.13 --editable '.[tui]'",
+  "remoteEnv": { "PATH": "${containerEnv:PATH}:/home/vscode/.local/bin" },
+  "postAttachCommand": "echo 'koda is installed. Run: koda   (asks before writes and commands; headless: koda run \"<task>\" --workspace .)'",
+  "waitFor": "postCreateCommand",
+
+  "customizations": {
+    "codespaces": { "openFiles": ["README.md"] },
+    "vscode": { "extensions": ["ms-python.python"] }
+  }
+}

@@ -1,0 +1,48 @@
+%%{init: {"flowchart": {"wrappingWidth": 300}}}%%
+%% koda architecture: one turn = one LangGraph run (src/koda/agents/graph.py). Reflects koda @ 63fda57.
+%% Polished SVG versions: docs/assets/architecture-light.svg / architecture-dark.svg
+flowchart TD
+    IN["koda · koda chat · koda run<br/>task + session history"]
+    R{{"<b>route</b><br/>1 structured LLM call<br/>unparseable → inspect"}}
+    IN --> R
+
+    A["<b>answer</b><br/>no file tools<br/>MCP · vision · ≤ 5 steps"]
+    RD["<b>reader</b><br/>read-only files + shell<br/>explore · ≤ 20 steps"]
+    INV["<b>investigator</b><br/>same read-only tools<br/>shell-first · ≤ 25 steps"]
+
+    subgraph EDIT["edit path: the only one with write tools, the only one verified"]
+        PN{"plan_needed?"}
+        P["<b>plan</b> (optional)<br/>read-only · ≤ 5-item<br/>checklist · ≤ 15 steps"]
+        C["<b>coder</b> · read + write<br/>run_command, 6 edit tools<br/>snapshots workspace first"]
+        V["<b>verify</b> · no tools<br/>hash-snapshot diff<br/>+ observed tool log<br/>→ one structured verdict"]
+        PN -- yes --> P
+        PN -- no --> C
+        P --> C
+        C --> V
+        V -. "fail, once · plan_needed" .-> P
+        V -. "fail, once · otherwise" .-> C
+    end
+
+    R -- answer --> A
+    R -- read --> RD
+    R -- inspect --> INV
+    R -- edit --> EDIT
+
+    E(["<b>END</b><br/>Langfuse trace per turn, if configured"])
+    A -- no verify --> E
+    RD -- no verify --> E
+    INV -- no verify --> E
+    V -- "pass, or retry used" --> E
+
+    subgraph MW["inside every agent node · middleware, outermost first"]
+        direction LR
+        SB["StepBudget<br/>per-agent tool cap"] --> PM["Permission<br/>① deny gate<br/>② approval, default deny"]
+        PM --> TR["tool runs<br/>③ workspace confine<br/>bwrap on Linux, if installed"]
+        TR --> OT["ToolOutputTrim<br/>④ redact secrets<br/>cap → artifact"]
+    end
+    E ~~~ MW
+
+    classDef edit stroke:#7c74f4,stroke-width:2px
+    classDef verify stroke:#2ea043,stroke-width:2px
+    class P,C edit
+    class V verify

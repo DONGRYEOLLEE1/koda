@@ -1,0 +1,217 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1822" viewBox="0 0 1600 1822" role="img" aria-labelledby="arch-title arch-desc" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, &quot;Noto Sans&quot;, sans-serif">
+<title id="arch-title">koda agent architecture</title>
+<desc id="arch-desc">Each turn is one LangGraph run. A router sends the request to answer, reader, investigator or the edit path. Read paths end without verification; the edit path runs an optional planner, a coder with write tools, and a verifier that judges a hash-snapshot diff plus the observed tool log, retrying once on failure. Every agent node runs the same middleware chain: step budget, permission (deny gate then approval), tool execution confined to the workspace (bubblewrap on Linux only), output redaction and trimming, and history trimming before model calls.</desc>
+<defs><marker id="arch-arrow-muted" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#6e77a6"/></marker><marker id="arch-arrow-fg" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#9aa5ce"/></marker><marker id="arch-arrow-primary" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#7c74f4"/></marker><marker id="arch-arrow-green" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#7ee787"/></marker><marker id="arch-arrow-rose" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#f7768e"/></marker><marker id="arch-arrow-amber" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#e0af68"/></marker></defs>
+<rect width="1600" height="1822" fill="#191a24"/>
+<text x="48" y="66" font-size="36" fill="#c0caf5"><tspan fill="#e6e9ff" font-weight="800">koda</tspan><tspan fill="#9aa5ce" font-weight="400">  agent architecture</tspan></text>
+<text x="48" y="102" font-size="19" fill="#9aa5ce">Each turn is one LangGraph run. Requests go to the narrowest path; only the edit path gets write tools, and only it is verified.</text>
+<text x="48" y="164" font-size="16" font-weight="700" fill="#9aa5ce" letter-spacing="1.6">ENTRY</text>
+<rect x="48" y="180" width="440" height="40" rx="10" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="arch-entry0"/>
+<text x="66" y="207" font-size="18" font-weight="600" fill="#e6e9ff" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="arch-entry0">koda</text>
+<text x="190" y="207" font-size="18" fill="#9aa5ce" data-box="arch-entry0">TUI · parallel sessions</text>
+<rect x="48" y="226" width="440" height="40" rx="10" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="arch-entry1"/>
+<text x="66" y="253" font-size="18" font-weight="600" fill="#e6e9ff" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="arch-entry1">koda chat</text>
+<text x="190" y="253" font-size="18" fill="#9aa5ce" data-box="arch-entry1">REPL · stdin batch</text>
+<rect x="48" y="272" width="440" height="40" rx="10" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="arch-entry2"/>
+<text x="66" y="299" font-size="18" font-weight="600" fill="#e6e9ff" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="arch-entry2">koda run</text>
+<text x="190" y="299" font-size="18" fill="#9aa5ce" data-box="arch-entry2">headless · exit 1 on fail</text>
+<path d="M488 200 H520" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M488 246 H520" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M488 292 H520" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M520 200 V292" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M520 246 H656" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-muted)"/>
+<text x="590" y="236" font-size="16" fill="#9aa5ce" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">task +</text>
+<text x="590" y="270" font-size="16" fill="#9aa5ce" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">history</text>
+<rect x="660" y="150" width="400" height="152" rx="14" fill="#2a2d3e" stroke="#5b6390" stroke-width="2" id="arch-route"/>
+<text x="684" y="196" font-size="36" font-weight="700" fill="#e6e9ff" data-box="arch-route">route</text>
+<text x="808" y="194" font-size="18" fill="#9aa5ce" data-box="arch-route">1 structured LLM call</text>
+<text x="684" y="228" font-size="17" fill="#c0caf5" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="arch-route">answer | read | inspect | edit</text>
+<text x="684" y="256" font-size="18" fill="#c0caf5" data-box="arch-route">+ plan_needed for edits</text>
+<text x="684" y="284" font-size="18" fill="#9aa5ce" data-box="arch-route">unparseable → inspect (read-only)</text>
+<text x="1100" y="164" font-size="16" font-weight="700" fill="#9aa5ce" letter-spacing="1.6">LEGEND</text>
+<rect x="1100" y="178" width="114" height="28" rx="14" fill="#191a24" stroke="#9aa5ce" stroke-width="1.5" id="arch-chip26"/>
+<text x="1157" y="197.4" font-size="15" font-weight="700" fill="#9aa5ce" text-anchor="middle" letter-spacing="0.8" data-box="arch-chip26">NO TOOLS</text>
+<rect x="1222" y="178" width="125" height="28" rx="14" fill="#191a24" id="arch-chip28-bg"/>
+<rect x="1222" y="178" width="125" height="28" rx="14" fill="#c0caf5" fill-opacity="0.12" stroke="#c0caf5" stroke-width="1" id="arch-chip28"/>
+<text x="1284.5" y="197.4" font-size="15" font-weight="700" fill="#c0caf5" text-anchor="middle" letter-spacing="0.8" data-box="arch-chip28">READ-ONLY</text>
+<rect x="1355" y="178" width="159" height="28" rx="14" fill="#7c74f4" id="arch-chip31"/>
+<text x="1434.5" y="197.4" font-size="15" font-weight="700" fill="#14151d" text-anchor="middle" letter-spacing="0.8" data-box="arch-chip31">READ + WRITE</text>
+<path d="M1100 234 H1144" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-muted)"/>
+<text x="1156" y="240" font-size="18" fill="#9aa5ce">always</text>
+<path d="M1230 234 H1274" fill="none" stroke="#f7768e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 5" marker-end="url(#arch-arrow-rose)"/>
+<text x="1286" y="240" font-size="18" fill="#9aa5ce">retry on verify fail (once)</text>
+<text x="1100" y="272" font-size="18" fill="#9aa5ce"><tspan fill="#c0caf5" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">explore</tspan><tspan > = read-only sub-agent tool;</tspan></text>
+<text x="1100" y="296" font-size="18" fill="#9aa5ce">returns only a summary, once per turn</text>
+<path d="M860 302 V334" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M188 334 H988" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="956" y="392" width="596" height="668" rx="18" fill="#7c74f4" fill-opacity="0.1" stroke="#7c74f4" stroke-width="2" id="arch-edit"/>
+<path d="M188 334 V396" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-muted)"/>
+<rect x="148.72" y="348" width="78.56" height="26" rx="6" fill="#191a24" stroke="#5b6390" stroke-width="1.5" id="arch-drop-answer"/>
+<text x="188" y="366" font-size="16" fill="#c0caf5" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="arch-drop-answer">answer</text>
+<path d="M488 334 V396" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-muted)"/>
+<rect x="458.48" y="348" width="59.04" height="26" rx="6" fill="#191a24" stroke="#5b6390" stroke-width="1.5" id="arch-drop-read"/>
+<text x="488" y="366" font-size="16" fill="#c0caf5" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="arch-drop-read">read</text>
+<path d="M788 334 V396" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-muted)"/>
+<rect x="743.84" y="348" width="88.32" height="26" rx="6" fill="#191a24" stroke="#5b6390" stroke-width="1.5" id="arch-drop-inspect"/>
+<text x="788" y="366" font-size="16" fill="#c0caf5" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="arch-drop-inspect">inspect</text>
+<path d="M988 334 V482" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="958.48" y="348" width="59.04" height="26" rx="6" fill="#191a24" stroke="#7c74f4" stroke-width="1.5" id="arch-drop-edit"/>
+<text x="988" y="366" font-size="16" fill="#a59ffb" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="arch-drop-edit">edit</text>
+<rect x="48" y="398" width="280" height="300" rx="14" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="arch-col-answer"/>
+<text x="70" y="442" font-size="32" font-weight="700" fill="#e6e9ff" data-box="arch-col-answer">answer</text>
+<text x="70" y="470" font-size="18" fill="#9aa5ce" data-box="arch-col-answer">general question</text>
+<rect x="70" y="486" width="170" height="28" rx="14" fill="#191a24" stroke="#9aa5ce" stroke-width="1.5" id="arch-chip57"/>
+<text x="155" y="505.4" font-size="15" font-weight="700" fill="#9aa5ce" text-anchor="middle" letter-spacing="0.8" data-box="arch-chip57">NO FILE TOOLS</text>
+<path d="M70 532 H306" fill="none" stroke="#3b3f57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="70" y="560" font-size="18" fill="#c0caf5" data-box="arch-col-answer">MCP tools</text>
+<text x="70" y="586" font-size="18" fill="#c0caf5" data-box="arch-col-answer">analyze_image</text>
+<text x="70" y="612" font-size="18" fill="#c0caf5" data-box="arch-col-answer">read_artifact</text>
+<text x="70" y="638" font-size="18" fill="#9aa5ce" data-box="arch-col-answer">no explore, no skills</text>
+<text x="70" y="678" font-size="18" fill="#9aa5ce" data-box="arch-col-answer">thinking · ≤ 5 steps</text>
+<rect x="348" y="398" width="280" height="300" rx="14" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="arch-col-read"/>
+<text x="370" y="442" font-size="32" font-weight="700" fill="#e6e9ff" data-box="arch-col-read">reader</text>
+<text x="370" y="470" font-size="18" fill="#9aa5ce" data-box="arch-col-read">answers from files</text>
+<rect x="370" y="486" width="125" height="28" rx="14" fill="#191a24" id="arch-chip68-bg"/>
+<rect x="370" y="486" width="125" height="28" rx="14" fill="#c0caf5" fill-opacity="0.12" stroke="#c0caf5" stroke-width="1" id="arch-chip68"/>
+<text x="432.5" y="505.4" font-size="15" font-weight="700" fill="#c0caf5" text-anchor="middle" letter-spacing="0.8" data-box="arch-chip68">READ-ONLY</text>
+<path d="M370 532 H606" fill="none" stroke="#3b3f57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="370" y="560" font-size="18" fill="#c0caf5" data-box="arch-col-read">read / search / list files</text>
+<text x="370" y="586" font-size="18" fill="#c0caf5" data-box="arch-col-read">read-only shell</text>
+<text x="370" y="612" font-size="18" fill="#c0caf5" data-box="arch-col-read">explore sub-agent</text>
+<text x="370" y="638" font-size="18" fill="#c0caf5" data-box="arch-col-read">MCP · skills · vision</text>
+<text x="370" y="678" font-size="18" fill="#9aa5ce" data-box="arch-col-read">thinking · ≤ 20 steps</text>
+<rect x="648" y="398" width="280" height="300" rx="14" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="arch-col-inspect"/>
+<text x="670" y="442" font-size="32" font-weight="700" fill="#e6e9ff" data-box="arch-col-inspect">investigator</text>
+<text x="670" y="470" font-size="18" fill="#9aa5ce" data-box="arch-col-inspect">shell-first inspection</text>
+<rect x="670" y="486" width="125" height="28" rx="14" fill="#191a24" id="arch-chip80-bg"/>
+<rect x="670" y="486" width="125" height="28" rx="14" fill="#c0caf5" fill-opacity="0.12" stroke="#c0caf5" stroke-width="1" id="arch-chip80"/>
+<text x="732.5" y="505.4" font-size="15" font-weight="700" fill="#c0caf5" text-anchor="middle" letter-spacing="0.8" data-box="arch-chip80">READ-ONLY</text>
+<path d="M670 532 H906" fill="none" stroke="#3b3f57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="670" y="560" font-size="18" fill="#c0caf5" data-box="arch-col-inspect">same toolset as reader</text>
+<text x="670" y="586" font-size="18" fill="#c0caf5" data-box="arch-col-inspect">shell-first prompt</text>
+<text x="670" y="612" font-size="18" fill="#9aa5ce" data-box="arch-col-inspect">router fallback when</text>
+<text x="670" y="638" font-size="18" fill="#9aa5ce" data-box="arch-col-inspect">the reply is unparseable</text>
+<text x="670" y="678" font-size="18" fill="#9aa5ce" data-box="arch-col-inspect">thinking · ≤ 25 steps</text>
+<text x="1024" y="428" font-size="16" font-weight="800" fill="#a59ffb" letter-spacing="1.6" data-box="arch-edit">EDIT PATH</text>
+<text x="1024" y="454" font-size="18" fill="#9aa5ce" data-box="arch-edit">only path with write tools · only path verified</text>
+<path d="M988 482 L1002 496 L988 510 L974 496 Z" fill="#191a24" stroke="#7c74f4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1014" y="502" font-size="17" fill="#c0caf5" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">plan_needed?</text>
+<path d="M988 510 V755 Q988 767 1000 767 H1048" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-primary)"/>
+<path d="M988 596 H1048" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-primary)"/>
+<text x="1019" y="586" font-size="16" fill="#a59ffb" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">yes</text>
+<text x="1019" y="757" font-size="16" fill="#a59ffb" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">no</text>
+<rect x="1050" y="540" width="312" height="112" rx="14" fill="#191a24" stroke="#7c74f4" stroke-width="2" stroke-dasharray="8 6" id="arch-plan"/>
+<text x="1072" y="584" font-size="34" font-weight="700" fill="#e6e9ff" data-box="arch-plan">plan</text>
+<rect x="1219" y="558" width="125" height="28" rx="14" fill="#191a24" id="arch-chip99-bg"/>
+<rect x="1219" y="558" width="125" height="28" rx="14" fill="#c0caf5" fill-opacity="0.12" stroke="#c0caf5" stroke-width="1" id="arch-chip99"/>
+<text x="1281.5" y="577.4" font-size="15" font-weight="700" fill="#c0caf5" text-anchor="middle" letter-spacing="0.8" data-box="arch-chip99">READ-ONLY</text>
+<text x="1072" y="616" font-size="18" fill="#c0caf5" data-box="arch-plan">≤ 5-item checklist, enforced</text>
+<text x="1072" y="642" font-size="18" fill="#9aa5ce" data-box="arch-plan">optional · no-think · ≤ 15</text>
+<rect x="1050" y="696" width="312" height="142" rx="14" fill="#191a24" stroke="#7c74f4" stroke-width="2.5" id="arch-coder"/>
+<text x="1072" y="740" font-size="34" font-weight="700" fill="#e6e9ff" data-box="arch-coder">coder</text>
+<rect x="1185" y="714" width="159" height="28" rx="14" fill="#7c74f4" id="arch-chip106"/>
+<text x="1264.5" y="733.4" font-size="15" font-weight="700" fill="#14151d" text-anchor="middle" letter-spacing="0.8" data-box="arch-chip106">READ + WRITE</text>
+<text x="1072" y="772" font-size="18" fill="#c0caf5" data-box="arch-coder">read · shell · 6 edit tools</text>
+<text x="1072" y="798" font-size="18" fill="#9aa5ce" data-box="arch-coder">snapshots workspace first</text>
+<text x="1072" y="824" font-size="18" fill="#9aa5ce" data-box="arch-coder">no-think · ≤ 35 steps</text>
+<rect x="1050" y="882" width="312" height="164" rx="14" fill="#191a24" stroke="#7c74f4" stroke-width="2.5" id="arch-verify"/>
+<text x="1072" y="926" font-size="34" font-weight="700" fill="#e6e9ff" data-box="arch-verify">verify</text>
+<rect x="1230" y="900" width="114" height="28" rx="14" fill="#191a24" stroke="#9aa5ce" stroke-width="1.5" id="arch-chip113"/>
+<text x="1287" y="919.4" font-size="15" font-weight="700" fill="#9aa5ce" text-anchor="middle" letter-spacing="0.8" data-box="arch-chip113">NO TOOLS</text>
+<text x="1072" y="958" font-size="18" fill="#c0caf5" data-box="arch-verify">snapshot diff + tool log</text>
+<text x="1072" y="984" font-size="18" fill="#c0caf5" data-box="arch-verify">→ one structured verdict</text>
+<text x="1072" y="1010" font-size="18" fill="#9aa5ce" data-box="arch-verify">+ reviewer if ≥ 2 files</text>
+<text x="1072" y="1036" font-size="18" fill="#9aa5ce" data-box="arch-verify">  or diff &gt; 2,000 chars</text>
+<path d="M1206 652 V694" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-primary)"/>
+<path d="M1206 838 V880" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-primary)"/>
+<path d="M1362 964 H1502 Q1514 964 1514 952 V608 Q1514 596 1502 596 H1364" fill="none" stroke="#f7768e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="7 6" marker-end="url(#arch-arrow-rose)"/>
+<path d="M1514 767 H1364" fill="none" stroke="#f7768e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="7 6" marker-end="url(#arch-arrow-rose)"/>
+<text x="1438" y="584" font-size="16" fill="#f7768e" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">if plan_needed</text>
+<text x="1438" y="755" font-size="16" fill="#f7768e" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">otherwise</text>
+<rect x="1364" y="950" width="148" height="28" rx="14" fill="#191a24" stroke="#f7768e" stroke-width="1.5" id="arch-chip125"/>
+<text x="1438" y="969.4" font-size="15" font-weight="700" fill="#f7768e" text-anchor="middle" letter-spacing="0.8" data-box="arch-chip125">FAIL · ONCE</text>
+<text x="1438" y="1006" font-size="16" fill="#f7768e" text-anchor="middle">with verifier</text>
+<text x="1438" y="1026" font-size="16" fill="#f7768e" text-anchor="middle">feedback</text>
+<path d="M1206 1046 V1094" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-primary)"/>
+<text x="1220" y="1084" font-size="16" fill="#a59ffb" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">pass, or retry used</text>
+<path d="M188 698 V1094" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-muted)"/>
+<path d="M488 698 V1094" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-muted)"/>
+<path d="M788 698 V1094" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-muted)"/>
+<rect x="48" y="834" width="880" height="116" rx="24" fill="#191a24" stroke="#5b6390" stroke-width="1.5" stroke-dasharray="5 5" id="arch-noverify"/>
+<text x="488" y="870" font-size="21" font-weight="700" fill="#c0caf5" text-anchor="middle" data-box="arch-noverify">no verify step on read paths</text>
+<text x="488" y="900" font-size="18" fill="#9aa5ce" text-anchor="middle" data-box="arch-noverify">they get no write tools; verify gates side effects, not prose</text>
+<text x="488" y="928" font-size="18" fill="#e0af68" text-anchor="middle" data-box="arch-noverify">without bwrap (macOS) the auto-approved read-only shell can write</text>
+<rect x="48" y="1096" width="1504" height="54" rx="12" fill="#2a2d3e" stroke="#5b6390" stroke-width="1.5" id="arch-end"/>
+<text x="800" y="1131" font-size="19" fill="#c0caf5" text-anchor="middle" data-box="arch-end"><tspan fill="#e6e9ff" font-weight="800" font-size="22">END</tspan><tspan fill="#9aa5ce">   answer streams to the user · chat / TUI append the turn to the session · Langfuse trace per turn, if configured</tspan></text>
+<text x="48" y="1200" font-size="16" font-weight="700" fill="#9aa5ce" letter-spacing="1.6">INSIDE EVERY AGENT NODE</text>
+<text x="340" y="1200" font-size="18" fill="#9aa5ce">LangChain create_agent middleware, outermost first · numbered badges = the four safety layers</text>
+<path d="M48 1274 H148" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-muted)"/>
+<text x="48" y="1258" font-size="16" fill="#9aa5ce" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">tool call</text>
+<rect x="150" y="1222" width="296" height="134" rx="12" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="arch-mw0"/>
+<text x="170" y="1258" font-size="22" font-weight="700" fill="#e6e9ff" data-box="arch-mw0">StepBudget</text>
+<text x="170" y="1290" font-size="18" fill="#c0caf5" data-box="arch-mw0">per-agent tool cap (5–35)</text>
+<text x="170" y="1316" font-size="18" fill="#9aa5ce" data-box="arch-mw0">over cap → "answer now"</text>
+<path d="M446 1274 H478" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-muted)"/>
+<rect x="480" y="1222" width="296" height="134" rx="12" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="arch-mw1"/>
+<text x="500" y="1258" font-size="22" font-weight="700" fill="#e6e9ff" data-box="arch-mw1">Permission</text>
+<circle cx="511" cy="1284" r="10" fill="#7c74f4" stroke="#7c74f4" stroke-width="1.5"/>
+<text x="511" y="1288.68" font-size="13" font-weight="800" fill="#14151d" text-anchor="middle">1</text>
+<text x="528" y="1290" font-size="18" fill="#c0caf5" data-box="arch-mw1">deny gate on shell cmds</text>
+<circle cx="511" cy="1310" r="10" fill="#7c74f4" stroke="#7c74f4" stroke-width="1.5"/>
+<text x="511" y="1314.68" font-size="13" font-weight="800" fill="#14151d" text-anchor="middle">2</text>
+<text x="528" y="1316" font-size="18" fill="#c0caf5" data-box="arch-mw1">approval, default deny</text>
+<text x="500" y="1342" font-size="18" fill="#e0af68" data-box="arch-mw1">--yolo skips the approval</text>
+<path d="M776 1274 H808" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-muted)"/>
+<rect x="810" y="1222" width="296" height="134" rx="12" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="arch-mw2"/>
+<text x="830" y="1258" font-size="22" font-weight="700" fill="#e6e9ff" data-box="arch-mw2">Tool runs</text>
+<circle cx="841" cy="1284" r="10" fill="#7c74f4" stroke="#7c74f4" stroke-width="1.5"/>
+<text x="841" y="1288.68" font-size="13" font-weight="800" fill="#14151d" text-anchor="middle">3</text>
+<text x="858" y="1290" font-size="18" fill="#c0caf5" data-box="arch-mw2">workspace confinement</text>
+<text x="830" y="1316" font-size="18" fill="#c0caf5" data-box="arch-mw2">+ bwrap for shells (Linux)</text>
+<text x="830" y="1342" font-size="18" fill="#e0af68" data-box="arch-mw2">macOS: shells unsandboxed</text>
+<path d="M1106 1274 H1138" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-muted)"/>
+<rect x="1140" y="1222" width="296" height="134" rx="12" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="arch-mw3"/>
+<text x="1160" y="1258" font-size="22" font-weight="700" fill="#e6e9ff" data-box="arch-mw3">ToolOutputTrim</text>
+<circle cx="1171" cy="1284" r="10" fill="#7c74f4" stroke="#7c74f4" stroke-width="1.5"/>
+<text x="1171" y="1288.68" font-size="13" font-weight="800" fill="#14151d" text-anchor="middle">4</text>
+<text x="1188" y="1290" font-size="18" fill="#c0caf5" data-box="arch-mw3">redact secrets</text>
+<text x="1160" y="1316" font-size="18" fill="#c0caf5" data-box="arch-mw3">cap ~8k chars → artifact</text>
+<text x="1160" y="1342" font-size="18" fill="#9aa5ce" data-box="arch-mw3">full text via read_artifact</text>
+<path d="M1436 1274 H1550" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arch-arrow-muted)"/>
+<text x="1552" y="1258" font-size="16" fill="#9aa5ce" text-anchor="end" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">to model</text>
+<rect x="48" y="1372" width="1504" height="50" rx="12" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="arch-histtrim"/>
+<text x="68" y="1404" font-size="18" fill="#c0caf5" data-box="arch-histtrim"><tspan fill="#e6e9ff" font-weight="700">HistoryTrim</tspan><tspan fill="#c0caf5">   before every model call: fit messages into budget − system prompt − measured tool schemas − 4,096 output tokens</tspan></text>
+<rect x="48" y="1462" width="358" height="292" rx="14" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="arch-aux0"/>
+<text x="70" y="1500" font-size="16" font-weight="700" fill="#9aa5ce" letter-spacing="1.4" data-box="arch-aux0">MEMORY &amp; SESSION</text>
+<text x="70" y="1536" font-size="18" fill="#c0caf5" data-box="arch-aux0">semantic · episodic · procedural</text>
+<text x="70" y="1562" font-size="18" fill="#9aa5ce" data-box="arch-aux0">judged + saved per chat turn</text>
+<text x="70" y="1588" font-size="18" fill="#9aa5ce" data-box="arch-aux0">fed to answer · reader ·</text>
+<text x="70" y="1614" font-size="18" fill="#9aa5ce" data-box="arch-aux0">investigator · plan · coder</text>
+<text x="70" y="1652" font-size="18" fill="#c0caf5" data-box="arch-aux0">session keeps final answers</text>
+<text x="70" y="1678" font-size="18" fill="#9aa5ce" data-box="arch-aux0">compacts past ~36k chars,</text>
+<text x="70" y="1704" font-size="18" fill="#9aa5ce" data-box="arch-aux0">keeps the last 4 turns</text>
+<rect x="430" y="1462" width="358" height="292" rx="14" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="arch-aux1"/>
+<text x="452" y="1500" font-size="16" font-weight="700" fill="#9aa5ce" letter-spacing="1.4" data-box="arch-aux1">PROMPT-CACHE PREFIX</text>
+<text x="452" y="1536" font-size="18" fill="#c0caf5" data-box="arch-aux1">agent prompt → budget → skills</text>
+<text x="452" y="1562" font-size="18" fill="#c0caf5" data-box="arch-aux1">→ memory → date (day only)</text>
+<text x="452" y="1600" font-size="18" fill="#9aa5ce" data-box="arch-aux1">static first, dynamic last</text>
+<text x="452" y="1626" font-size="18" fill="#9aa5ce" data-box="arch-aux1">MCP tool list fixed per session</text>
+<text x="452" y="1652" font-size="18" fill="#9aa5ce" data-box="arch-aux1">history append-only until</text>
+<text x="452" y="1678" font-size="18" fill="#9aa5ce" data-box="arch-aux1">compaction (one cache miss)</text>
+<rect x="812" y="1462" width="358" height="292" rx="14" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="arch-aux2"/>
+<text x="834" y="1500" font-size="16" font-weight="700" fill="#9aa5ce" letter-spacing="1.4" data-box="arch-aux2">EXTENSIONS</text>
+<text x="834" y="1536" font-size="18" fill="#c0caf5" data-box="arch-aux2">MCP: stdio or HTTP servers</text>
+<text x="834" y="1562" font-size="18" fill="#9aa5ce" data-box="arch-aux2">global + project config</text>
+<text x="834" y="1588" font-size="18" fill="#9aa5ce" data-box="arch-aux2">approval required by default</text>
+<text x="834" y="1626" font-size="18" fill="#c0caf5" data-box="arch-aux2">skills/*/SKILL.md</text>
+<text x="834" y="1652" font-size="18" fill="#9aa5ce" data-box="arch-aux2">listed; body loaded on demand</text>
+<rect x="1194" y="1462" width="358" height="292" rx="14" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="arch-aux3"/>
+<text x="1216" y="1500" font-size="16" font-weight="700" fill="#9aa5ce" letter-spacing="1.4" data-box="arch-aux3">PROVIDERS &amp; TRACING</text>
+<text x="1216" y="1536" font-size="18" fill="#c0caf5" data-box="arch-aux3">model name picks the profile</text>
+<text x="1216" y="1562" font-size="18" fill="#9aa5ce" data-box="arch-aux3">DeepSeek · OpenAI</text>
+<text x="1216" y="1588" font-size="18" fill="#9aa5ce" data-box="arch-aux3">PRIMARY=local: llama.cpp</text>
+<text x="1216" y="1614" font-size="18" fill="#9aa5ce" data-box="arch-aux3">any OpenAI-compatible URL</text>
+<text x="1216" y="1652" font-size="18" fill="#c0caf5" data-box="arch-aux3">Langfuse, if keys are set:</text>
+<text x="1216" y="1678" font-size="18" fill="#9aa5ce" data-box="arch-aux3">1 turn = 1 trace, per session</text>
+<text x="48" y="1796" font-size="16" fill="#9aa5ce" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">Reflects koda @ 63fda57 — src/koda/agents/graph.py · agents/specs.py · middleware/ · denygate.py · workspace.py</text>
+</svg>

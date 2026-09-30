@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="1189" viewBox="0 0 480 1189" role="img" aria-labelledby="qcostc-title qcostc-desc" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, &quot;Noto Sans&quot;, sans-serif">
+<title id="qcostc-title">koda cost per run on read-only and general questions</title>
+<desc id="qcostc-desc">Horizontal bar chart. Median cost per run on read-only and general questions (tasks e1 and f1, 10 runs per tool, all answers correct), one-shot runs each in a new directory, DeepSeek list price, peak basis: koda $0.0015, opencode $0.0031 (2.5 times koda, paired, koda lower in 10/10 rounds), Hermes Agent $0.0050 (4.6 times, koda lower in 10/10 rounds). Condition: the new directory per run kept opencode's and Hermes' prompts out of the cache; with every input token cached the paired ratios would be 0.90x / 1.15x, so koda would not be cheaper than opencode; on edit tasks opencode is cheaper. Run main-20260930, 2026-09-30, deepseek-flash. Full results (incl. where koda trails): benchmarks/</desc>
+<defs><marker id="qcostc-arrow-muted" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#8a8a8a"/></marker></defs>
+<rect width="480" height="1189" fill="#ffffff"/>
+<text x="20" y="44" font-size="28" fill="#262626"><tspan fill="#0a0a0a" font-weight="800">koda</tspan><tspan fill="#626262">  cost per run</tspan></text>
+<text x="20" y="78" font-size="22" fill="#626262">read-only and general questions</text>
+<text x="20" y="112" font-size="17" fill="#262626">One-shot runs, each in a new directory: about</text>
+<text x="20" y="136" font-size="17" fill="#262626">half of opencode's cost, under a third of Hermes'.</text>
+<text x="20" y="164" font-size="14" fill="#626262">Tasks e1 (code reading across modules) + f1 (general</text>
+<text x="20" y="184" font-size="14" fill="#626262">knowledge) · 10 runs per tool · every answer correct, 10/10</text>
+<text x="20" y="204" font-size="14" fill="#626262">for all three · same model, deepseek-flash</text>
+<rect x="20" y="252" width="12" height="12" rx="3" fill="#006fea"/>
+<text x="40" y="264" font-size="19" font-weight="800" fill="#0a0a0a">koda</text>
+<text x="460" y="266" font-size="24" font-weight="800" fill="#0a0a0a" text-anchor="end">$0.0015</text>
+<path d="M20 282 H105.97942857142857 Q109.97942857142857 282 109.97942857142857 286 V298 Q109.97942857142857 302 105.97942857142857 302 H20 Z" fill="#006fea"><title>koda: median $0.0015 per run (n=10); IQR $0.000556–$0.002535</title></path>
+<path d="M54.31314285714285 292 H176.44571428571427 M54.31314285714285 287 V297 M176.44571428571427 287 V297" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+<path d="M54.31314285714285 292 H176.44571428571427 M54.31314285714285 287 V297 M176.44571428571427 287 V297" fill="none" stroke="#262626" stroke-width="2" stroke-linecap="round"/>
+<text x="20" y="326" font-size="15" fill="#626262">reference</text>
+<rect x="20" y="356" width="12" height="12" rx="3" fill="#8a8a8a"/>
+<text x="40" y="368" font-size="19" font-weight="600" fill="#262626">opencode</text>
+<text x="460" y="370" font-size="24" font-weight="600" fill="#262626" text-anchor="end">$0.0031</text>
+<path d="M20 386 H206.14171428571427 Q210.14171428571427 386 210.14171428571427 390 V402 Q210.14171428571427 406 206.14171428571427 406 H20 Z" fill="#8a8a8a"><title>opencode: median $0.0031 per run (n=10); IQR $0.002161–$0.004051</title></path>
+<path d="M153.36457142857142 396 H270.00457142857147 M153.36457142857142 391 V401 M270.00457142857147 391 V401" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+<path d="M153.36457142857142 396 H270.00457142857147 M153.36457142857142 391 V401 M270.00457142857147 391 V401" fill="none" stroke="#262626" stroke-width="2" stroke-linecap="round"/>
+<text x="20" y="430" font-size="15" fill="#626262">2.5× koda's cost, paired · koda lower in 10/10 rounds</text>
+<rect x="20" y="460" width="12" height="12" rx="3" fill="#8a8a8a"/>
+<text x="40" y="472" font-size="19" font-weight="600" fill="#262626">Hermes Agent</text>
+<text x="460" y="474" font-size="24" font-weight="600" fill="#262626" text-anchor="end">$0.0050</text>
+<path d="M20 490 H327.472 Q331.472 490 331.472 494 V506 Q331.472 510 327.472 510 H20 Z" fill="#8a8a8a"><title>Hermes Agent: median $0.0050 per run (n=10); IQR $0.003987–$0.006658</title></path>
+<path d="M266.05485714285714 500 H430.8937142857143 M266.05485714285714 495 V505 M430.8937142857143 495 V505" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+<path d="M266.05485714285714 500 H430.8937142857143 M266.05485714285714 495 V505 M430.8937142857143 495 V505" fill="none" stroke="#262626" stroke-width="2" stroke-linecap="round"/>
+<text x="20" y="534" font-size="15" fill="#626262">4.6× koda's cost, paired · koda lower in 10/10 rounds</text>
+<text x="20" y="568" font-size="14" fill="#626262">Bars on one scale from $0 · bar = median of 10 runs · line =</text>
+<text x="20" y="588" font-size="14" fill="#626262">middle 50% of runs (IQR)</text>
+<rect x="20" y="610" width="440" height="333" rx="12" fill="#fafafa" stroke="#aa6a00" stroke-width="1.5" id="qcostc-cond"/>
+<rect x="36" y="626" width="112" height="24" rx="12" fill="#fafafa" stroke="#aa6a00" stroke-width="1.5" id="qcostc-chip31"/>
+<text x="92" y="642.68" font-size="13" font-weight="700" fill="#8a5600" text-anchor="middle" letter-spacing="0.8" data-box="qcostc-chip31">CONDITION</text>
+<text x="36" y="676" font-size="16" fill="#262626" data-box="qcostc-cond">Each run in a new, randomly named directory</text>
+<text x="36" y="699" font-size="16" fill="#262626" data-box="qcostc-cond">kept opencode's and Hermes' prompts out of the</text>
+<text x="36" y="722" font-size="16" fill="#262626" data-box="qcostc-cond">cache (their system prompts carry per-run</text>
+<text x="36" y="745" font-size="16" fill="#262626" data-box="qcostc-cond">content, likely the path; koda's prompt has no</text>
+<text x="36" y="768" font-size="16" fill="#262626" data-box="qcostc-cond">path). With everything cached koda is not</text>
+<text x="36" y="791" font-size="16" fill="#262626" data-box="qcostc-cond">cheaper than opencode. On edits opencode is</text>
+<text x="36" y="814" font-size="16" fill="#262626" data-box="qcostc-cond">cheaper.</text>
+<text x="36" y="841" font-size="14" fill="#626262" data-box="qcostc-cond">Paired ratio vs opencode / Hermes: as measured 2.5× /</text>
+<text x="36" y="861" font-size="14" fill="#626262" data-box="qcostc-cond">4.6× · with no cache at all 1.6× / 3.6× · with every</text>
+<text x="36" y="881" font-size="14" fill="#626262" data-box="qcostc-cond">input token cached 0.90× / 1.15×. The cache split is</text>
+<text x="36" y="901" font-size="14" fill="#626262" data-box="qcostc-cond">inferred from prompt lengths and cache counts; request</text>
+<text x="36" y="921" font-size="14" fill="#626262" data-box="qcostc-cond">bodies were not logged.</text>
+<text x="20" y="973" font-size="14" fill="#626262">Run main-20260930 · 2026-09-30 12:13-12:42 UTC ·</text>
+<text x="20" y="993" font-size="14" fill="#626262">deepseek-flash for all three tools, one API account · koda</text>
+<text x="20" y="1013" font-size="14" fill="#626262">0.1.0 @ 63fda57 · opencode 1.18.33 · Hermes Agent</text>
+<text x="20" y="1033" font-size="14" fill="#626262">2026.9.24</text>
+<text x="20" y="1057" font-size="14" fill="#626262">Cost = DeepSeek list price, peak basis (per 1M tokens:</text>
+<text x="20" y="1077" font-size="14" fill="#626262">cache hit $0.006, miss $0.30, output $1.20); the runs were</text>
+<text x="20" y="1097" font-size="14" fill="#626262">off-peak and billed at 50% · paired = median of the 10</text>
+<text x="20" y="1117" font-size="14" fill="#626262">same-round tool ÷ koda ratios</text>
+<text x="20" y="1145" font-size="15" fill="#262626">Full results (incl. where koda trails):</text>
+<text x="20" y="1167" font-size="15" fill="#0055dc" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">benchmarks/</text>
+</svg>

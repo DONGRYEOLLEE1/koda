@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="1720" viewBox="0 0 480 1720" role="img" aria-labelledby="archc-title archc-desc" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, &quot;Noto Sans&quot;, sans-serif">
+<title id="archc-title">koda agent graph (compact)</title>
+<desc id="archc-desc">A router sends each request down one path. answer, reader and investigator hold no write tools and end without verification. The edit path runs an optional planner, a coder with write tools and a verifier that judges a hash-snapshot diff plus the observed tool log, retrying once on failure. Every tool call passes a deny gate, default-deny approval (the only layer --yolo skips), workspace confinement and secret redaction.</desc>
+<defs><marker id="archc-arrow-muted" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#6e77a6"/></marker><marker id="archc-arrow-fg" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#9aa5ce"/></marker><marker id="archc-arrow-primary" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#7c74f4"/></marker><marker id="archc-arrow-green" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#7ee787"/></marker><marker id="archc-arrow-rose" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#f7768e"/></marker><marker id="archc-arrow-amber" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#e0af68"/></marker></defs>
+<rect width="480" height="1720" fill="#191a24"/>
+<text x="20" y="46" font-size="28" fill="#c0caf5"><tspan fill="#e6e9ff" font-weight="800">koda</tspan><tspan fill="#9aa5ce" font-weight="400">  agent graph</tspan></text>
+<text x="20" y="78" font-size="17" fill="#9aa5ce">Each request takes the narrowest path.</text>
+<text x="20" y="101" font-size="17" fill="#9aa5ce">Only the edit path gets write tools,</text>
+<text x="20" y="124" font-size="17" fill="#9aa5ce">and only it is verified.</text>
+<rect x="20" y="148" width="440" height="78" rx="14" fill="#2a2d3e" stroke="#5b6390" stroke-width="2" id="archc-route"/>
+<text x="40" y="186" font-size="28" font-weight="700" fill="#e6e9ff" data-box="archc-route">route</text>
+<text x="128" y="184" font-size="16" fill="#9aa5ce" data-box="archc-route">1 structured LLM call</text>
+<text x="40" y="212" font-size="16" fill="#9aa5ce" data-box="archc-route">unparseable reply → inspect (read-only)</text>
+<rect x="60" y="274" width="400" height="310" rx="16" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="archc-readg"/>
+<text x="78" y="304" font-size="14" font-weight="800" fill="#9aa5ce" letter-spacing="1.4" data-box="archc-readg">READ PATHS</text>
+<text x="78" y="324" font-size="16" fill="#9aa5ce" data-box="archc-readg">no write tools · no verify step</text>
+<path d="M78 338 H442" fill="none" stroke="#3b3f57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="78" y="366" font-size="22" font-weight="700" fill="#e6e9ff" data-box="archc-readg">answer</text>
+<rect x="294" y="347" width="148" height="24" rx="12" fill="#22242f" stroke="#9aa5ce" stroke-width="1.5" id="archc-chip13"/>
+<text x="368" y="363.68" font-size="13" font-weight="700" fill="#9aa5ce" text-anchor="middle" letter-spacing="0.8" data-box="archc-chip13">NO FILE TOOLS</text>
+<text x="78" y="388" font-size="16" fill="#9aa5ce" data-box="archc-readg">general questions · MCP · vision</text>
+<path d="M78 400 H442" fill="none" stroke="#3b3f57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="78" y="428" font-size="22" font-weight="700" fill="#e6e9ff" data-box="archc-readg">reader</text>
+<rect x="334" y="409" width="108" height="24" rx="12" fill="#22242f" id="archc-chip18-bg"/>
+<rect x="334" y="409" width="108" height="24" rx="12" fill="#c0caf5" fill-opacity="0.12" stroke="#c0caf5" stroke-width="1" id="archc-chip18"/>
+<text x="388" y="425.68" font-size="13" font-weight="700" fill="#c0caf5" text-anchor="middle" letter-spacing="0.8" data-box="archc-chip18">READ-ONLY</text>
+<text x="78" y="450" font-size="16" fill="#9aa5ce" data-box="archc-readg">files + read-only shell · explore</text>
+<path d="M78 462 H442" fill="none" stroke="#3b3f57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="78" y="490" font-size="22" font-weight="700" fill="#e6e9ff" data-box="archc-readg">investigator</text>
+<rect x="334" y="471" width="108" height="24" rx="12" fill="#22242f" id="archc-chip24-bg"/>
+<rect x="334" y="471" width="108" height="24" rx="12" fill="#c0caf5" fill-opacity="0.12" stroke="#c0caf5" stroke-width="1" id="archc-chip24"/>
+<text x="388" y="487.68" font-size="13" font-weight="700" fill="#c0caf5" text-anchor="middle" letter-spacing="0.8" data-box="archc-chip24">READ-ONLY</text>
+<text x="78" y="512" font-size="16" fill="#9aa5ce" data-box="archc-readg">same tools, shell-first</text>
+<path d="M78 524 H442" fill="none" stroke="#3b3f57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="78" y="548" font-size="15" fill="#e0af68" data-box="archc-readg">macOS has no bwrap: the auto-approved</text>
+<text x="78" y="570" font-size="15" fill="#e0af68" data-box="archc-readg">read-only shell can still write files</text>
+<path d="M36 292 Q36 304 48 304 H58" fill="none" stroke="#6e77a6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archc-arrow-muted)"/>
+<text x="62" y="264" font-size="14" fill="#c0caf5" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">route = answer · read · inspect</text>
+<text x="442" y="304" font-size="14" font-weight="700" fill="#c0caf5" text-anchor="end" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archc-readg">→ END</text>
+<rect x="60" y="628" width="400" height="606" rx="16" fill="#7c74f4" fill-opacity="0.1" stroke="#7c74f4" stroke-width="2" id="archc-editg"/>
+<text x="78" y="658" font-size="14" font-weight="800" fill="#a59ffb" letter-spacing="1.4" data-box="archc-editg">EDIT PATH</text>
+<text x="78" y="678" font-size="16" fill="#9aa5ce" data-box="archc-editg">only path with write tools · verified</text>
+<path d="M36 646 Q36 658 48 658 H58" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archc-arrow-primary)"/>
+<text x="62" y="618" font-size="14" fill="#a59ffb" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">route = edit</text>
+<path d="M36 226 V646" fill="none" stroke="#6e77a6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="180" y="712" width="160" height="36" rx="18" fill="#191a24" stroke="#7c74f4" stroke-width="2" id="archc-pill"/>
+<text x="260" y="735" font-size="15" fill="#c0caf5" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archc-pill">plan_needed?</text>
+<rect x="100" y="782" width="320" height="112" rx="14" fill="#191a24" stroke="#7c74f4" stroke-width="2" stroke-dasharray="8 6" id="archc-plan"/>
+<text x="118" y="820" font-size="26" font-weight="700" fill="#e6e9ff" data-box="archc-plan">plan</text>
+<rect x="296" y="798" width="108" height="24" rx="12" fill="#191a24" id="archc-chip44-bg"/>
+<rect x="296" y="798" width="108" height="24" rx="12" fill="#c0caf5" fill-opacity="0.12" stroke="#c0caf5" stroke-width="1" id="archc-chip44"/>
+<text x="350" y="814.68" font-size="13" font-weight="700" fill="#c0caf5" text-anchor="middle" letter-spacing="0.8" data-box="archc-chip44">READ-ONLY</text>
+<text x="118" y="850" font-size="16" fill="#c0caf5" data-box="archc-plan">≤ 5-item checklist, enforced</text>
+<text x="118" y="874" font-size="16" fill="#9aa5ce" data-box="archc-plan">optional · no-think · ≤ 15</text>
+<rect x="100" y="928" width="320" height="112" rx="14" fill="#191a24" stroke="#7c74f4" stroke-width="2.5" id="archc-coder"/>
+<text x="118" y="966" font-size="26" font-weight="700" fill="#e6e9ff" data-box="archc-coder">coder</text>
+<rect x="266" y="944" width="138" height="24" rx="12" fill="#7c74f4" id="archc-chip51"/>
+<text x="335" y="960.68" font-size="13" font-weight="700" fill="#14151d" text-anchor="middle" letter-spacing="0.8" data-box="archc-chip51">READ + WRITE</text>
+<text x="118" y="996" font-size="16" fill="#c0caf5" data-box="archc-coder">run_command · 6 edit tools</text>
+<text x="118" y="1020" font-size="16" fill="#9aa5ce" data-box="archc-coder">snapshots the workspace first</text>
+<rect x="100" y="1074" width="320" height="136" rx="14" fill="#191a24" stroke="#7ee787" stroke-width="2.5" id="archc-verify"/>
+<text x="118" y="1112" font-size="26" font-weight="700" fill="#e6e9ff" data-box="archc-verify">verify</text>
+<rect x="306" y="1090" width="98" height="24" rx="12" fill="#191a24" stroke="#9aa5ce" stroke-width="1.5" id="archc-chip57"/>
+<text x="355" y="1106.68" font-size="13" font-weight="700" fill="#9aa5ce" text-anchor="middle" letter-spacing="0.8" data-box="archc-chip57">NO TOOLS</text>
+<text x="118" y="1142" font-size="16" fill="#c0caf5" data-box="archc-verify">hash-snapshot diff + tool log</text>
+<text x="118" y="1166" font-size="16" fill="#c0caf5" data-box="archc-verify">→ one structured verdict</text>
+<text x="118" y="1190" font-size="16" fill="#f7768e" data-box="archc-verify">fail → retry once</text>
+<path d="M260 748 V780" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archc-arrow-primary)"/>
+<text x="270" y="770" font-size="14" fill="#a59ffb" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">yes</text>
+<path d="M180 730 H90 Q80 730 80 740 V958 Q80 968 90 968 H98" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archc-arrow-primary)"/>
+<text x="96" y="722" font-size="14" fill="#a59ffb" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">no</text>
+<path d="M260 894 V926" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archc-arrow-primary)"/>
+<path d="M260 1040 V1072" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archc-arrow-primary)"/>
+<path d="M420 1132 H430 Q440 1132 440 1122 V740 Q440 730 430 730 H342" fill="none" stroke="#f7768e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="7 6" marker-end="url(#archc-arrow-rose)"/>
+<text x="428" y="722" font-size="14" fill="#f7768e" text-anchor="end" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">fail, once</text>
+<path d="M260 1210 V1272" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archc-arrow-primary)"/>
+<text x="248" y="1260" font-size="14" fill="#a59ffb" text-anchor="end" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">pass, or retry used</text>
+<rect x="175" y="1274" width="170" height="36" rx="18" fill="#2a2d3e" stroke="#5b6390" stroke-width="1.5" id="archc-end"/>
+<text x="260" y="1298" font-size="16" font-weight="700" fill="#e6e9ff" text-anchor="middle" data-box="archc-end">END</text>
+<text x="20" y="1360" font-size="14" font-weight="800" fill="#9aa5ce" letter-spacing="1.4">EVERY TOOL CALL</text>
+<text x="20" y="1382" font-size="16" fill="#9aa5ce">four safety layers, in this order</text>
+<rect x="20" y="1400" width="440" height="264" rx="14" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="archc-layers"/>
+<circle cx="50" cy="1436" r="13" fill="#7c74f4" stroke="#7c74f4" stroke-width="1.5"/>
+<text x="50" y="1441.04" font-size="14" font-weight="800" fill="#14151d" text-anchor="middle">1</text>
+<text x="76" y="1431" font-size="18" font-weight="700" fill="#e6e9ff" data-box="archc-layers">Deny gate</text>
+<text x="76" y="1454" font-size="16" fill="#9aa5ce" data-box="archc-layers">catastrophic shell commands blocked</text>
+<path d="M36 1468 H444" fill="none" stroke="#3b3f57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="50" cy="1500" r="13" fill="#e0af68" stroke="#e0af68" stroke-width="1.5"/>
+<text x="50" y="1505.04" font-size="14" font-weight="800" fill="#14151d" text-anchor="middle">2</text>
+<text x="76" y="1495" font-size="18" font-weight="700" fill="#e6e9ff" data-box="archc-layers">Approval, default deny</text>
+<text x="76" y="1518" font-size="16" fill="#e0af68" data-box="archc-layers">--yolo auto-approves only this layer</text>
+<path d="M36 1532 H444" fill="none" stroke="#3b3f57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="50" cy="1564" r="13" fill="#7c74f4" stroke="#7c74f4" stroke-width="1.5"/>
+<text x="50" y="1569.04" font-size="14" font-weight="800" fill="#14151d" text-anchor="middle">3</text>
+<text x="76" y="1559" font-size="18" font-weight="700" fill="#e6e9ff" data-box="archc-layers">Workspace confinement</text>
+<text x="76" y="1582" font-size="16" fill="#9aa5ce" data-box="archc-layers">file paths always; shells via bwrap (Linux)</text>
+<path d="M36 1596 H444" fill="none" stroke="#3b3f57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="50" cy="1628" r="13" fill="#7c74f4" stroke="#7c74f4" stroke-width="1.5"/>
+<text x="50" y="1633.04" font-size="14" font-weight="800" fill="#14151d" text-anchor="middle">4</text>
+<text x="76" y="1623" font-size="18" font-weight="700" fill="#e6e9ff" data-box="archc-layers">Secret redaction</text>
+<text x="76" y="1646" font-size="16" fill="#9aa5ce" data-box="archc-layers">masks keys and tokens in tool output</text>
+<text x="20" y="1698" font-size="13" fill="#9aa5ce" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">koda @ 63fda57 · compact view of architecture-*.svg</text>
+</svg>

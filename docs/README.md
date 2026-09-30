@@ -5,7 +5,8 @@
 | 문서 | 내용 | 이럴 때 본다 |
 |---|---|---|
 | [onboarding.md](onboarding.md) | 설치 → 첫 실행 → 설정 → 워크스페이스 → 안전 → 개발 → 문제 해결 | 처음 쓸 때, 새 머신에 설치할 때 |
-| [providers/](providers/README.md) | provider 별 환경변수 블록과 문제 해결 | 모델·엔드포인트를 바꿀 때, 401·400 이 날 때 |
+| [tui.md](tui.md) | TUI 화면 구성, 세션 패널, 상태줄, 키·슬래시 명령, 턴 표시 규칙 | TUI 화면의 표시가 무슨 뜻인지 알고 싶을 때 |
+| [providers/](providers/README.md) | provider 별 환경변수 블록, 엔드포인트 호환 표, 문제 해결 | 모델·엔드포인트를 바꿀 때, 401·400 이 날 때 |
 | [mcp/](mcp/README.md) | 외부 MCP 서버 등록·키 관리·자동 승인·문제 해결 | 웹 검색·문서 조회 도구를 붙일 때 |
 
-아키텍처·도구·안전 모델의 요약과 TUI 표시 규칙은 루트 [README](../README.md) 에 있다.
+아키텍처·도구·안전 모델의 요약은 루트 README([English](../README.md) · [한국어](../README.ko.md))에 있다.

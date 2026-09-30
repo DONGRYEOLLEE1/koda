@@ -24,14 +24,23 @@ koda 는 워크스페이스(작업 디렉터리) 안에서 파일을 읽고 고�
 
 ## 3. 설치
 
-설치 방식이 둘이다. **코드를 고칠 생각이 있으면 개발용으로 설치한다.**
+쓰기만 할 거라면 설치 스크립트 한 줄이면 된다. uv 가 없으면 먼저 설치하고, koda 를 TUI 까지 포함해 Python 3.13 기반의 독립된 uv 도구로 설치한다. 다시 실행하면 업그레이드된다.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DONGRYEOLLEE1/koda/main/install.sh | sh
+# 버전 고정: … | sh -s -- --ref <태그·브랜치·커밋>    셸 설정 파일을 건드리지 않기: --no-modify-path    제거: --uninstall
+```
+
+저장소를 받아 직접 설치하는 방식은 둘이다. **코드를 고칠 생각이 있으면 개발용으로 설치한다.**
 
 ```bash
 git clone https://github.com/DONGRYEOLLEE1/koda && cd koda
 
-uv tool install ".[tui]"        # 사용자용: 소스를 복사해 설치한다
-uv tool install -e ".[tui]"     # 개발용: 소스 디렉터리를 가리킨다 (editable)
+uv tool install --python 3.13 ".[tui]"        # 사용자용: 소스를 복사해 설치한다
+uv tool install --python 3.13 -e ".[tui]"     # 개발용: 소스 디렉터리를 가리킨다 (editable)
 ```
+
+`--python 3.13` 은 빼지 않는다. `uv tool install` 은 `requires-python` 도, 저장소의 `.python-version` 도 보고 인터프리터를 고르지 않아서, uv 의 기본 인터프리터가 3.12 이하면 설치가 실패한다(설치 스크립트는 이 옵션을 알아서 붙인다).
 
 | | 사용자용 | 개발용 (`-e`) |
 |---|---|---|
@@ -54,7 +63,7 @@ uv tool install -e ".[tui]"     # 개발용: 소스 디렉터리를 가리킨다
 # …/koda/src/koda/__init__.py        → 개발용 (저장소)
 ```
 
-TUI 없이 자동화 경로만 쓸 거라면 extra 를 빼고 `uv tool install .` 로 설치해도 된다. 그러면 `koda`(TUI)는 설치 안내만 내고 끝나고, `koda run`·`koda chat` 은 그대로 쓴다.
+TUI 없이 자동화 경로만 쓸 거라면 extra 를 빼고 `uv tool install --python 3.13 .` 로 설치해도 된다. 그러면 `koda`(TUI)는 설치 안내만 내고 끝나고, `koda run`·`koda chat` 은 그대로 쓴다.
 
 ## 4. 첫 실행
 
@@ -154,7 +163,7 @@ koda run "calc.py 에 sub 함수를 추가해줘" --workspace . --yolo
 | `/thinking [show\|hide]` · `/theme [이름]` | 사고 줄 표시 전환 · 테마 전환 |
 | `/exit` | 끝내기 |
 
-화면 구성과 표시 규칙의 전체 설명은 루트 [README 의 빠른 시작](../README.md#빠른-시작) 에 있다.
+화면 구성과 표시 규칙의 전체 설명은 [TUI 가이드](tui.md) 에 있다.
 
 ## 8. koda 가 만드는 파일
 
@@ -200,7 +209,7 @@ koda run "calc.py 에 sub 함수를 추가해줘" --workspace . --yolo
 - **MCP** — 웹 검색·최신 문서 조회 같은 외부 도구를 붙인다. `koda mcp add --url …` 한 줄이면 된다. → [mcp/](mcp/README.md)
 - **스킬** — `<workspace>/skills/<이름>/SKILL.md` 를 두면 에이전트가 목록을 보고 필요할 때 본문을 읽는다
 - **메모리** — 턴이 끝날 때마다 판정자 LLM 이 기억할 만한 것을 골라 저장한다. 직접 넣으려면 `/remember [semantic|episodic|procedural] <내용>` (유형을 빼면 semantic)
-- **에이전트** — `src/koda/agents/specs.py` 의 `AGENTS` 에 항목을 더하고 `src/koda/prompts/<이름>.md` 를 둔다
+- **에이전트** — `src/koda/agents/specs.py` 의 `AGENTS` 에 항목을 더하고 `src/koda/prompts/<이름>.md` 를 둔 뒤, 그 에이전트를 부르는 노드나 도구를 `src/koda/agents/graph.py` 에 붙인다
 - **provider** — [providers/ 의 "새 provider 추가"](providers/README.md#새-provider-추가)
 
 스킬 파일은 머리말에 `name`·`description` 을 적는다. 에이전트는 이 설명을 보고 스킬을 쓸지 정한다.
@@ -219,7 +228,7 @@ description: 커밋 로그를 읽어 사용자용 릴리스 노트를 쓴다
 
 ```bash
 uv sync --extra tui                            # .venv 구성. --extra tui 를 빼면 textual 이 지워진다
-uv tool install -e ".[tui]" --force            # 어디서나 저장소 코드로 도는 koda
+uv tool install --python 3.13 -e ".[tui]" --force   # 어디서나 저장소 코드로 도는 koda
 uv run python -m pytest --ignore=tests/test_live_llm.py -q
 ```
 
@@ -240,12 +249,14 @@ docker compose up -d        # 웹 UI: http://localhost:28900
 
 | 증상 | 원인 → 조치 |
 |---|---|
-| 코드를 고쳤는데 `koda` 에 반영되지 않는다 | `-e` 없이 설치해 복사본이 돈다 → `uv tool install -e ".[tui]" --force` (3절) |
+| 코드를 고쳤는데 `koda` 에 반영되지 않는다 | `-e` 없이 설치해 복사본이 돈다 → `uv tool install --python 3.13 -e ".[tui]" --force` (3절) |
 | `.env` 를 고쳤는데 값이 바뀌지 않는다 | 셸에 export 된 같은 이름의 변수가 이긴다 → 5절의 `env \| grep` 으로 찾아 `unset` |
 | 시작하자마자 "API 키가 없습니다" 로 끝난다 | 쓸 수 있는 엔드포인트가 없다 → `DEEPSEEK_API_KEY`, 또는 `MODEL` 과 그 provider 의 키 |
 | 401 · 400 | 다른 provider 의 base_url·reasoning·구조화 방식이 남아 있다 → [providers/](providers/README.md) 의 해당 provider 문제 해결 표 |
-| `textual 미설치` 로 끝난다 | TUI extra 없이 설치했다 → `uv tool install ".[tui]" --force` |
+| `textual 미설치` 로 끝난다 | TUI extra 없이 설치했다 → `uv tool install --python 3.13 ".[tui]" --force` |
 | `uv run pytest` → `Failed to spawn: pytest` | `uv run python -m pytest` 로 부른다 |
 | TUI 테스트가 `No module named 'textual'` | `uv sync` 가 extra 를 지웠다 → `uv sync --extra tui` |
 | `OS 샌드박스(bubblewrap) 비활성` 경고 | bubblewrap 이 없어 정적 차단만 적용된다. Linux 는 `apt install bubblewrap`, macOS 는 해당 없다 |
+| 컨테이너 안에서 셸 명령이 모두 실패한다 | bwrap 은 있지만 네임스페이스를 만들 권한이 없다 → `BH_SANDBOX=off` 로 샌드박스를 끈다(정적 차단·승인 게이트는 그대로 적용) |
+| 설치가 `does not satisfy Python>=3.13` 으로 실패한다 | uv 의 기본 인터프리터가 3.12 이하다 → `uv tool install` 에 `--python 3.13` 을 붙인다(3절) |
 | MCP 도구가 안 보이거나 실패한다 | [mcp/ 의 문제 해결](mcp/README.md#문제-해결) |
