@@ -1,0 +1,13 @@
+Fixed. The billing bug had two root causes in `invoicer/money.py`:
+
+1. **Rounding mode** — `quantize(CENT)` used Python's default `ROUND_HALF_EVEN` (banker's rounding), so `2.675 → 2.67`. Now `ROUND_HALF_UP`, matching the README rule ("0.005 rounds to 0.01"), applied at every step (line amount, discount, tax via `to_money`).
+2. **Float conversion** — `Decimal(2.675)` reads the binary expansion (`2.67499…`), so even half-up would have produced `2.67`. `to_decimal` now converts floats via `Decimal(repr(value))`, i.e. the decimal number as written, as README rule 1 requires.
+
+Verification (`.venv/bin/python -m pytest -q` → 7 passed, plus direct checks):
+
+    LineItem('w', 2.675).amount()  -> 2.68   (was 2.67)
+    to_money(0.125)                -> 0.13
+    to_money(1.005)                -> 1.01
+    README example: subtotal 9.45, disc 0.95, tax 0.68, total 9.18
+
+Public function signatures (`to_decimal`, `to_money`, `format_money`, `LineItem`, `Invoice`) are unchanged.

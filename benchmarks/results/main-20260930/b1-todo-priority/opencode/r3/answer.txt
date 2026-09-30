@@ -1,0 +1,6 @@
+All 14 tests pass. Changes:
+
+- `todo/models.py:5` — `PRIORITIES = ("low", "normal", "high")`, `Task.priority: str = "normal"`, validated in `__post_init__` (raises `ValueError`), `from_dict` defaults missing key to `normal`.
+- `todo/store.py:24` — `add(..., priority="normal")` passes it through.
+- `todo/cli.py` — `--priority {low,normal,high}` (default `normal`; argparse exits 2 on bad value), `format_task` prefix `(!) `/`(~) `, `sort_tasks` orders high→normal→low then id.
+- Tests added in `tests/test_models.py`, `tests/test_store.py`, `tests/test_cli.py` covering validation, default, legacy JSON, argparse error, and ordering.

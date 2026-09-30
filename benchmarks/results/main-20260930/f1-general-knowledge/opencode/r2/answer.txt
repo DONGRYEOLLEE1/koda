@@ -1,0 +1,1 @@
+3-way handshake는 **SYN → SYN+ACK → ACK** 순서입니다. 정상 종료(4-way)는 양쪽이 각각 FIN을 보내고 ACK로 확인하므로 보통 **4개**의 세그먼트가 오갑니다(지연 ACK 등으로 FIN+ACK가 합쳐지면 3개가 될 수도 있음).

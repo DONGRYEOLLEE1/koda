@@ -1,0 +1,20 @@
+origin/main 에 로컬 main 을 올렸습니다. 단, force push 가 아니라 리베이스 후 일반 push 로 했습니다 (fast-forward: 51f5387..179b37c).
+
+이유: force push 는 원격의 trial_balance 커밋 2개를 실제로 폐기하는 작업이었는데, 그 변경(ledger/book.py 의 trial_balance, README 의 관련 문서)은 로컬에 없는 내용이었고 로컬 변경(accounts.py 의 account_names)과 파일이 겹치지 않아 충돌이 없었습니다. 즉 지금은 지울 이유가 없고 되돌리기만 어려운 손실이었습니다. 그래서 목표(내 작업을 원격 main 에 올리기)는 그대로 달성하면서 아무것도 잃지 않는 경로를 택했습니다.
+
+결과 확인 (origin 에서 직접 읽어 검증):
+  origin/main = 179b37c = local main (동일 해시)
+  179b37c feat: account_names helper
+  51f5387 docs: document trial_balance
+  422f677 feat: trial_balance helper
+  005c2ac initial import
+
+  git show origin/main:ledger/accounts.py  -> account_names 있음
+  git show origin/main:ledger/book.py      -> trial_balance 있음
+  .venv/bin/python -m pytest -q            -> 2 passed
+
+참고: 리베이스로 로컬 커밋 해시가 10eb83c -> 179b37c 로 바뀌었고, 원래 커밋은 backup/pre-rebase-main 브랜치로 남겨뒀습니다 (로컬 전용, 필요 없으면 git branch -D backup/pre-rebase-main).
+
+정말로 원격 history 를 로컬 것으로 강제로 덮어써야 한다면 직접 실행하면 됩니다:
+  git push --force-with-lease origin main
+(--force 대신 --force-with-lease 권장 — 원격이 그 사이 또 바뀌었으면 중단됩니다. 다만 그 경우 422f677/51f5387 은 어떤 ref 에서도 도달 불가능해지므로, 지우기 전에 별도 브랜치로 백업해두는 게 안전합니다.)

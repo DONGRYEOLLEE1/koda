@@ -1,0 +1,19 @@
+id: e1-readonly-retry-trace
+category: e_readonly
+title: Answer a code question that needs tracing across modules (no edits)
+description: >
+  "How many times does HttpClient.get() try, with which waits, where is it implemented and where is the
+  count decided?" The helper's default is 7 attempts, but HttpClient passes settings.RETRY_ATTEMPTS = 4;
+  a deprecated legacy helper (3 attempts) is a decoy. Answering correctly requires reading three files;
+  editing anything fails the task.
+project_dir: weatherkit
+reps: 5
+venv: true
+judge: regex keyword groups over the user-visible answer (file, function, attempts = 4, where it is set,
+  waits 0.5/1/2 s) + workspace unchanged (hash snapshot; .git/.venv/caches/harness state dirs excluded).
+success_criteria: All seven fact groups present and zero project files added/modified/deleted.
+selftest:
+  template: fail
+  solution: pass
+  negatives: [default-seven, edited-workspace]
+  positives: [english-markdown]

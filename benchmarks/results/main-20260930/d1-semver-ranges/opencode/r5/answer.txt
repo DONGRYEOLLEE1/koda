@@ -1,0 +1,15 @@
+Now I understand the code and spec. Let me check the git log and run the current tests.
+Fixed. The root causes and changes:
+
+**`semverlite/version.py`**
+- `key()` compared `major/minor/patch` as *strings*, so `"10" < "9"` — the reported bug. Replaced with numeric core comparison plus a real SemVer §11 prerelease comparator (`_cmp_prerelease`): numeric vs numeric, ASCII for alphanumerics, numeric < alphanumeric, shorter is lower when prefixes match, and no-prerelease > prerelease. Build is ignored.
+- `parse` accepted invalid input (leading zeros, `a..b`, empty identifiers). Added validation for numbers, prerelease identifiers (no leading zeros), and build identifiers, and tightened the regex.
+
+**`semverlite/ranges.py`**
+- No `||` handling. Now a range is split into comparator sets and matched with `any`.
+- `^`/`~` were wrong (`^` only checked major; `~` only minor, so `~1.2.3` matched `2.2.0`). Now `^` computes the left-most-nonzero upper bound and `~` uses `MAJOR.(MINOR+1).0`.
+- The pre-release rule was entirely missing. `_match_set` now rejects a prerelease candidate unless a comparator in the same set targets the same `MAJOR.MINOR.PATCH` with a prerelease.
+- Empty ranges/sets and malformed comparators now raise `ValueError`.
+- `max_satisfying` parses every entry (invalid entries raise) and keeps the first element on ties.
+
+Public signatures unchanged. All tests plus the full set of SPEC examples (including the precedence chain, caret/tilde bounds, and prerelease examples) pass.

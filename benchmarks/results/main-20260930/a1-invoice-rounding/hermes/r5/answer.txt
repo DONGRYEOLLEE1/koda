@@ -1,0 +1,18 @@
+Fixed. `invoicer/money.py` was the only file changed — no signature changes.
+
+What was wrong (both in the shared money helpers, so the fix covers every amount the library returns):
+
+- `to_decimal` used `Decimal(value)`. On a float that reads the binary expansion, i.e. `Decimal(2.675)` = `2.67499999999999982236431605997495353221893310546875`, which then rounded down to 2.67. Now a float is read as the decimal it is written as, via its shortest `repr`: `Decimal(repr(2.675))` → `2.675` (README rule 1).
+- `to_money` used `quantize(CENT)` with the default context rounding, `ROUND_HALF_EVEN` (banker's rounding). Now `quantize(CENT, rounding=ROUND_HALF_UP)` (README rule 2), so 0.005 → 0.01 and 0.015 → 0.02.
+
+Because `LineItem.amount`, `Invoice.subtotal/discount/tax`, and `format_money` all route through `to_money`, the half-up rule now applies at the line-amount, discount, and tax steps, and the float rule applies wherever inputs are accepted. Rates still go through `to_decimal` (never rounded), and `total = subtotal - discount + tax` is untouched.
+
+Verified:
+- reported case: `LineItem("widget", 2.675).amount()` == 2.68
+- half-up at each step: 0.005→0.01, 0.025→0.03, discount 0.15×0.5=0.075→0.08, tax (0.15−0.08)×0.5=0.035→0.04
+- rate not rounded: 100.00 × 0.0755 = 7.55 (not 8.00)
+- subtotal sums rounded line amounts; total is exactly 2dp
+- README example now yields subtotal 9.45, discount 0.95, tax 0.68, total 9.18
+- `python -m pytest`: 7 passed
+
+One thing worth flagging: `summary()` renders the unit price with `format_money`, so 2.675 prints as "2.68" while the line amount uses the unrounded 2.675 (2.675 × 2 = 5.35, not 5.36). That's display-only and pre-existing — the computed amounts are correct. Say the word if you want the unit-price column to show its true precision instead.

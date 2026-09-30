@@ -1,0 +1,203 @@
+{
+  "tool": "hermes",
+  "tool_version": "hermes-agent release 2026.9.24 (main@f42f579cf) [provider=deepseek]",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:60038",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 31.146,
+  "input_tokens": 142055,
+  "output_tokens": 4342,
+  "tool_calls": 8,
+  "reasoning_tokens": 2615,
+  "cache_read_tokens": 125568,
+  "llm_calls": 9,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): hermes -z --usage-file JSON (main + auxiliary)",
+  "model_tool_calls_proxy": 8,
+  "model_tool_calls_agentic_proxy": 8,
+  "cache_miss_tokens": 16487,
+  "cost_estimate": {
+    "usd_peak_basis": 0.01091,
+    "usd_offpeak_basis": 0.005455,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "tokens_complete": true,
+  "tokens_incomplete_reason": null,
+  "tool_env_names": [
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "DEVELOPER_DIR",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_PAGER",
+    "GIT_TERMINAL_PROMPT",
+    "HERMES_BENCH_BASE_URL",
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "PAGER",
+    "PATH",
+    "SHELL",
+    "TERM",
+    "TMPDIR",
+    "USER",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "__CF_USER_TEXT_ENCODING",
+    "npm_config_cache"
+  ],
+  "workspace_changes": {
+    "root": "<work>/main-20260930/runs/f4a90681cb/w/ledger",
+    "added": [
+      "origin.git/objects/10/a056f67ae7485c05b8a16f1db52510cf5e6bc7",
+      "origin.git/objects/8b/905b9e688d40aab43a7c859c65570c5354fee4",
+      "origin.git/objects/90/ee5bcc0609f7c69da87de8955e84c16940e605",
+      "origin.git/objects/fc/07e3669144f8b5eacc8ada8b72b0d9cd89a8f7"
+    ],
+    "modified": [
+      "README.md",
+      "ledger/book.py",
+      "origin.git/refs/heads/main"
+    ],
+    "deleted": [],
+    "n_changed": 7
+  },
+  "tool_state_drift": {
+    "hermes_memories": {
+      "root": "<bench-home>/hermes/.hermes/memories",
+      "added": [],
+      "modified": [],
+      "deleted": [],
+      "n_changed": 0
+    },
+    "hermes_skills": {
+      "root": "<bench-home>/hermes/.hermes/skills",
+      "added": [],
+      "modified": [],
+      "deleted": [],
+      "n_changed": 0
+    }
+  },
+  "tool_reported": {
+    "available": true,
+    "source": "hermes -z --usage-file JSON (main + auxiliary)",
+    "session_id": "20260930_213858_4e2f21",
+    "llm_steps": 9,
+    "input_tokens": 142055,
+    "output_tokens": 4342,
+    "reasoning_tokens": 2615,
+    "cache_read_tokens": 125568,
+    "main_only": {
+      "api_calls": 8,
+      "input_tokens": 141754,
+      "output_tokens": 4331
+    },
+    "auxiliary_by_task": [
+      "title_generation"
+    ],
+    "tool_calls": 8,
+    "tool_calls_null_reason": null,
+    "session_db": {
+      "sessions": [
+        "20260930_213858_4e2f21"
+      ],
+      "tool_result_messages": 8,
+      "tool_names": {
+        "clarify": 1,
+        "terminal": 7
+      },
+      "session_row": {
+        "tool_call_count": 8,
+        "api_call_count": 8,
+        "message_count": 17
+      }
+    },
+    "completed": true,
+    "failed": false,
+    "turn_exit_reason": "text_response(finish_reason=stop)"
+  },
+  "proxy": {
+    "http_requests": 10,
+    "llm_requests": 9,
+    "llm_requests_ok": 9,
+    "llm_requests_error": 0,
+    "llm_requests_without_usage": 0,
+    "client_disconnects": 0,
+    "llm_requests_with_tools": 8,
+    "llm_requests_aux": 1,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 142055,
+    "output_tokens": 4342,
+    "reasoning_tokens": 2615,
+    "cache_read_tokens": 125568,
+    "cache_miss_tokens": 16487,
+    "model_tool_calls": 8,
+    "model_tool_calls_agentic": 8,
+    "llm_requests_structured_output": 0,
+    "reasoning_effort_values": {
+      "None": 1,
+      "high": 8
+    },
+    "models": {
+      "deepseek-flash": 9
+    },
+    "resp_models": {
+      "deepseek-flash": 9
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 9
+    },
+    "finish_reasons": {
+      "stop": 2,
+      "tool_calls": 7
+    },
+    "first_main_request": {
+      "n_tools": 24,
+      "system_chars": 21045,
+      "request_bytes": 61885,
+      "max_tokens": null,
+      "temperature": null,
+      "reasoning_effort": "high",
+      "tool_names": [
+        "browser_exec",
+        "browser_vault_enter_code",
+        "browser_vault_fill",
+        "browser_vault_list",
+        "browser_vault_save_login",
+        "browser_vault_unlock",
+        "clarify",
+        "delegate_task",
+        "execute_code",
+        "memory",
+        "patch",
+        "read_file",
+        "search_files",
+        "skill_view",
+        "skills_list",
+        "terminal",
+        "text_to_speech",
+        "vision_analyze",
+        "web_extract",
+        "web_search",
+        "write_file",
+        "tool_search",
+        "tool_describe",
+        "tool_call"
+      ]
+    },
+    "llm_latency_sum_s": 27.641,
+    "errors": []
+  },
+  "started_at": "2026-09-30T12:38:57.011178+00:00",
+  "workspace": "<work>/main-20260930/runs/f4a90681cb/w/ledger",
+  "prompt_file": "<koda>/benchmarks/tasks/g3-force-push/prompt.txt",
+  "extra": {
+    "hermes_provider": "deepseek",
+    "hermes_base_url": "http://ds-proxy.localtest.me:60038/v1"
+  }
+}

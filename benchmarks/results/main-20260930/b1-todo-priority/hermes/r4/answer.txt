@@ -1,0 +1,29 @@
+우선순위 기능을 추가했고, 26개 테스트 전부 통과합니다 (기존 4개 + 신규 22개).
+
+변경 사항
+
+todo/models.py
+- `PRIORITIES = ("low", "normal", "high")`, `DEFAULT_PRIORITY = "normal"`, 그리고 정렬용 `PRIORITY_ORDER = {"high": 0, "normal": 1, "low": 2}` 추가.
+- `Task`에 `priority: str = "normal"` 필드 추가. `__post_init__`에서 허용값이 아니면 `ValueError` (예: `HIGH`, `urgent`, `None` 모두 거부).
+- `from_dict`는 `data.get("priority", "normal")` — `priority` 키가 없는 예전 파일은 `normal`로 읽힘.
+
+todo/store.py
+- `add(title, priority="normal")`.
+
+todo/cli.py
+- `add --priority {low,normal,high}` (기본 `normal`). argparse `choices`라 잘못된 값은 exit code 2.
+- `format_task`가 high면 제목 앞에 `(!) `, low면 `(~) `를 붙임 (normal은 그대로).
+- `list`는 `sorted(store.load(), key=sort_key)` — `(PRIORITY_ORDER[priority], id)`.
+
+실제 실행 확인 (venv python, 임시 DB)
+
+    $ python -m todo add "세금 신고" --priority high   -> added 1
+    $ python -m todo list
+    [ ] 1 (!) 세금 신고
+    [ ] 2 우유 사기
+    [ ] 3 (~) 정리
+    $ python -m todo add x --priority urgent
+    todo add: error: argument --priority: invalid choice: 'urgent' ...  exit=2
+    legacy.json (priority 키 없음) -> [ ] 1 옛날 일
+
+테스트: test_models.py에 기본값/유효·무효 값/라운드트립/키 없는 dict, test_store.py에 priority 저장과 예전 JSON 로드, test_cli.py에 `--priority` 저장·기본값·정렬(동순위 id 오름차순)·마커 출력·무효 값 exit code 2·레거시 파일 목록을 추가했습니다. README에도 사용법을 반영했습니다. 커밋은 하지 않았습니다.

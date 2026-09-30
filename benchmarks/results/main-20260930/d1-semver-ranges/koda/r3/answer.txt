@@ -1,0 +1,51 @@
+I'll start by exploring the workspace structure and reading the spec.I have the full picture. The codebase is tiny (3 source files, 75 lines) and I've read all of it plus the spec.
+
+**Key defects found:**
+
+| # | 위치 | 문제 | SPEC 위반 |
+|---|---|---|---|
+| 1 | `version.py:24-25` `key()` | major/minor/patch를 **문자열**로 비교 → `"10" < "9"` | §2.1 |
+| 2 | `version.py:24-25` `key()` | prerelease를 문자열로 이어붙여 비교 → `alpha.10 < alpha.9`, `alpha < alpha.1` 역전 | §2.3 |
+| 3 | `version.py:24-25` `key()` | prerelease 유무 구분 없음 → `1.0.0-rc < 1.0.0` 위반 | §2.2 |
+| 4 | `version.py:4` `_RE` | `\d+`가 선행 0 허용(`01.2.3`), `[0-9A-Za-z.-]+`가 빈 식별자(`a..b`, `1.2.3-`) 허용 | §1 |
+| 5 | `version.py:4` `_RE` | `v?`가 대문자/중복 v 미검증, `text.strip()`이 비문자열에서 실패 | §1 |
+| 6 | `ranges.py:25` `satisfies` | `\|\|` 미지원, 빈 range/빈 set 미검증 | §3 |
+| 7 | `ranges.py:17-20` | `^0.2.3`→`<0.3.0`, `^0.0.3`→`<0.0.4` 규칙 미구현(무조건 major 고정) | §3 |
+| 8 | `ranges.py:19-20` | `~`가 minor 고정 → `~1.2.3`이 `<1.3.0`이 아니라 `<2.0.0` | §3 |
+| 9 | `ranges.py:7-21` | **pre-release rule 전무** — `2.0.0-rc.1`이 `*`/`<2.0.0` 통과 | §3 |
+| 10 | `ranges.py:28-30` | `max_satisfying`이 동점 시 마지막 요소 반환(안정성 위반), `sort_versions`도 동일 | §2, §3 |
+
+- [ ] **항목 1: `Version.key()`를 SPEC §2에 맞는 비교 키로 교체** — `semverlite/version.py` — 검증: `compare("1.10.0","1.9.0")==1`, `compare("1.0.0-rc.1","1.0.0")==-1`, `compare("1.0.0-alpha","1.0.0-alpha.1")==-1`, `compare("1.0.0-alpha.10","1.0.0-alpha.9")==1`, `compare("1.0.0-beta.11","1.0.0-rc.1")==-1`, `compare("1.0.0+a","1.0.0+b")==0` 를 SPEC §2의 7단계 사슬 전체로 확인. 구현: major/minor/patch는 `int` 그대로, prerelease는 `(1,)`(없음) vs `(0, tuple(...))` 형태로 인코딩하고 각 식별자는 `(0, int(id))`(숫자) / `(1, id)`(영숫자) 튜플로 변환해 숫자<영숫자 및 길이 비교가 자연 순서로 성립하게 함. build는 키에서 제외.
+
+- [ ] **항목 2: `parse`의 정규식·검증을 SPEC §1 문법으로 강화** — `semverlite/version.py` (`_RE` 및 `parse`) — 검증: `parse("v1.2.3")`·`parse(" 1.2.3 ")` 성공, `parse("1.2.3-0a")`·`parse("1.2.3+01")` 성공, 그리고 `""`, `"1.2"`, `"1.2.3.4"`, `"1.2.3-"`, `"1.2.3-a..b"`, `"1.2.3+"`, `"01.2.3"`, `"1.2.3-01"`, `"1.2.3-be$ta"` 각각이 `ValueError`를 던지는지 파라미터화 테스트로 확인. 구현: 숫자부를 `0|[1-9]\d*`로, prerelease/build 식별자를 `[0-9A-Za-z-]+` 단위의 점 결합으로 바꾸고, 파싱 후 prerelease의 순수 숫자 식별자에 선행 0이 있으면 `ValueError`. `Version` 인스턴스 입력은 그대로 반환(기존 동작 유지).
+
+- [ ] **항목 3: `satisfies`를 SPEC §3의 `||`·비교자·에러 규칙에 맞게 재작성** — `semverlite/ranges.py` — 검증: `satisfies("1.9.0","~1.2.0 || ^1.5.0")` True, `satisfies("1.4.0","^1.2.3")` True / `satisfies("2.0.0","^1.2.3")` False, `satisfies("1.2.3","1.2.3")`·`satisfies("1.2.3","=1.2.3")` True, `satisfies("1.2.3","*")` True, 그리고 `""`, `"  "`, `"||"`, `"^1.2"`, `">= 1.2.3"`, `"1.2.3 ||"` 가 `ValueError`인지 확인. 구현: `range_str.split("||")`로 set 분할 → 각 set을 `split()` 후 빈 set이면 `ValueError`, set 내 모든 비교자가 매치되면 True(any-of-sets). 비교자 파싱은 `_OPS` 접두 매칭 후 나머지를 `parse`로 검증(부분 버전 거부), `*`는 단독 비교자로만 허용.
+
+- [ ] **항목 4: `^`/`~` 경계와 pre-release rule 구현** — `semverlite/ranges.py` (`_match` 및 신규 헬퍼) — 검증: `^1.2.3`→`>=1.2.3 <2.0.0`, `^0.2.3`→`>=0.2.3 <0.3.0`, `^0.0.3`→`>=0.0.3 <0.0.4`, `~1.2.3`→`>=1.2.3 <1.3.0` 각각의 상·하한 경계값(예: `satisfies("0.3.0","^0.2.3")` False, `satisfies("1.3.0","~1.2.3")` False)을 확인. pre-release rule은 SPEC §3 예시 4개를 그대로 테스트: `1.2.3-beta.2` ⊨ `>=1.2.3-beta.1` True, `1.2.4-beta.1` ⊨ `>=1.2.3-beta.1` False, `1.2.3-beta.4` ⊨ `^1.2.3-beta.1` True / `1.3.0-beta.1` False, `2.0.0-rc.1` ⊨ `*` 및 `<2.0.0` 모두 False. 구현: `^`/`~`를 명시적 `(lower, upper)` 범위로 전개하고, 버전에 prerelease가 있으면 **같은 set 내** 비교자 중 `major.minor.patch`가 동일하면서 prerelease를 가진 것이 하나도 없을 때 False(비교자 자신의 target 기준, `^`/`~`는 하한 V 기준).
+
+- [ ] **항목 5: `sort_versions`·`max_satisfying`의 안정성·에러 규칙 정합화 후 전체 테스트 실행** — `semverlite/version.py`, `semverlite/ranges.py`, `tests/test_version.py`, `tests/test_ranges.py` — 검증: `sort_versions(["1.0.0","1.0.0+a","1.0.0"])`가 입력 순서를 보존하는지, `max_satisfying(["1.2.3","1.9.0","2.0.0"],"~1.2.0 || ^1.5.0")=="1.9.0"`(README 예시), 동점 시 먼저 나온 요소 반환, `max_satisfying(["bogus"],"*")`가 `ValueError`인지 확인. 구현: `sorted(..., key=...)`는 Python 안정 정렬이므로 키만 올바르면 되지만, `max`는 동점 시 첫 요소를 유지하도록 `max(ok, key=...)` 대신 명시적 루프/`>` 비교로 교체. 마지막으로 `.venv/bin/python -m pytest -q` 전체 통과(현재 1 failed) 및 공개 시그니처(`parse`, `compare`, `sort_versions`, `satisfies`, `max_satisfying`) 불변을 `__init__.py` 기준으로 확인.I'll start by exploring the workspace structure and reading the spec and source files.Now let me implement the fixes. Starting with `version.py` (items 1, 2, 5):Now `ranges.py` (items 3, 4, 5):Now let me add the tests specified in the plan:Two issues: `_bounds` returns tuples for `^`/`~` upper bounds (need `Version`), and `Version` lacks `__eq__`. Let me fix both:All 47 tests pass. Let me run the plan's explicit verification checks and confirm the public signatures are unchanged:모든 항목을 완료했습니다. `semverlite`가 이제 `docs/SPEC.md` 규칙을 전부 만족합니다.
+
+## 변경 요약
+
+**`semverlite/version.py`**
+- **`Version.key()` 교체 (항목 1)**: `(major, minor, patch, pre)` 형태로 반환. `major/minor/patch`는 `int` 그대로, prerelease는 없으면 `(1,)`, 있으면 `(0, tuple(...))`로 인코딩해 "prerelease 없음 > 있음"을 자연 순서로 성립시켰습니다. 각 식별자는 `(0, int(id))`(숫자) / `(1, id)`(영숫자)로 변환해 숫자 < 영숫자, 짧은 쪽 < 긴 쪽(공유 접두사 동일 시)이 성립합니다. build는 키에서 제외.
+- **`_RE`·`parse` 강화 (항목 2)**: 숫자부를 `0|[1-9]\d*`로, prerelease/build를 `[0-9A-Za-z-]+` 단위의 점 결합으로 변경. 파싱 후 prerelease의 순수 숫자 식별자에 선행 0이 있으면 `ValueError`. `Version` 인스턴스 입력은 그대로 반환.
+- **`__eq__`/`__hash__` 추가**: `key()` 기반. `parse("v1.2.3") == parse("1.2.3")` 같은 값 비교가 성립하도록(기존엔 identity 비교였음).
+- `sort_versions`는 Python 안정 정렬 + 올바른 키로 SPEC §2의 안정성 요구를 충족.
+
+**`semverlite/ranges.py`**
+- **`satisfies` 재작성 (항목 3)**: `split("||")`로 set 분할 → 각 set을 `split()` 후 빈 set이면 `ValueError`(any-of-sets). 비교자는 `_OPS` 접두 매칭 후 나머지를 `parse`로 검증(부분 버전 거부), `*`는 단독 비교자로만 허용.
+- **`^`/`~` 경계 + pre-release rule (항목 4)**: `_bounds`로 `^`/`~`를 명시적 `(lower, upper)`로 전개(`^1.2.3`→`<2.0.0`, `^0.2.3`→`<0.3.0`, `^0.0.3`→`<0.0.4`, `~1.2.3`→`<1.3.0`). `_set_matches`에서 버전에 prerelease가 있으면 같은 set 내 비교자 중 `major.minor.patch`가 동일하면서 prerelease를 가진 것이 하나도 없을 때 False(`^`/`~`는 하한 V 기준).
+- **`max_satisfying` (항목 5)**: `max(ok, key=...)` 대신 명시적 루프 + `>` 비교로 동점 시 먼저 나온 요소를 유지. 무효 항목은 `satisfies` 호출 중 `ValueError` 전파.
+
+**테스트**: `tests/test_version.py`, `tests/test_ranges.py`에 SPEC §1~§3의 파라미터화 케이스(파싱 유효/무효, 7단계 precedence 사슬, 범위/에러, pre-release 예시 4개, 안정성·동점·무효 항목)를 추가.
+
+## 검증 결과
+- `.venv/bin/python -m pytest -q` → **47 passed** (수정 전 1 failed).
+- 계획서의 모든 개별 검증(항목 1~5)을 별도 스크립트로 실행 → **ALL CHECKS PASSED**.
+- 공개 시그니처 불변 확인: `parse(text)`, `compare(a, b)`, `sort_versions(versions)`, `satisfies(version, range_str)`, `max_satisfying(versions, range_str)` — `__init__.py`의 `__all__`도 그대로.
+
+승인 거부나 미실행 검증은 없었습니다.
+
+--- route: edit | verdict: pass ---
+판정 근거: 관측된 실행에서 SPEC.md·소스·테스트를 읽고 pytest를 실행했으며(수정 전 1 failed 확인), diff상 version.py의 `_RE`/`key`/`__eq__` 강화와 ranges.py의 `||`·`^`/`~` 경계·pre-release rule·`max_satisfying` 재작성이 실제로 반영되어 `compare('1.10.0','1.9.0')` 버그가 해소됨을 확인했다. 공개 시그니처는 유지되었고, `.pytest_cache` 변경은 테스트 실행 부산물로 요청 범위와 무관한 소스 변경이 아니다(단, version.py diff가 잘려 `compare`/`sort_versions` 본문 전체는 직접 확인하지 못했으나 테스트 통과 정황과 일치).

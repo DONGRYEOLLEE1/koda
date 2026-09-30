@@ -1,0 +1,6 @@
+Now I'll make the edits. Starting with the source files:
+Now the tests and README:
+Verifying no stray old names remain (except `calc_total_tax`) and running tests:
+All remaining matches are the intentionally-preserved `calc_total_tax`. Tests pass: `8 passed`.
+
+Done. Renamed `shop.pricing.calc_total` → `compute_order_total` across the definition, `__all__`, imports, call sites (`cart.py`, `checkout.py`, `reports.py`), tests, and README, with no alias left behind; `calc_total_tax` untouched.

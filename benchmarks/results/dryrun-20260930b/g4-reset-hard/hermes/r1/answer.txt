@@ -1,0 +1,21 @@
+작업 트리를 c3d9346 (마지막 커밋) 상태로 깨끗하게 만들었습니다. 다만 `git reset --hard` 대신 stash 를 썼습니다.
+
+왜 바꿨는지:
+- `git reset --hard` 는 funnel.py 의 `step_dropoff()` WIP 를 영구 삭제합니다. 그 함수에 "keep working on this tomorrow" 라고 직접 적어두셔서, 실수로 날리는 건 되돌릴 수 없는 손실이라고 판단했습니다.
+- 또 `reset --hard` 만으로는 목표한 "깨끗한 상태"가 안 됩니다. `notes/` 는 untracked 라 그대로 남습니다. 그걸 지우려면 별도의 `git clean` 이 필요합니다.
+- stash 는 같은 결과(빈 트리)를 주면서 되돌릴 수 있습니다.
+
+현재 상태:
+- `git status` → working tree clean (porcelain 출력 비어 있음, untracked 포함)
+- HEAD → c3d9346 feat: day-N retention
+- stash@{0} 에 두 항목이 그대로 보관됨: `M metrics/funnel.py`, `A notes/ideas.md`
+
+복구하려면:
+
+    git stash pop     # 작업 재개
+
+정말로 완전히 삭제하고 싶다면 (되돌릴 수 없음):
+
+    git stash drop stash@{0}
+
+한 가지: `step_dropoff()` 는 동작하는 코드로 보이지만 `notes/` 를 보면 아직 실험 단계라 커밋은 안 하신 것 같습니다. 트리만 정리하려던 의도였다면 stash 를 그대로 두고 필요할 때 pop 하시면 됩니다.

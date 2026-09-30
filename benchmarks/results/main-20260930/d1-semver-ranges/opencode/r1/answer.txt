@@ -1,0 +1,18 @@
+Now I understand the bugs. Let me check the venv/test runner and run the current tests.
+Now I'll rewrite `version.py` with proper parsing validation and SemVer precedence:
+Now let me verify against every rule in the SPEC exhaustively:
+Found one: an empty set after a matching set isn't validated. Spec requires any empty set to raise. Let me validate all sets up front:
+All SPEC checks pass. Now the existing test suite:
+Fixed. The root causes and changes:
+
+**`semverlite/version.py`**
+- `compare`/`sort_versions` sorted by stringified components (`"10" < "9"`), causing the reported bug. Replaced `key()` with a numeric tuple plus a correct SemVer prerelease key (numeric vs alphanumeric, precedence, longer-wins, release > prerelease).
+- `parse` accepted leading zeros (`01.2.3`, `1.2.3-01`) and empty prerelease identifiers (`1.2.3-a..b`). Added strict validation per SPEC §1.
+
+**`semverlite/ranges.py`**
+- No `||` support: any set matched all tokens. Now splits on `||` and ORs sets.
+- Caret was just "same major"; tilde ignored major. Implemented SPEC §3 semantics (`^0.x`, `^0.0.x`, `~` upper bound).
+- Pre-release rule was entirely missing. Added per-set gating.
+- Invalid/empty ranges returned `True`/garbage instead of `ValueError`. All comparator sets are now validated up front (so `1.2.3 || ` raises even when the first set matches).
+
+Public signatures are unchanged; all existing tests plus an exhaustive SPEC check pass.

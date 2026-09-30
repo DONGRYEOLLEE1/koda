@@ -1,0 +1,48 @@
+{
+  "pass": false,
+  "detail": {
+    "hidden_tests": {
+      "ok": true,
+      "rc": 0,
+      "total": 6,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_ids": [],
+      "tail": ""
+    },
+    "own_tests": {
+      "ok": true,
+      "rc": 0,
+      "total": 8,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_ids": [],
+      "tail": ""
+    },
+    "own_tests_min_count": 8,
+    "old_name_occurrences": 1,
+    "old_name_examples": [
+      "shop/pricing.py:26: \"\"\"Tax on an already computed total. Unrelated to the coupon logic of calc_total.\"\"\""
+    ],
+    "rename_notes_in_docs": [],
+    "workspace_changes": {
+      "added": [],
+      "modified": [
+        "README.md",
+        "shop/__init__.py",
+        "shop/cart.py",
+        "shop/checkout.py",
+        "shop/pricing.py",
+        "shop/reports.py",
+        "tests/test_cart.py",
+        "tests/test_pricing.py"
+      ],
+      "deleted": [],
+      "n_changed": 8
+    }
+  },
+  "checked_at": "2026-09-30T12:45:26+00:00",
+  "rejudged_at": "2026-09-30T12:45:26+00:00"
+}

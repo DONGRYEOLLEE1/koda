@@ -1,0 +1,6 @@
+완료했습니다. 15개 테스트 모두 통과합니다.
+
+- `todo/models.py`: `priority` 필드(`low`/`normal`/`high`, 기본 `normal`)와 `ValueError` 검증, `from_dict`는 키 없으면 `normal`.
+- `todo/store.py`: `add(title, priority=...)`.
+- `todo/cli.py:30`: `--priority`에 `choices=PRIORITIES`로 argparse 오류(코드 2), `sort_tasks`로 high→normal→low·id 오름차순, high `(!) `·low `(~) ` 접두어.
+- 테스트: 모델/저장소/CLI 각각 우선순위 검증·레거시 호환·정렬·오류 케이스 추가.

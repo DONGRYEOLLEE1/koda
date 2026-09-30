@@ -1,0 +1,3 @@
+3-way handshake 순서: SYN → SYN+ACK → ACK (첫 세그먼트는 SYN, 두 번째는 SYN과 ACK를 함께, 세 번째는 ACK).
+
+정상 종료(4-way teardown)는 보통 4개 세그먼트입니다: FIN → ACK → FIN → ACK. (양쪽이 거의 동시에 종료하면 FIN+ACK가 합쳐져 3개가 되기도 합니다.)

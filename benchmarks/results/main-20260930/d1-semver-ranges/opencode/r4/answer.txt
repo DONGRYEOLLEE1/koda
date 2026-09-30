@@ -1,0 +1,16 @@
+Now I understand the bugs. Let me rewrite both modules.
+Now let me verify against the full spec with an ad-hoc test script.
+All spec rules now hold. Summary of fixes:
+
+**`semverlite/version.py`**
+- Regex now rejects leading zeros in MAJOR/MINOR/PATCH and malformed pre/build segments; prerelease identifiers with numeric leading zeros (`1.0.0-01`) raise `ValueError`.
+- Replaced the string-based `key()` sorting with real numeric comparison (`_compare_parsed`): MAJOR/MINOR/PATCH compared as ints (fixes `1.10.0 > 1.9.0`), prerelease compared per SemVer rule (no-prerelease is greater, numeric<alphanumeric, ASCII order, more identifiers greater), build ignored.
+- `sort_versions` uses `cmp_to_key`, so equal precedence keeps input order.
+
+**`semverlite/ranges.py`**
+- Proper `||` comparator-set parsing with whitespace-split sets; empty range/set raises `ValueError`.
+- Correct `^` (leftmost non-zero bump) and `~` (minor bump) upper bounds instead of the old major/minor equality hack.
+- Implemented the per-set pre-release rule.
+- `max_satisfying` validates every entry via `parse` (so invalid entries raise), picks highest precedence, returns elements as given.
+
+Public signatures unchanged. `pytest`: 4 passed.

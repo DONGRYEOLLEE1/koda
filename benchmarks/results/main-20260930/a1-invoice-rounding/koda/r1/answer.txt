@@ -1,0 +1,57 @@
+I'll start by exploring the workspace structure and reading the README's "Money rules" section.I have the full picture. Two root causes: `to_decimal` uses `Decimal(value)` (binary expansion for floats, violating rule 1), and `quantize` uses the default `ROUND_HALF_EVEN` (violating rule 2's half-up).## 조사 결과 요약
+
+**README "Money rules" 위반 지점 2곳 (모두 `invoicer/money.py`):**
+
+| 규칙 | 현재 코드 | 문제 |
+|---|---|---|
+| 규칙 1: float은 "쓰여진 그대로"의 십진수 | `to_decimal`: `Decimal(value)` | `Decimal(2.675)` → `2.67499999999999982...` (이진 전개). `Decimal(repr(value))` 여야 함 |
+| 규칙 2: 반올림은 **half up** | `to_money`: `.quantize(CENT)` | 기본 `ROUND_HALF_EVEN` → `2.675`가 `2.68`이 아닌 `2.67`로 감. `rounding=ROUND_HALF_UP` 필요 |
+
+`invoice.py`의 `subtotal`/`discount`/`tax`/`total`은 이미 `to_money`를 각 단계마다 호출하므로 규칙 2의 "매 단계 반올림" 구조는 충족 — `money.py` 두 함수만 고치면 전파됨. 공개 시그니처(`to_decimal(value)`, `to_money(value)`, `format_money(value)`, `LineItem.amount()`, `Invoice.*`)는 유지 가능.
+
+---
+
+## 작업 계획
+
+- [ ] **항목 1: `to_decimal`의 float 처리를 십진수 기준으로 수정** — `invoicer/money.py` — `Decimal(value)`를 `float`일 때 `Decimal(repr(value))`를 쓰도록 분기(그 외 타입은 기존 경로 유지, 시그니처 불변). 검증: `python -c "from invoicer import to_decimal; print(to_decimal(2.675))"` → `2.675` 출력, `to_decimal(3)`, `to_decimal("19.99")`, `to_decimal(Decimal("1.005"))`도 기존과 동일.
+
+- [ ] **항목 2: `to_money`에 half-up 반올림 명시** — `invoicer/money.py` — `quantize(CENT, rounding=ROUND_HALF_UP)`로 변경하고 `from decimal import ROUND_HALF_UP` 임포트 추가. 검증: `python -c "from invoicer import to_money; print(to_money('2.675'), to_money('0.005'), to_money('1.005'))"` → `2.68 0.01 1.01` (half-even이면 `2.67 0.00 1.00`).
+
+- [ ] **항목 3: 회귀 테스트로 규칙 준수 고정** — `tests/test_money.py` — float 입력의 십진 해석(`to_decimal(2.675) == Decimal("2.675")`), half-up 경계값(`to_money("2.675") == Decimal("2.68")`, `to_money("0.005") == Decimal("0.01")`), `format_money(2.675) == "2.68"` 케이스 추가. 검증: `python -m pytest tests/test_money.py -q` 전부 통과.
+
+- [ ] **항목 4: 전체 스위트 및 README 예시 시나리오 검증** — `tests/`, `README.md` — `python -m pytest -q`로 기존 테스트(특히 `test_reported_rounding_bug`, `test_discount_and_tax`) 통과 확인 후, README 8행 예시(`LineItem("widget", 2.675, 2)`, `LineItem("cable", "4.10")`, discount 0.1, tax 0.08)를 실행해 각 단계 금액이 규칙 2의 "매 단계 반올림" 순서대로 산출되는지 수기 대조. 검증: pytest 전체 green + 예시 `summary()` 출력의 line amount/subtotal/discount/tax/total이 손계산값과 일치.I'll start by exploring the workspace structure and reading the key files.Now I have the full picture. Let me apply the fixes.Now the regression tests:Now let me run the verification steps.Both pass. Now the README example scenario, hand-checked against the rules:Hand-check against README rule 2 (round at every step, half-up):
+
+- line amount widget = 2.675 × 2 = 5.35 → **5.35** ✓
+- line amount cable = 4.10 × 1 = **4.10** ✓
+- subtotal = 5.35 + 4.10 = **9.45** ✓
+- discount = 9.45 × 0.1 = 0.945 → half-up → **0.95** ✓ (half-even would give 0.94)
+- tax = (9.45 − 0.95) × 0.08 = 8.50 × 0.08 = 0.68 → **0.68** ✓
+- total = 9.45 − 0.95 + 0.68 = **9.18** ✓
+
+All match. Note the summary line shows `2 x 2.68 = 5.35` — the unit price column is the rounded display of 2.675, while the amount is computed from the unrounded price, which is correct per rule 2 (only money is rounded, and the line amount is price × qty rounded).
+
+## 변경 요약
+
+**`invoicer/money.py`**
+- `to_decimal`: `float` 입력이면 `Decimal(repr(value))`로 변환해, `2.675`가 이진 근사(2.67499…)가 아니라 십진수 2.675로 해석되도록 수정. 그 외 타입(int/str/Decimal)은 기존 `Decimal(value)` 경로 유지. 시그니처 불변.
+- `to_money`: `quantize(CENT, rounding=ROUND_HALF_UP)`로 half-up 반올림을 명시(기본 half-even이던 동작 수정). `ROUND_HALF_UP` 임포트 추가.
+
+**`tests/test_money.py`** — 회귀 테스트 4개 추가:
+- float의 십진 해석(`to_decimal(2.675) == Decimal("2.675")`, `to_decimal(0.1) == Decimal("0.1")`)
+- 다른 타입 경로 불변(int/str/Decimal)
+- half-up 경계값(`to_money("2.675") == 2.68`, `"0.005" → 0.01`, `"1.005" → 1.01`)
+- `format_money(2.675) == "2.68"`
+
+## 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `to_decimal(2.675)` 등 4종 | `2.675 3 19.99 1.005` — 기존 경로 동일 ✓ |
+| `to_money('2.675','0.005','1.005')` | `2.68 0.01 1.01` (half-up) ✓ |
+| `python -m pytest -q` | **11 passed** (기존 `test_reported_rounding_bug`, `test_discount_and_tax` 포함) ✓ |
+| README 8행 예시 수기 대조 | line 5.35/4.10, subtotal 9.45, discount 0.95, tax 0.68, total 9.18 — 규칙 2 순서와 일치 ✓ |
+
+미실행/잔여 위험 없음. 공개 함수 시그니처는 변경하지 않았습니다.
+
+--- route: edit | verdict: pass ---
+판정 근거: diff 상 `to_decimal`이 float를 `Decimal(repr(value))`로, `to_money`가 `ROUND_HALF_UP`으로 수정되어 2.675→2.68 half-up 규칙이 반영됐고 공개 시그니처도 유지됐다. 리뷰가 지적한 `format_money`는 diff에 본문 변경이 없으나 추가 테스트 `format_money(2.675)=="2.68"`가 통과했다는 관측과 함께, 남은 불확실성은 있으나 핵심 요구(모든 금액 half-up)는 충족된 것으로 판단한다. `.pytest_cache/`는 pytest 실행 부산물로 요청 범위 위반이라 보기 어렵다.

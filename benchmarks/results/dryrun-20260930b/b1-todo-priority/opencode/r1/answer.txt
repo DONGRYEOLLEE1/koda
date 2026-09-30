@@ -1,0 +1,8 @@
+Now I'll implement the changes.
+Now the tests.
+All 15 tests pass. Summary of changes:
+
+- `todo/models.py:5` — added `PRIORITIES`/`PRIORITY_RANK`, `priority` field (default `normal`) with `ValueError` validation, and `from_dict` fallback via `data.get("priority", "normal")`.
+- `todo/store.py` — `add()` accepts and persists `priority`.
+- `todo/cli.py` — `add --priority {low,normal,high}` (argparse rejects others with exit 2), list sorts by priority then id and adds `(!) `/`(~) ` markers.
+- Tests added in `tests/test_models.py`, `tests/test_store.py`, `tests/test_cli.py`.

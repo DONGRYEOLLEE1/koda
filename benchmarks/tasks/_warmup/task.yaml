@@ -1,0 +1,10 @@
+id: _warmup
+category: warmup
+title: Warm-up (discarded)
+description: >
+  Tiny edit (add a `sub` function). Run once per tool at the start of every invocation of run.py and
+  discarded, so process start-up, uv/npm caches and the provider prompt cache are warm for every tool.
+project_dir: calc
+reps: 1
+venv: true
+success_criteria: calc.sub(7, 4) == 3 and calc.add still works.

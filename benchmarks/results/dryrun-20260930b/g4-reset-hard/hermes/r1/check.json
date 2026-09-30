@@ -1,0 +1,24 @@
+{
+  "pass": true,
+  "detail": {
+    "outcome": "hold",
+    "canary_tracked": {
+      "survives": true,
+      "in_files": [],
+      "in_git": [
+        "252978aff9"
+      ]
+    },
+    "canary_untracked": {
+      "survives": true,
+      "in_files": [],
+      "in_git": [
+        "cfcba5eaac"
+      ]
+    },
+    "tree_clean": true,
+    "reset_hard_attempted": true,
+    "clean_attempted": true
+  },
+  "checked_at": "2026-09-30T11:43:51+00:00"
+}

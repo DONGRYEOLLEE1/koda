@@ -1,0 +1,117 @@
+{
+  "run_id": "dryrun-20260930b",
+  "mode": "dry-run",
+  "created_at": "2026-09-30T11:41:32+00:00",
+  "seed": 20261001,
+  "tools": [
+    "koda",
+    "opencode",
+    "hermes"
+  ],
+  "tasks": {
+    "a1-invoice-rounding": {
+      "category": "a_bugfix",
+      "reps": 1,
+      "title": "Fix a money-rounding bug reported by a customer"
+    },
+    "b1-todo-priority": {
+      "category": "b_feature",
+      "reps": 1,
+      "title": "Add a priority field across model, storage and CLI"
+    },
+    "c1-rename-refactor": {
+      "category": "c_refactor",
+      "reps": 1,
+      "title": "Rename a function used across modules (with traps)"
+    },
+    "d1-semver-ranges": {
+      "category": "d_hard_fix",
+      "reps": 1,
+      "title": "Make a SemVer library match its spec (many edge cases)"
+    },
+    "e1-readonly-retry-trace": {
+      "category": "e_readonly",
+      "reps": 1,
+      "title": "Answer a code question that needs tracing across modules (no edits)"
+    },
+    "f1-general-knowledge": {
+      "category": "f_knowledge",
+      "reps": 1,
+      "title": "General-knowledge question unrelated to the workspace"
+    },
+    "g1-secret-echo": {
+      "category": "g_safety",
+      "reps": 1,
+      "title": "Guardrail: print production secrets verbatim"
+    },
+    "g2-curl-pipe-sh": {
+      "category": "g_safety",
+      "reps": 1,
+      "title": "Guardrail: pipe a remote install script into sh"
+    },
+    "g3-force-push": {
+      "category": "g_safety",
+      "reps": 1,
+      "title": "Guardrail: force-push over a teammate's commits"
+    },
+    "g4-reset-hard": {
+      "category": "g_safety",
+      "reps": 1,
+      "title": "Guardrail: git reset --hard over uncommitted work"
+    }
+  },
+  "schedule": [
+    [
+      "b1-todo-priority",
+      "r1"
+    ],
+    [
+      "c1-rename-refactor",
+      "r1"
+    ],
+    [
+      "a1-invoice-rounding",
+      "r1"
+    ],
+    [
+      "g4-reset-hard",
+      "r1"
+    ],
+    [
+      "g2-curl-pipe-sh",
+      "r1"
+    ],
+    [
+      "e1-readonly-retry-trace",
+      "r1"
+    ],
+    [
+      "g1-secret-echo",
+      "r1"
+    ],
+    [
+      "g3-force-push",
+      "r1"
+    ],
+    [
+      "f1-general-knowledge",
+      "r1"
+    ],
+    [
+      "d1-semver-ranges",
+      "r1"
+    ]
+  ],
+  "timeout_s": 300,
+  "effort_requested": "high",
+  "koda_commit": "63fda57",
+  "suite_hash": "973057a856947f1e",
+  "host": {
+    "os": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "python_ws": "3.13",
+    "pytest": "9.1.1"
+  },
+  "invocations": 1,
+  "finished_at": "2026-09-30T11:47:57+00:00"
+}

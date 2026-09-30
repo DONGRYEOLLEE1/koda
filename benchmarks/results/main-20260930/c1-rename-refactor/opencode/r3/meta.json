@@ -1,0 +1,158 @@
+{
+  "tool": "opencode",
+  "tool_version": "opencode 1.18.33",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:59899",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 22.553,
+  "input_tokens": 94380,
+  "output_tokens": 5458,
+  "tool_calls": 30,
+  "reasoning_tokens": 1259,
+  "cache_read_tokens": 83200,
+  "llm_calls": 8,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+  "model_tool_calls_proxy": 30,
+  "model_tool_calls_agentic_proxy": 30,
+  "cache_miss_tokens": 11180,
+  "cost_estimate": {
+    "usd_peak_basis": 0.010403,
+    "usd_offpeak_basis": 0.005201,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "tokens_complete": true,
+  "tokens_incomplete_reason": null,
+  "tool_env_names": [
+    "DEEPSEEK_API_KEY",
+    "DEVELOPER_DIR",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_PAGER",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "OPENCODE_CONFIG",
+    "OPENCODE_DISABLE_AUTOUPDATE",
+    "PAGER",
+    "PATH",
+    "SHELL",
+    "TERM",
+    "TMPDIR",
+    "USER",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "__CF_USER_TEXT_ENCODING",
+    "npm_config_cache"
+  ],
+  "workspace_changes": {
+    "root": "<work>/main-20260930/runs/239025ec51/w/shop",
+    "added": [],
+    "modified": [
+      "README.md",
+      "shop/__init__.py",
+      "shop/cart.py",
+      "shop/checkout.py",
+      "shop/pricing.py",
+      "shop/reports.py",
+      "tests/test_cart.py",
+      "tests/test_pricing.py"
+    ],
+    "deleted": [],
+    "n_changed": 8
+  },
+  "tool_state_drift": null,
+  "tool_reported": {
+    "available": true,
+    "source": "opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+    "session_id": "ses_f0dae870cffetsHzTYv71qv4Nc",
+    "llm_steps": 7,
+    "input_tokens": 93713,
+    "output_tokens": 5130,
+    "reasoning_tokens": 946,
+    "cache_read_tokens": 82688,
+    "raw": {
+      "input": 11025,
+      "output": 4184,
+      "reasoning": 946,
+      "cache_read": 82688,
+      "cache_write": 0
+    },
+    "tool_calls": 30,
+    "tool_names": {
+      "grep": 2,
+      "bash": 3,
+      "read": 8,
+      "edit": 17
+    },
+    "error_events": 0,
+    "note": "the session-title call (small_model) is not included in the JSON events"
+  },
+  "proxy": {
+    "http_requests": 8,
+    "llm_requests": 8,
+    "llm_requests_ok": 8,
+    "llm_requests_error": 0,
+    "llm_requests_without_usage": 0,
+    "client_disconnects": 0,
+    "llm_requests_with_tools": 7,
+    "llm_requests_aux": 1,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 94380,
+    "output_tokens": 5458,
+    "reasoning_tokens": 1259,
+    "cache_read_tokens": 83200,
+    "cache_miss_tokens": 11180,
+    "model_tool_calls": 30,
+    "model_tool_calls_agentic": 30,
+    "llm_requests_structured_output": 0,
+    "reasoning_effort_values": {
+      "high": 7,
+      "low": 1
+    },
+    "models": {
+      "deepseek-flash": 8
+    },
+    "resp_models": {
+      "deepseek-flash": 8
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 8
+    },
+    "finish_reasons": {
+      "tool_calls": 6,
+      "stop": 2
+    },
+    "first_main_request": {
+      "n_tools": 10,
+      "system_chars": 9848,
+      "request_bytes": 31463,
+      "max_tokens": 32000,
+      "temperature": null,
+      "reasoning_effort": "high",
+      "tool_names": [
+        "bash",
+        "edit",
+        "glob",
+        "grep",
+        "read",
+        "skill",
+        "task",
+        "todowrite",
+        "webfetch",
+        "write"
+      ]
+    },
+    "llm_latency_sum_s": 21.919,
+    "errors": []
+  },
+  "started_at": "2026-09-30T12:37:00.148304+00:00",
+  "workspace": "<work>/main-20260930/runs/239025ec51/w/shop",
+  "prompt_file": "<koda>/benchmarks/tasks/c1-rename-refactor/prompt.txt"
+}

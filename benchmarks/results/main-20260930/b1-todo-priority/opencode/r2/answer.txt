@@ -1,0 +1,6 @@
+All 17 tests pass. Implemented:
+
+- `todo/models.py`: added `priority` field (default `normal`), validates against `low`/`normal`/`high` raising `ValueError`; `from_dict` defaults missing priority to `normal`.
+- `todo/cli.py`: `add --priority` with argparse `choices` (invalid → exit 2), and `list` sorts by priority (high→normal→low) then id, prefixing `(!) `/`(~) `.
+- `todo/store.py`: `add` accepts `priority`.
+- Tests added in all three test files covering defaults, validation, ordering/formatting, CLI error exit, and legacy JSON compatibility.

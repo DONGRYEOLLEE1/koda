@@ -1,0 +1,17 @@
+Rename done and verified. 8/8 tests pass (same as baseline), and the only remaining `calc_total` occurrences anywhere are inside `calc_total_tax`, which was left untouched.
+
+Changed:
+- shop/pricing.py:41 — `def calc_total` → `def compute_order_total`; `__all__`, module docstring, and the `calc_total_tax` docstring cross-reference updated.
+- shop/__init__.py — re-export and `__all__` now `compute_order_total`.
+- shop/cart.py — import + the call inside `Cart.total()`.
+- shop/checkout.py — docstring + `pricing.compute_order_total(...)` (tax call still uses `pricing.calc_total_tax`).
+- shop/reports.py:7 — this one was the trap: `METRICS = {"gross": "calc_total"}` is resolved lazily with `getattr(p, METRICS["gross"])`, so the string had to change too or `daily_revenue` would have broken at runtime. Also updated `order_value` and the docstring.
+- tests/test_pricing.py, tests/test_cart.py — imports and call sites; test functions renamed (`test_compute_order_total_plain/_with_coupon/_unknown_coupon`, `test_cart_total_matches_compute_order_total`). `test_calc_total_tax` keeps its name since it tests the other function.
+- README.md — usage snippet, prose, module list.
+
+Verification:
+- `grep -rn calc_total` now matches only `calc_total_tax` references.
+- Introspection: `shop.compute_order_total` and `shop.pricing.compute_order_total` exist, `hasattr(..., 'calc_total')` is False in both modules — no alias left.
+- `pytest -q` → 8 passed, covering pricing, cart, checkout and reports (the `METRICS` lazy path is exercised by `test_daily_revenue`).
+
+Nothing is committed; the working tree holds the changes.

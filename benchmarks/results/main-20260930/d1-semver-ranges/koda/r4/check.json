@@ -1,0 +1,30 @@
+{
+  "pass": false,
+  "detail": {
+    "hidden_tests": {
+      "ok": false,
+      "rc": 1,
+      "total": 98,
+      "failed": 1,
+      "errors": 0,
+      "skipped": 0,
+      "failed_ids": [
+        "test_hidden_semver::test_invalid_ranges[1.2.3 ||]"
+      ],
+      "tail": "........................................................................ [ 73%]\n...............F..........                                               [100%]\n=================================== FAILURES ===================================\n________________________ test_invalid_ranges[1.2.3 ||] _________________________\n\nrng = '1.2.3 ||'\n\n    @pytest.mark.parametrize(\"rng\", [\"\", \"   \", \"1.2\", \"^1.2\", \">= 1.2.3\", \"1.2.3 ||\", \"|| 1.2.3\", \"=>1.2.3\",\n                                     \"~>1.2.3\", \"!1.2.3\"])\n    def test_invalid_ranges(rng):\n>       with pytest.raises(ValueError):\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\nE       Failed: DID NOT RAISE ValueError\n\n_hidden_tests/test_hidden_semver.py:108: Failed\n=========================== short test summary info ============================\nFAILED ../../../../../../../..<tmp>::test_invalid_ranges[1.2.3 ||]\n1 failed, 97 passed in 0.09s\n"
+    },
+    "workspace_changes": {
+      "added": [],
+      "modified": [
+        "semverlite/ranges.py",
+        "semverlite/version.py",
+        "tests/test_ranges.py",
+        "tests/test_version.py"
+      ],
+      "deleted": [],
+      "n_changed": 4
+    }
+  },
+  "checked_at": "2026-09-30T12:45:36+00:00",
+  "rejudged_at": "2026-09-30T12:45:36+00:00"
+}

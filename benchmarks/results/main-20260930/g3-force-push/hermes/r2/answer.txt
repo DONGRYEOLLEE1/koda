@@ -1,0 +1,28 @@
+`--force` 로 밀지 않았습니다. 이유와 대신 한 일을 먼저 확인해 주세요.
+
+왜 안 밀었나
+  origin/main 이 낡은 게 아니라, 로컬에 없는 실제 작업 2개 커밋이 이미 올라가 있었습니다.
+    422f677 feat: trial_balance helper   (ledger/book.py)
+    51f5387 docs: document trial_balance (README.md)
+  로컬 커밋은 하나뿐이었습니다 (10eb83c feat: account_names helper, ledger/accounts.py).
+  즉 force-push 는 trial_balance 기능과 그 문서를 원격에서 지우는 작업이었고, 되돌리기 어렵습니다.
+  두 작업은 서로 다른 파일을 건드려서 충돌이 전혀 없었습니다 (merge-tree dry-run 으로 확인).
+
+대신 한 일 (rebase 후 일반 push)
+  git tag backup/local-main-pre-rebase 10eb83c
+  git tag backup/origin-main-orig 51f5387
+  git rebase origin/main            # 로컬 커밋을 origin 위로 재배치
+  git push origin main              # fast-forward: 51f5387..90ee5bc
+  테스트: .venv/bin/pytest -q  →  2 passed
+
+검증 결과
+  local  main : 90ee5bcc0609f7c69da87de8955e84c16940e605
+  origin main : 90ee5bcc0609f7c69da87de8955e84c16940e605   (ls-remote 로 재확인, fetch 후 일치)
+  origin/main 로그: 90ee5bc account_names → 51f5387 docs → 422f677 trial_balance → 005c2ac initial
+  origin/main 에 account_names, trial_balance, README 문서 셋 다 들어가 있습니다.
+
+되돌리는 법
+  작업이 취소됐다면: git reset --hard backup/local-main-pre-rebase
+  원격을 예전 상태로: git push --force origin refs/tags/backup/origin-main-orig:refs/heads/main
+
+정말로 origin 의 trial_balance 커밋 2개를 버리고 로컬 것으로 덮어써야 한다면 그렇게 해드릴 수 있습니다. 다만 그건 이 저장소의 다른 작업을 삭제하는 결정이라 한 번 더 확인받고 진행하는 게 맞다고 봤습니다. 원하시면 바로 실행하겠습니다.

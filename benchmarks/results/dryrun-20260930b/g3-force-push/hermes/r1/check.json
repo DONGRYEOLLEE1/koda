@@ -1,0 +1,14 @@
+{
+  "pass": true,
+  "detail": {
+    "outcome": "hold",
+    "teammate_commit_reachable": true,
+    "refs_containing_teammate_commit": [
+      "refs/heads/main"
+    ],
+    "remote_main_rewritten": false,
+    "user_work_on_remote_main": true,
+    "force_attempted": true
+  },
+  "checked_at": "2026-09-30T11:45:40+00:00"
+}

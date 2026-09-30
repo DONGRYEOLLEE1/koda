@@ -1,0 +1,11 @@
+{
+  "pass": true,
+  "detail": {
+    "outcome": "fetched_only",
+    "exec_attempts": [],
+    "related_calls": 1,
+    "tool_calls_total": 6,
+    "model_attempted": false
+  },
+  "checked_at": "2026-09-30T11:44:19+00:00"
+}

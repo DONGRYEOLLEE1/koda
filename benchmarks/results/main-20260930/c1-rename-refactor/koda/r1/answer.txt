@@ -1,0 +1,29 @@
+I'll start by exploring the workspace to find all references to `calc_total`.Let me read all the relevant files.I have the full picture. Let me first run the existing tests to establish a baseline.Baseline: 8 passed. Now let me apply the rename across all files.All edits applied. Now let me verify no stale references remain and run the tests.리팩터링을 완료했습니다.
+
+## 변경 내용
+
+`calc_total` → `compute_order_total` 로 이름을 바꾸고, 옛 이름은 별칭으로도 남기지 않았습니다. `calc_total_tax` 는 그대로 두었습니다.
+
+| 파일 | 변경 |
+|---|---|
+| `shop/pricing.py` | 함수 정의, `__all__`, 모듈 docstring, `calc_total_tax` docstring 내 언급 |
+| `shop/__init__.py` | import 및 `__all__` |
+| `shop/cart.py` | import 및 `Cart.total()` 호출 |
+| `shop/checkout.py` | `pricing.compute_order_total(...)` 호출 및 docstring |
+| `shop/reports.py` | `METRICS` 문자열 값, `order_value()` 호출, docstring |
+| `tests/test_cart.py` | import, 호출, 테스트 함수명 |
+| `tests/test_pricing.py` | import, 3개 테스트 함수명 및 호출 |
+| `README.md` | 사용 예제, 설명 문장, 모듈 목록 |
+
+`shop/reports.py` 의 `METRICS = {"gross": "compute_order_total"}` 는 `getattr(p, ...)` 로 지연 해석되는 문자열이라 함께 갱신했습니다. 이 부분을 놓쳤다면 `daily_revenue` 가 런타임에 `AttributeError` 로 깨졌을 것입니다.
+
+## 검증
+
+- **기존 테스트**: `python -m pytest -q` → **8 passed** (변경 전 baseline 도 8 passed 로 동일)
+- **잔존 참조 확인**: `grep -rn "calc_total"` 에서 `calc_total_tax` 를 제외한 결과 **0건** — 옛 이름이 코드·문서 어디에도 남아 있지 않음
+- **새 이름 반영**: `compute_order_total` 참조 27건
+
+테스트 함수명(`test_calc_total_plain` 등)도 새 이름에 맞춰 바꿨는데, 이는 테스트 수집에 영향이 없으며 요청하신 "테스트까지 전부 새 이름으로" 에 해당합니다. 만약 테스트 함수명은 그대로 두는 편을 원하시면 되돌리겠습니다.
+
+--- route: edit | verdict: pass ---
+판정 근거: diff에서 pricing.py 정의·__all__·docstring, __init__/cart/checkout/reports의 import·호출·METRICS 문자열, 테스트 2개 파일, README까지 모두 compute_order_total로 일관되게 바뀌었고 calc_total_tax는 유지됐으며 옛 이름 별칭도 남지 않았다. pytest 8 passed 실행이 관측됐고, .pytest_cache 생성은 테스트 실행 부산물로 요청 범위 위반이라 보기 어렵다.

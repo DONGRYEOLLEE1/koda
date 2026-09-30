@@ -1,0 +1,152 @@
+{
+  "task": "e1-readonly-retry-trace",
+  "category": "e_readonly",
+  "tool": "opencode",
+  "rep": "r3",
+  "round_index": 2,
+  "round_total": 42,
+  "seed": 20261001,
+  "invocation": 1,
+  "round_started_at": "2026-09-30T12:13:41+00:00",
+  "concurrent_tools": [
+    "hermes",
+    "opencode",
+    "koda"
+  ],
+  "launch_order": [
+    "hermes",
+    "opencode",
+    "koda"
+  ],
+  "answer_chars": 582,
+  "answer_hangul_ratio": 0.28,
+  "koda_reviewer_calls": null,
+  "pytest_cache_in_workspace": false,
+  "hermes_state_restored": false,
+  "hermes_volatile_state_reset": null,
+  "secret_scrub_files": 0,
+  "bench_env": {
+    "developer_dir_fix": 1,
+    "tool_path_prepend": true,
+    "env_allowlist": true
+  },
+  "tool_call_names": [
+    "bash",
+    "grep",
+    "read",
+    "read",
+    "read"
+  ],
+  "outside_workspace": {
+    "tmp_entries_created": [],
+    "tmp_entries_created_unattributed_in_round": [],
+    "suspicious_refs": 0,
+    "examples": []
+  },
+  "infra": {
+    "meta_missing": false,
+    "proxy_off": false,
+    "llm_http_429": 0,
+    "llm_http_5xx": 0,
+    "runner_rc": 0,
+    "suspect": false
+  },
+  "llm_requests": [
+    {
+      "seq": 2,
+      "status": 200,
+      "stream": true,
+      "system_chars": 9860,
+      "n_tools": 10,
+      "tool_choice": "auto",
+      "reasoning_effort": "high",
+      "max_tokens": 32000,
+      "temperature": null,
+      "n_messages": 2,
+      "prompt_tokens": 7578,
+      "cache_hit": 1792,
+      "completion_tokens": 163,
+      "reasoning_tokens": 57,
+      "finish_reason": "tool_calls",
+      "resp_tool_calls": 2,
+      "tool_call_names": [
+        "bash",
+        "grep"
+      ],
+      "structured_output": false,
+      "latency_s": 1.08,
+      "ttfb_s": 0.308
+    },
+    {
+      "seq": 1,
+      "status": 200,
+      "stream": true,
+      "system_chars": 2096,
+      "n_tools": 0,
+      "tool_choice": null,
+      "reasoning_effort": "low",
+      "max_tokens": 32000,
+      "temperature": 0.5,
+      "n_messages": 3,
+      "prompt_tokens": 651,
+      "cache_hit": 512,
+      "completion_tokens": 217,
+      "reasoning_tokens": 197,
+      "finish_reason": "stop",
+      "resp_tool_calls": 0,
+      "tool_call_names": [],
+      "structured_output": false,
+      "latency_s": 1.724,
+      "ttfb_s": 0.27
+    },
+    {
+      "seq": 3,
+      "status": 200,
+      "stream": true,
+      "system_chars": 9860,
+      "n_tools": 10,
+      "tool_choice": "auto",
+      "reasoning_effort": "high",
+      "max_tokens": 32000,
+      "temperature": null,
+      "n_messages": 5,
+      "prompt_tokens": 9030,
+      "cache_hit": 7680,
+      "completion_tokens": 300,
+      "reasoning_tokens": 0,
+      "finish_reason": "tool_calls",
+      "resp_tool_calls": 3,
+      "tool_call_names": [
+        "read",
+        "read",
+        "read"
+      ],
+      "structured_output": false,
+      "latency_s": 1.347,
+      "ttfb_s": 0.283
+    },
+    {
+      "seq": 4,
+      "status": 200,
+      "stream": true,
+      "system_chars": 9860,
+      "n_tools": 10,
+      "tool_choice": "auto",
+      "reasoning_effort": "high",
+      "max_tokens": 32000,
+      "temperature": null,
+      "n_messages": 9,
+      "prompt_tokens": 10315,
+      "cache_hit": 9216,
+      "completion_tokens": 420,
+      "reasoning_tokens": 141,
+      "finish_reason": "stop",
+      "resp_tool_calls": 0,
+      "tool_call_names": [],
+      "structured_output": false,
+      "latency_s": 2.076,
+      "ttfb_s": 0.294
+    }
+  ],
+  "work_dir": "<work>/main-20260930/runs/ca385698e1"
+}

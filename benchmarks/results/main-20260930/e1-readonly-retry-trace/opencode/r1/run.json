@@ -1,0 +1,154 @@
+{
+  "task": "e1-readonly-retry-trace",
+  "category": "e_readonly",
+  "tool": "opencode",
+  "rep": "r1",
+  "round_index": 41,
+  "round_total": 42,
+  "seed": 20261001,
+  "invocation": 1,
+  "round_started_at": "2026-09-30T12:40:12+00:00",
+  "concurrent_tools": [
+    "hermes",
+    "koda",
+    "opencode"
+  ],
+  "launch_order": [
+    "hermes",
+    "koda",
+    "opencode"
+  ],
+  "answer_chars": 668,
+  "answer_hangul_ratio": 0.276,
+  "koda_reviewer_calls": null,
+  "pytest_cache_in_workspace": false,
+  "hermes_state_restored": false,
+  "hermes_volatile_state_reset": null,
+  "secret_scrub_files": 0,
+  "bench_env": {
+    "developer_dir_fix": 1,
+    "tool_path_prepend": true,
+    "env_allowlist": true
+  },
+  "tool_call_names": [
+    "grep",
+    "glob",
+    "read",
+    "read",
+    "read"
+  ],
+  "outside_workspace": {
+    "tmp_entries_created": [],
+    "tmp_entries_created_unattributed_in_round": [
+      "hermes_rpc_6d00b0b633fd4f22bb88eccb78660b2a.sock"
+    ],
+    "suspicious_refs": 0,
+    "examples": []
+  },
+  "infra": {
+    "meta_missing": false,
+    "proxy_off": false,
+    "llm_http_429": 0,
+    "llm_http_5xx": 0,
+    "runner_rc": 0,
+    "suspect": false
+  },
+  "llm_requests": [
+    {
+      "seq": 2,
+      "status": 200,
+      "stream": true,
+      "system_chars": 9860,
+      "n_tools": 10,
+      "tool_choice": "auto",
+      "reasoning_effort": "high",
+      "max_tokens": 32000,
+      "temperature": null,
+      "n_messages": 2,
+      "prompt_tokens": 7578,
+      "cache_hit": 1792,
+      "completion_tokens": 126,
+      "reasoning_tokens": 23,
+      "finish_reason": "tool_calls",
+      "resp_tool_calls": 2,
+      "tool_call_names": [
+        "grep",
+        "glob"
+      ],
+      "structured_output": false,
+      "latency_s": 1.122,
+      "ttfb_s": 0.345
+    },
+    {
+      "seq": 1,
+      "status": 200,
+      "stream": true,
+      "system_chars": 2096,
+      "n_tools": 0,
+      "tool_choice": null,
+      "reasoning_effort": "low",
+      "max_tokens": 32000,
+      "temperature": 0.5,
+      "n_messages": 3,
+      "prompt_tokens": 651,
+      "cache_hit": 512,
+      "completion_tokens": 575,
+      "reasoning_tokens": 563,
+      "finish_reason": "stop",
+      "resp_tool_calls": 0,
+      "tool_call_names": [],
+      "structured_output": false,
+      "latency_s": 2.904,
+      "ttfb_s": 0.204
+    },
+    {
+      "seq": 3,
+      "status": 200,
+      "stream": true,
+      "system_chars": 9860,
+      "n_tools": 10,
+      "tool_choice": "auto",
+      "reasoning_effort": "high",
+      "max_tokens": 32000,
+      "temperature": null,
+      "n_messages": 5,
+      "prompt_tokens": 9376,
+      "cache_hit": 7680,
+      "completion_tokens": 300,
+      "reasoning_tokens": 0,
+      "finish_reason": "tool_calls",
+      "resp_tool_calls": 3,
+      "tool_call_names": [
+        "read",
+        "read",
+        "read"
+      ],
+      "structured_output": false,
+      "latency_s": 1.391,
+      "ttfb_s": 0.294
+    },
+    {
+      "seq": 4,
+      "status": 200,
+      "stream": true,
+      "system_chars": 9860,
+      "n_tools": 10,
+      "tool_choice": "auto",
+      "reasoning_effort": "high",
+      "max_tokens": 32000,
+      "temperature": null,
+      "n_messages": 9,
+      "prompt_tokens": 10661,
+      "cache_hit": 9600,
+      "completion_tokens": 520,
+      "reasoning_tokens": 210,
+      "finish_reason": "stop",
+      "resp_tool_calls": 0,
+      "tool_call_names": [],
+      "structured_output": false,
+      "latency_s": 2.557,
+      "ttfb_s": 0.291
+    }
+  ],
+  "work_dir": "<work>/main-20260930/runs/dde7819f17"
+}

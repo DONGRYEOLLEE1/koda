@@ -1,0 +1,123 @@
+{
+  "tool": "opencode",
+  "tool_version": "opencode 1.18.33",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:58356",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 49.852,
+  "input_tokens": 142345,
+  "output_tokens": 11676,
+  "tool_calls": 17,
+  "reasoning_tokens": 6246,
+  "cache_read_tokens": 131072,
+  "llm_calls": 10,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+  "model_tool_calls_proxy": 17,
+  "model_tool_calls_agentic_proxy": 17,
+  "cache_miss_tokens": 11273,
+  "cost_estimate": {
+    "usd_peak_basis": 0.01818,
+    "usd_offpeak_basis": 0.00909,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "workspace_changes": {
+    "root": "<work>/dryrun-20260930b/runs/6dd1c486ce/w/semverlite",
+    "added": [],
+    "modified": [
+      "semverlite/ranges.py",
+      "semverlite/version.py"
+    ],
+    "deleted": [],
+    "n_changed": 2
+  },
+  "tool_state_drift": null,
+  "tool_reported": {
+    "available": true,
+    "source": "opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+    "session_id": "ses_f0ddd6862ffe5RchdX0a5pdkRb",
+    "llm_steps": 9,
+    "input_tokens": 141654,
+    "output_tokens": 11458,
+    "reasoning_tokens": 6044,
+    "cache_read_tokens": 130560,
+    "raw": {
+      "input": 11094,
+      "output": 5414,
+      "reasoning": 6044,
+      "cache_read": 130560,
+      "cache_write": 0
+    },
+    "tool_calls": 17,
+    "tool_names": {
+      "bash": 6,
+      "read": 9,
+      "write": 2
+    },
+    "error_events": 0,
+    "note": "the session-title call (small_model) is not included in the JSON events"
+  },
+  "proxy": {
+    "http_requests": 10,
+    "llm_requests": 10,
+    "llm_requests_ok": 10,
+    "llm_requests_error": 0,
+    "llm_requests_with_tools": 9,
+    "llm_requests_aux": 1,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 142345,
+    "output_tokens": 11676,
+    "reasoning_tokens": 6246,
+    "cache_read_tokens": 131072,
+    "cache_miss_tokens": 11273,
+    "model_tool_calls": 17,
+    "model_tool_calls_agentic": 17,
+    "llm_requests_structured_output": 0,
+    "reasoning_effort_values": {
+      "low": 1,
+      "high": 9
+    },
+    "models": {
+      "deepseek-flash": 10
+    },
+    "resp_models": {
+      "deepseek-flash": 10
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 10
+    },
+    "finish_reasons": {
+      "stop": 2,
+      "tool_calls": 8
+    },
+    "first_main_request": {
+      "n_tools": 10,
+      "system_chars": 9866,
+      "request_bytes": 31513,
+      "max_tokens": 32000,
+      "temperature": null,
+      "reasoning_effort": "high",
+      "tool_names": [
+        "bash",
+        "edit",
+        "glob",
+        "grep",
+        "read",
+        "skill",
+        "task",
+        "todowrite",
+        "webfetch",
+        "write"
+      ]
+    },
+    "llm_latency_sum_s": 47.883,
+    "errors": []
+  },
+  "started_at": "2026-09-30T11:45:47.784197+00:00",
+  "workspace": "<work>/dryrun-20260930b/runs/6dd1c486ce/w/semverlite",
+  "prompt_file": "<koda>/benchmarks/tasks/d1-semver-ranges/prompt.txt"
+}

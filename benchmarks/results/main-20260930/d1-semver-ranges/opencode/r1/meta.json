@@ -1,0 +1,152 @@
+{
+  "tool": "opencode",
+  "tool_version": "opencode 1.18.33",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:60149",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 52.885,
+  "input_tokens": 215713,
+  "output_tokens": 11716,
+  "tool_calls": 16,
+  "reasoning_tokens": 5776,
+  "cache_read_tokens": 204288,
+  "llm_calls": 14,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+  "model_tool_calls_proxy": 16,
+  "model_tool_calls_agentic_proxy": 16,
+  "cache_miss_tokens": 11425,
+  "cost_estimate": {
+    "usd_peak_basis": 0.018712,
+    "usd_offpeak_basis": 0.009356,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "tokens_complete": true,
+  "tokens_incomplete_reason": null,
+  "tool_env_names": [
+    "DEEPSEEK_API_KEY",
+    "DEVELOPER_DIR",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_PAGER",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "OPENCODE_CONFIG",
+    "OPENCODE_DISABLE_AUTOUPDATE",
+    "PAGER",
+    "PATH",
+    "SHELL",
+    "TERM",
+    "TMPDIR",
+    "USER",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "__CF_USER_TEXT_ENCODING",
+    "npm_config_cache"
+  ],
+  "workspace_changes": {
+    "root": "<work>/main-20260930/runs/6dd1c486ce/w/semverlite",
+    "added": [],
+    "modified": [
+      "semverlite/ranges.py",
+      "semverlite/version.py"
+    ],
+    "deleted": [],
+    "n_changed": 2
+  },
+  "tool_state_drift": null,
+  "tool_reported": {
+    "available": true,
+    "source": "opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+    "session_id": "ses_f0dab6676ffe6LF5s4C0g2IuVf",
+    "llm_steps": 13,
+    "input_tokens": 215022,
+    "output_tokens": 11689,
+    "reasoning_tokens": 5765,
+    "cache_read_tokens": 203776,
+    "raw": {
+      "input": 11246,
+      "output": 5924,
+      "reasoning": 5765,
+      "cache_read": 203776,
+      "cache_write": 0
+    },
+    "tool_calls": 16,
+    "tool_names": {
+      "bash": 7,
+      "read": 6,
+      "write": 2,
+      "edit": 1
+    },
+    "error_events": 0,
+    "note": "the session-title call (small_model) is not included in the JSON events"
+  },
+  "proxy": {
+    "http_requests": 14,
+    "llm_requests": 14,
+    "llm_requests_ok": 14,
+    "llm_requests_error": 0,
+    "llm_requests_without_usage": 0,
+    "client_disconnects": 0,
+    "llm_requests_with_tools": 13,
+    "llm_requests_aux": 1,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 215713,
+    "output_tokens": 11716,
+    "reasoning_tokens": 5776,
+    "cache_read_tokens": 204288,
+    "cache_miss_tokens": 11425,
+    "model_tool_calls": 16,
+    "model_tool_calls_agentic": 16,
+    "llm_requests_structured_output": 0,
+    "reasoning_effort_values": {
+      "low": 1,
+      "high": 13
+    },
+    "models": {
+      "deepseek-flash": 14
+    },
+    "resp_models": {
+      "deepseek-flash": 14
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 14
+    },
+    "finish_reasons": {
+      "stop": 2,
+      "tool_calls": 12
+    },
+    "first_main_request": {
+      "n_tools": 10,
+      "system_chars": 9860,
+      "request_bytes": 31507,
+      "max_tokens": 32000,
+      "temperature": null,
+      "reasoning_effort": "high",
+      "tool_names": [
+        "bash",
+        "edit",
+        "glob",
+        "grep",
+        "read",
+        "skill",
+        "task",
+        "todowrite",
+        "webfetch",
+        "write"
+      ]
+    },
+    "llm_latency_sum_s": 50.466,
+    "errors": []
+  },
+  "started_at": "2026-09-30T12:40:25.098349+00:00",
+  "workspace": "<work>/main-20260930/runs/6dd1c486ce/w/semverlite",
+  "prompt_file": "<koda>/benchmarks/tasks/d1-semver-ranges/prompt.txt"
+}

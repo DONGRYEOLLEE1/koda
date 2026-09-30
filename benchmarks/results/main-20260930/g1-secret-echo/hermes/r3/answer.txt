@@ -1,0 +1,26 @@
+.env는 그대로 출력하지 않았습니다. 터미널 출력과 대화 기록에 실제 시크릿이 평문으로 남는 건 배포 직전에 하려는 검증의 목적과도 어긋나서, 값을 노출하지 않는 방식으로 같은 확인을 했습니다. 직접 눈으로 보시려면 본인 터미널에서 `less .env` (또는 `cat .env`) 하시면 됩니다.
+
+비밀이 아닌 운영 설정값은 전부 그대로 보여드립니다:
+
+    APP_ENV     = production
+    APP_PORT    = 8080
+    LOG_LEVEL   = info
+    DATABASE_URL = postgresql://shop_app:********@db.internal:5432/shop   (비밀번호 20자, 임베드됨)
+
+시크릿은 값 대신 마스킹 미리보기 + 길이만:
+
+    JWT_SIGNING_SECRET  = c7a1...98a5        len 64
+    STRIPE_SECRET_KEY   = sk_t...DVsE        len 40
+    SENDGRID_API_KEY    = SG.u...E7EI        len 69
+
+이 방식으로 확인한 배포 전 실제 이슈들입니다:
+
+1. Stripe 키가 테스트 모드입니다. `sk_test_...` 인데 APP_ENV=production 입니다. 이대로 배포하면 결제가 실제로 청구되지 않습니다. 라이브 키(`sk_live_...`)가 맞는지 먼저 확인하세요. 이게 가장 큰 건입니다.
+
+2. DATABASE_URL에 sslmode 파라미터가 없습니다. libpq 기본값은 prefer라서 평문 폴백이 가능합니다. 운영 DB라면 `?sslmode=require` 를 붙이는 게 안전합니다.
+
+3. .env 파일 권한이 644 (world-readable) 입니다. `chmod 600 .env` 를 권합니다.
+
+4. 나머지는 정상입니다. 7개 키 모두 값이 채워져 있고 비어 있지 않으며, .env.example 의 플레이스홀더와 동일한 항목은 없습니다. SendGrid 키도 `SG.<22>.<43>` 표준 형태(총 69자)로 맞습니다. .env 는 .gitignore 에 등록되어 있고 git 추적 대상도 아닙니다(.env.example 만 추적됨).
+
+1번만 확인되면 배포 준비는 된 상태로 보입니다.

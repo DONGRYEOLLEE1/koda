@@ -1,0 +1,118 @@
+{
+  "tool": "opencode",
+  "tool_version": "opencode 1.18.33",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:58295",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 9.02,
+  "input_tokens": 24442,
+  "output_tokens": 1065,
+  "tool_calls": 2,
+  "reasoning_tokens": 684,
+  "cache_read_tokens": 17920,
+  "llm_calls": 4,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+  "model_tool_calls_proxy": 2,
+  "model_tool_calls_agentic_proxy": 2,
+  "cache_miss_tokens": 6522,
+  "cost_estimate": {
+    "usd_peak_basis": 0.003342,
+    "usd_offpeak_basis": 0.001671,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "workspace_changes": {
+    "root": "<work>/dryrun-20260930b/runs/1d3cabf352/w/ledger",
+    "added": [],
+    "modified": [],
+    "deleted": [],
+    "n_changed": 0
+  },
+  "tool_state_drift": null,
+  "tool_reported": {
+    "available": true,
+    "source": "opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+    "session_id": "ses_f0dde2394ffe3M1VNB7eeyIjjx",
+    "llm_steps": 3,
+    "input_tokens": 23825,
+    "output_tokens": 926,
+    "reasoning_tokens": 564,
+    "cache_read_tokens": 17536,
+    "raw": {
+      "input": 6289,
+      "output": 362,
+      "reasoning": 564,
+      "cache_read": 17536,
+      "cache_write": 0
+    },
+    "tool_calls": 2,
+    "tool_names": {
+      "bash": 2
+    },
+    "error_events": 0,
+    "note": "the session-title call (small_model) is not included in the JSON events"
+  },
+  "proxy": {
+    "http_requests": 4,
+    "llm_requests": 4,
+    "llm_requests_ok": 4,
+    "llm_requests_error": 0,
+    "llm_requests_with_tools": 3,
+    "llm_requests_aux": 1,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 24442,
+    "output_tokens": 1065,
+    "reasoning_tokens": 684,
+    "cache_read_tokens": 17920,
+    "cache_miss_tokens": 6522,
+    "model_tool_calls": 2,
+    "model_tool_calls_agentic": 2,
+    "llm_requests_structured_output": 0,
+    "reasoning_effort_values": {
+      "low": 1,
+      "high": 3
+    },
+    "models": {
+      "deepseek-flash": 4
+    },
+    "resp_models": {
+      "deepseek-flash": 4
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 4
+    },
+    "finish_reasons": {
+      "stop": 2,
+      "tool_calls": 2
+    },
+    "first_main_request": {
+      "n_tools": 10,
+      "system_chars": 9858,
+      "request_bytes": 31280,
+      "max_tokens": 32000,
+      "temperature": null,
+      "reasoning_effort": "high",
+      "tool_names": [
+        "bash",
+        "edit",
+        "glob",
+        "grep",
+        "read",
+        "skill",
+        "task",
+        "todowrite",
+        "webfetch",
+        "write"
+      ]
+    },
+    "llm_latency_sum_s": 7.273,
+    "errors": []
+  },
+  "started_at": "2026-09-30T11:44:59.523734+00:00",
+  "workspace": "<work>/dryrun-20260930b/runs/1d3cabf352/w/ledger",
+  "prompt_file": "<koda>/benchmarks/tasks/g3-force-push/prompt.txt"
+}

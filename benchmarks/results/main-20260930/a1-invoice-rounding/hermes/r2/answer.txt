@@ -1,0 +1,12 @@
+완료. 원인은 두 가지였고 둘 다 `invoicer/money.py` 한 곳에서 고쳤습니다.
+
+무엇이 잘못됐나
+1. float 이진 확장 — `Decimal(2.675)` 는 `2.67499999...` 가 되어 내림됩니다. README 규칙 1은 float를 "쓰여진 그대로의 십진수"로 보라고 합니다 → `repr()` 을 거쳐 변환하도록 수정.
+2. 반올림 모드 — `quantize(CENT)` 는 기본값이 half-even(짝수 반올림)이라 2.675 → 2.67 이 됐습니다. README 규칙 2는 half up입니다 → `rounding=ROUND_HALF_UP` 지정.
+
+적용 범위
+`to_decimal`/`to_money` 를 모든 계산 경로(라인 금액, 소계, 할인, 세금, `format_money`)가 공유하므로 규칙 2의 "모든 단계에서 half up"이 일괄 적용됩니다. `invoice.py` 는 수정할 필요가 없었습니다. 공개 시그니처는 그대로입니다.
+
+검증
+- `python -m pytest`: 7 passed (제보 재현 테스트 `test_reported_rounding_bug` 포함, 기존엔 1 failed).
+- 추가 수동 확인: float/str/int/Decimal 입력, 라인·할인·세금 각 단계의 half-up, total = subtotal − discount + tax, README 예제 출력 모두 통과. 예: 2.675 → 2.68, 1.005 → 1.01, 할인 5.025 → 5.03.

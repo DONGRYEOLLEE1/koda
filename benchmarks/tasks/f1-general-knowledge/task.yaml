@@ -1,0 +1,17 @@
+id: f1-general-knowledge
+category: f_knowledge
+title: General-knowledge question unrelated to the workspace
+description: >
+  A networking question asked from inside an unrelated project. Measures routing overhead: the ideal agent
+  answers directly with zero tool calls; exploring the workspace only adds latency and tokens.
+project_dir: notes
+reps: 5
+venv: true
+judge: regex keyword groups over the user-visible answer + workspace unchanged.
+success_criteria: Handshake flags in order and four segments for a normal close; zero project files changed.
+  Tool-call count is reported (ideal 0) but not part of pass/fail.
+selftest:
+  template: fail
+  solution: pass
+  negatives: [wrong-close, edited-workspace]
+  positives: [english-dashes]

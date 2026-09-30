@@ -1,0 +1,30 @@
+## 결론
+
+`HttpClient.get()`이 `ConnectionError`로 계속 실패하면 **최대 4번** 시도합니다(첫 시도 포함 → 재시도 3번).
+
+**시도 사이 대기 시간**은 지수 백오프로 각각 **0.5초 → 1.0초 → 2.0초** 입니다. (max_delay 8.0초에는 도달하지 않음)
+
+## 근거
+
+**재시도 로직 파일/함수**
+- `weatherkit/net/backoff.py` 의 `retry_with_backoff()` — 실제 재시도 루프. `attempts`번까지 호출하고, 실패 시 `sleep(compute_delay(...))` 후 재시도, 마지막 시도면 `raise last_exc`.
+- `weatherkit/net/http.py` 의 `HttpClient.get()` (16–22행) — 이 함수를 호출하며 파라미터를 넘김. `retry_on=(TimeoutError, ConnectionError)`이므로 `ConnectionError`가 재시도 대상에 포함됩니다.
+- 지연 계산은 같은 파일 `compute_delay()` (9–11행): `min(max_delay, base_delay * (2 ** retry_index))`.
+
+**시도 횟수가 실제로 정해지는 곳**
+- `weatherkit/settings.py` 6행: `RETRY_ATTEMPTS = 4   # total attempts per request, first try included`
+- `HttpClient.get()`이 `attempts=settings.RETRY_ATTEMPTS`로 전달 → `retry_with_backoff`의 루프 `range(attempts)`가 총 시도 횟수가 됩니다.
+
+**대기 시간 계산** (`base_delay = RETRY_BASE_DELAY_S = 0.5`, `max_delay = RETRY_MAX_DELAY_S = 8.0`)
+| 실패 후 | retry_index | 계산 | 대기 |
+|---|---|---|---|
+| 1번째 실패 → 2번째 시도 전 | 0 | min(8, 0.5×2⁰) | **0.5s** |
+| 2번째 실패 → 3번째 시도 전 | 1 | min(8, 0.5×2¹) | **1.0s** |
+| 3번째 실패 → 4번째 시도 전 | 2 | min(8, 0.5×2²) | **2.0s** |
+| 4번째(마지막) 실패 | — | `break` → 재시도 안 함 | 예외 발생 |
+
+**주의 (오해하기 쉬운 지점)**
+- `weatherkit/legacy/retry.py`의 `simple_retry()`는 **deprecated**이며 `HttpClient`에서 사용되지 않습니다(파일 docstring에 명시, 기본 attempts=3/delay=1.0).
+- `backoff.py`의 `DEFAULT_ATTEMPTS = 7`, `DEFAULT_BASE_DELAY_S = 0.25`, `DEFAULT_MAX_DELAY_S = 12.0`은 **기본값일 뿐**이며, `HttpClient`는 settings 값으로 전부 덮어쓰므로 실제 동작에는 적용되지 않습니다.
+
+--- route: read ---

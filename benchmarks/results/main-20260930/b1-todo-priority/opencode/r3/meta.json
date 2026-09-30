@@ -1,0 +1,155 @@
+{
+  "tool": "opencode",
+  "tool_version": "opencode 1.18.33",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:59977",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 28.003,
+  "input_tokens": 178320,
+  "output_tokens": 4176,
+  "tool_calls": 19,
+  "reasoning_tokens": 419,
+  "cache_read_tokens": 167040,
+  "llm_calls": 16,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+  "model_tool_calls_proxy": 19,
+  "model_tool_calls_agentic_proxy": 19,
+  "cache_miss_tokens": 11280,
+  "cost_estimate": {
+    "usd_peak_basis": 0.009397,
+    "usd_offpeak_basis": 0.004699,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "tokens_complete": true,
+  "tokens_incomplete_reason": null,
+  "tool_env_names": [
+    "DEEPSEEK_API_KEY",
+    "DEVELOPER_DIR",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_PAGER",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "OPENCODE_CONFIG",
+    "OPENCODE_DISABLE_AUTOUPDATE",
+    "PAGER",
+    "PATH",
+    "SHELL",
+    "TERM",
+    "TMPDIR",
+    "USER",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "__CF_USER_TEXT_ENCODING",
+    "npm_config_cache"
+  ],
+  "workspace_changes": {
+    "root": "<work>/main-20260930/runs/69be813a29/w/todo",
+    "added": [],
+    "modified": [
+      "tests/test_cli.py",
+      "tests/test_models.py",
+      "tests/test_store.py",
+      "todo/cli.py",
+      "todo/models.py",
+      "todo/store.py"
+    ],
+    "deleted": [],
+    "n_changed": 6
+  },
+  "tool_state_drift": null,
+  "tool_reported": {
+    "available": true,
+    "source": "opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+    "session_id": "ses_f0dad66d7ffeu1AwrKkzW19wjA",
+    "llm_steps": 15,
+    "input_tokens": 177501,
+    "output_tokens": 4158,
+    "reasoning_tokens": 409,
+    "cache_read_tokens": 166400,
+    "raw": {
+      "input": 11101,
+      "output": 3749,
+      "reasoning": 409,
+      "cache_read": 166400,
+      "cache_write": 0
+    },
+    "tool_calls": 19,
+    "tool_names": {
+      "bash": 4,
+      "read": 7,
+      "edit": 8
+    },
+    "error_events": 0,
+    "note": "the session-title call (small_model) is not included in the JSON events"
+  },
+  "proxy": {
+    "http_requests": 16,
+    "llm_requests": 16,
+    "llm_requests_ok": 16,
+    "llm_requests_error": 0,
+    "llm_requests_without_usage": 0,
+    "client_disconnects": 0,
+    "llm_requests_with_tools": 15,
+    "llm_requests_aux": 1,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 178320,
+    "output_tokens": 4176,
+    "reasoning_tokens": 419,
+    "cache_read_tokens": 167040,
+    "cache_miss_tokens": 11280,
+    "model_tool_calls": 19,
+    "model_tool_calls_agentic": 19,
+    "llm_requests_structured_output": 0,
+    "reasoning_effort_values": {
+      "low": 1,
+      "high": 15
+    },
+    "models": {
+      "deepseek-flash": 16
+    },
+    "resp_models": {
+      "deepseek-flash": 16
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 16
+    },
+    "finish_reasons": {
+      "stop": 2,
+      "tool_calls": 14
+    },
+    "first_main_request": {
+      "n_tools": 10,
+      "system_chars": 9848,
+      "request_bytes": 31964,
+      "max_tokens": 32000,
+      "temperature": null,
+      "reasoning_effort": "high",
+      "tool_names": [
+        "bash",
+        "edit",
+        "glob",
+        "grep",
+        "read",
+        "skill",
+        "task",
+        "todowrite",
+        "webfetch",
+        "write"
+      ]
+    },
+    "llm_latency_sum_s": 25.362,
+    "errors": []
+  },
+  "started_at": "2026-09-30T12:38:13.924589+00:00",
+  "workspace": "<work>/main-20260930/runs/69be813a29/w/todo",
+  "prompt_file": "<koda>/benchmarks/tasks/b1-todo-priority/prompt.txt"
+}

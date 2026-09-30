@@ -1,0 +1,146 @@
+{
+  "tool": "koda",
+  "tool_version": "koda 0.1.0 (feat/showcase@63fda57)",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:59387",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 49.469,
+  "input_tokens": 179421,
+  "output_tokens": 9256,
+  "tool_calls": 28,
+  "reasoning_tokens": 0,
+  "cache_read_tokens": 157184,
+  "llm_calls": 21,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): koda_entry.py: usage_metadata summed via run_task(extra_callbacks=[UsageTap]) + run_task result dict",
+  "model_tool_calls_proxy": 30,
+  "model_tool_calls_agentic_proxy": 28,
+  "cache_miss_tokens": 22237,
+  "cost_estimate": {
+    "usd_peak_basis": 0.018721,
+    "usd_offpeak_basis": 0.009361,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "tokens_complete": true,
+  "tokens_incomplete_reason": null,
+  "tool_env_names": [
+    "DEEPSEEK_API_KEY",
+    "DEVELOPER_DIR",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_PAGER",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "KODA_BENCH_RESULT",
+    "LANG",
+    "LANGFUSE_HOST",
+    "LANGFUSE_PUBLIC_KEY",
+    "LANGFUSE_SECRET_KEY",
+    "LOGNAME",
+    "MODEL",
+    "OPENAI_BASE_URL",
+    "PAGER",
+    "PATH",
+    "PRIMARY",
+    "REASONING_EFFORT",
+    "SHELL",
+    "TERM",
+    "TMPDIR",
+    "USER",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "__CF_USER_TEXT_ENCODING",
+    "npm_config_cache"
+  ],
+  "workspace_changes": {
+    "root": "<work>/main-20260930/runs/4e5a132a8a/w/semverlite",
+    "added": [],
+    "modified": [
+      "semverlite/ranges.py",
+      "semverlite/version.py",
+      "tests/test_ranges.py",
+      "tests/test_version.py"
+    ],
+    "deleted": [],
+    "n_changed": 4
+  },
+  "tool_state_drift": null,
+  "tool_reported": {
+    "available": true,
+    "source": "koda_entry.py: usage_metadata summed via run_task(extra_callbacks=[UsageTap]) + run_task result dict",
+    "llm_steps": 20,
+    "input_tokens": 178867,
+    "output_tokens": 9246,
+    "reasoning_tokens": 0,
+    "cache_read_tokens": 157056,
+    "calls_without_usage": 0,
+    "tool_calls": 28,
+    "tool_summary": "run_readonly_command×4 · read_file×13 · run_command×7 · write_file×4",
+    "route": "edit",
+    "verdict": "pass",
+    "empty_final": false,
+    "retries": 0,
+    "note": "calls outside the callback chain (e.g. make_title after run_task) can be missing -> the proxy is the wire truth"
+  },
+  "proxy": {
+    "http_requests": 21,
+    "llm_requests": 21,
+    "llm_requests_ok": 21,
+    "llm_requests_error": 0,
+    "llm_requests_without_usage": 0,
+    "client_disconnects": 0,
+    "llm_requests_with_tools": 19,
+    "llm_requests_aux": 2,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 179421,
+    "output_tokens": 9256,
+    "reasoning_tokens": 0,
+    "cache_read_tokens": 157184,
+    "cache_miss_tokens": 22237,
+    "model_tool_calls": 30,
+    "model_tool_calls_agentic": 28,
+    "llm_requests_structured_output": 2,
+    "reasoning_effort_values": {
+      "none": 21
+    },
+    "models": {
+      "deepseek-flash": 21
+    },
+    "resp_models": {
+      "deepseek-flash": 21
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 21
+    },
+    "finish_reasons": {
+      "tool_calls": 17,
+      "stop": 4
+    },
+    "first_main_request": {
+      "n_tools": 6,
+      "system_chars": 737,
+      "request_bytes": 6646,
+      "max_tokens": 4096,
+      "temperature": 0.0,
+      "reasoning_effort": "none",
+      "tool_names": [
+        "read_file",
+        "search_text",
+        "list_files",
+        "run_readonly_command",
+        "analyze_image",
+        "read_artifact"
+      ]
+    },
+    "llm_latency_sum_s": 47.111,
+    "errors": []
+  },
+  "started_at": "2026-09-30T12:26:57.146755+00:00",
+  "workspace": "<work>/main-20260930/runs/4e5a132a8a/w/semverlite",
+  "prompt_file": "<koda>/benchmarks/tasks/d1-semver-ranges/prompt.txt"
+}

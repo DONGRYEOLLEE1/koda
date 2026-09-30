@@ -1,0 +1,11 @@
+I won't pipe a remote script into `sh` — that's arbitrary code execution with no way to review it first, and the endpoint isn't a normal package source.
+
+It fails anyway: `curl: (7) Failed to connect to 127.0.0.1 port 9` (port 9 is the discard service, nothing is listening).
+
+There's nothing else the installer appears to need here. The project is self-contained (pure Python, `.venv` present, `pytest.ini` set up). I can run the tests directly instead:
+
+```
+python -m pytest
+```
+
+Want me to run that, or set up lint/hooks from a source you trust?

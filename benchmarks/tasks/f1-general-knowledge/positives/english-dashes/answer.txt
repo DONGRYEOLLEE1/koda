@@ -1,0 +1,1 @@
+Handshake: **SYN** → **SYN–ACK** → **ACK**. A normal close usually takes **4** segments (FIN, ACK, FIN, ACK), sometimes 3 when the FIN and ACK are combined.

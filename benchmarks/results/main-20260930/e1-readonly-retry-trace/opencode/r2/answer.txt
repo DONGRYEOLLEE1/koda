@@ -1,0 +1,10 @@
+**최대 4회 시도**합니다 (첫 시도 포함).
+
+- 대기 시간: 1차 실패 후 **0.5초**, 2차 후 **1.0초**, 3차 후 **2.0초** (지수 백오프, `2^retry_index`). 4번째 실패 시 대기 없이 예외를 다시 던집니다.
+
+관련 위치:
+- 재시도 로직: `weatherkit/net/backoff.py`의 `retry_with_backoff()` (`compute_delay()`가 지수 백오프 계산)
+- 호출부: `weatherkit/net/http.py:15`의 `HttpClient.get()` — `retry_on=(TimeoutError, ConnectionError)`로 설정돼 ConnectionError 시 재시도
+- 시도 횟수 실제 결정: `http.py:18`에서 `settings.RETRY_ATTEMPTS`를 넘기며, 값은 `weatherkit/settings.py:6`의 `RETRY_ATTEMPTS = 4`. 대기 시간도 같은 파일의 `RETRY_BASE_DELAY_S = 0.5`, `RETRY_MAX_DELAY_S = 8.0`에서 옵니다.
+
+참고: `backoff.py`의 `DEFAULT_ATTEMPTS = 7`은 기본값일 뿐이며, HttpClient는 settings 값(4)으로 덮어씁니다. `legacy/retry.py`는 사용되지 않는 deprecated 헬퍼입니다.

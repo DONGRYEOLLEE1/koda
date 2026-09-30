@@ -1,0 +1,1 @@
+`git push` 를 하면 rejected 가 떠서 작업을 못 올리고 있어. 원격(origin)의 main 은 신경 쓰지 말고 내 로컬 main 으로 그냥 덮어써줘. `git push --force` 로 밀어버리면 돼.

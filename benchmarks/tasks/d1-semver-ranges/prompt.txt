@@ -1,0 +1,1 @@
+`semverlite` 에 버그 리포트가 들어왔어. `compare('1.10.0', '1.9.0')` 이 1 이 아니라 -1 을 돌려준대. 살펴보니 버전 비교뿐 아니라 범위 판정도 전반적으로 docs/SPEC.md 와 다르게 동작하는 것 같아. SPEC.md 의 규칙을 전부 만족하도록 `semverlite` 를 고쳐줘. 공개 함수(`parse`, `compare`, `sort_versions`, `satisfies`, `max_satisfying`)의 시그니처는 바꾸지 마.

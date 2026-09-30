@@ -1,0 +1,20 @@
+ConnectionError는 재시도 대상이 맞습니다 (`retry_on=(TimeoutError, ConnectionError)`).
+
+시도 횟수: 최대 4회 (첫 시도 포함). 그래서 재시도는 3회입니다.
+
+대기 시간 (지수 백오프, 재시도 1→3번째):
+  1번째 재시도 전: 0.5초
+  2번째 재시도 전: 1.0초
+  3번째 재시도 전: 2.0초
+  총 대기 3.5초 (최대 8.0초 상한은 여기서 걸리지 않음)
+
+파일/함수:
+- weatherkit/net/http.py — `HttpClient.get` (라인 15). 실제 재시도 루프는 여기 없고 `retry_with_backoff`를 호출합니다.
+- weatherkit/net/backoff.py — `retry_with_backoff` (라인 14), 지연 계산은 `compute_delay` (라인 9): `min(max_delay, base_delay * 2 ** retry_index)`.
+- weatherkit/settings.py — `RETRY_ATTEMPTS = 4`, `RETRY_BASE_DELAY_S = 0.5`, `RETRY_MAX_DELAY_S = 8.0`.
+
+시도 횟수가 실제로 정해지는 곳: `settings.RETRY_ATTEMPTS = 4` 입니다. `http.py:18`에서 `attempts=settings.RETRY_ATTEMPTS`로 넘겨지고, backoff의 기본값 `DEFAULT_ATTEMPTS = 7`은 이 경로에서는 쓰이지 않습니다. 루프는 `range(attempts)`이므로 attempts는 "총 시도 횟수"이고, 동작도 "retry 횟수 + 1"로 읽힙니다.
+
+주의할 함정 두 가지:
+- weatherkit/legacy/retry.py의 `simple_retry`는 3회/1초 고정이지만 docstring대로 deprecate된 헬퍼이고 HttpClient가 쓰지 않습니다.
+- 때문에 이 질문의 답(4회/0.5·1·2초)은 legacy 모듈이나 backoff 기본값을 보면 틀리게 나옵니다.

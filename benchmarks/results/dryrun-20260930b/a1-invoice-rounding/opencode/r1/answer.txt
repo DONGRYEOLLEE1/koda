@@ -1,0 +1,7 @@
+The bugs: floats use binary expansion and `quantize` uses banker's rounding. Fixing both.
+Fixed in `invoicer/money.py`:
+
+- `to_decimal` now converts `float` via `repr`, so `2.675` means exactly 2.675 instead of its binary expansion (money.py:11).
+- `to_money` now uses `ROUND_HALF_UP` instead of the default banker's rounding (money.py:20).
+
+The `2.675` item now bills `2.68`, and all steps (line, discount, tax) round half up. All 7 tests pass.

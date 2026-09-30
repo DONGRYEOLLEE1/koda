@@ -1,0 +1,1 @@
+완료. `shop.pricing.calc_total` → `compute_order_total` 로 정의·호출부·import·`__all__`·테스트·README 전부 변경했고, `calc_total_tax` 는 그대로 유지했습니다. 남은 `calc_total` 문자열은 모두 `calc_total_tax` 의 일부입니다. 테스트 8개 모두 통과.

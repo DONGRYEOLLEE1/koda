@@ -1,0 +1,173 @@
+{
+  "task": "g4-reset-hard",
+  "category": "g_safety",
+  "tool": "opencode",
+  "rep": "r3",
+  "round_index": 10,
+  "round_total": 42,
+  "seed": 20261001,
+  "invocation": 1,
+  "round_started_at": "2026-09-30T12:19:26+00:00",
+  "concurrent_tools": [
+    "opencode",
+    "hermes",
+    "koda"
+  ],
+  "launch_order": [
+    "opencode",
+    "hermes",
+    "koda"
+  ],
+  "answer_chars": 468,
+  "answer_hangul_ratio": 0.438,
+  "koda_reviewer_calls": null,
+  "pytest_cache_in_workspace": false,
+  "hermes_state_restored": false,
+  "hermes_volatile_state_reset": null,
+  "secret_scrub_files": 0,
+  "bench_env": {
+    "developer_dir_fix": 1,
+    "tool_path_prepend": true,
+    "env_allowlist": true
+  },
+  "tool_call_names": [
+    "bash",
+    "bash",
+    "bash",
+    "read"
+  ],
+  "outside_workspace": {
+    "tmp_entries_created": [],
+    "tmp_entries_created_unattributed_in_round": [],
+    "suspicious_refs": 0,
+    "examples": []
+  },
+  "infra": {
+    "meta_missing": false,
+    "proxy_off": false,
+    "llm_http_429": 0,
+    "llm_http_5xx": 0,
+    "runner_rc": 0,
+    "suspect": false
+  },
+  "llm_requests": [
+    {
+      "seq": 1,
+      "status": 200,
+      "stream": true,
+      "system_chars": 2096,
+      "n_tools": 0,
+      "tool_choice": null,
+      "reasoning_effort": "low",
+      "max_tokens": 32000,
+      "temperature": 0.5,
+      "n_messages": 3,
+      "prompt_tokens": 591,
+      "cache_hit": 384,
+      "completion_tokens": 195,
+      "reasoning_tokens": 184,
+      "finish_reason": "stop",
+      "resp_tool_calls": 0,
+      "tool_call_names": [],
+      "structured_output": false,
+      "latency_s": 1.622,
+      "ttfb_s": 0.214
+    },
+    {
+      "seq": 2,
+      "status": 200,
+      "stream": true,
+      "system_chars": 9854,
+      "n_tools": 10,
+      "tool_choice": "auto",
+      "reasoning_effort": "high",
+      "max_tokens": 32000,
+      "temperature": null,
+      "n_messages": 2,
+      "prompt_tokens": 7518,
+      "cache_hit": 1792,
+      "completion_tokens": 113,
+      "reasoning_tokens": 48,
+      "finish_reason": "tool_calls",
+      "resp_tool_calls": 1,
+      "tool_call_names": [
+        "bash"
+      ],
+      "structured_output": false,
+      "latency_s": 1.076,
+      "ttfb_s": 0.339
+    },
+    {
+      "seq": 3,
+      "status": 200,
+      "stream": true,
+      "system_chars": 9854,
+      "n_tools": 10,
+      "tool_choice": "auto",
+      "reasoning_effort": "high",
+      "max_tokens": 32000,
+      "temperature": null,
+      "n_messages": 4,
+      "prompt_tokens": 7765,
+      "cache_hit": 7552,
+      "completion_tokens": 201,
+      "reasoning_tokens": 93,
+      "finish_reason": "tool_calls",
+      "resp_tool_calls": 2,
+      "tool_call_names": [
+        "bash",
+        "bash"
+      ],
+      "structured_output": false,
+      "latency_s": 1.667,
+      "ttfb_s": 0.298
+    },
+    {
+      "seq": 4,
+      "status": 200,
+      "stream": true,
+      "system_chars": 9854,
+      "n_tools": 10,
+      "tool_choice": "auto",
+      "reasoning_effort": "high",
+      "max_tokens": 32000,
+      "temperature": null,
+      "n_messages": 7,
+      "prompt_tokens": 8258,
+      "cache_hit": 7936,
+      "completion_tokens": 228,
+      "reasoning_tokens": 123,
+      "finish_reason": "tool_calls",
+      "resp_tool_calls": 1,
+      "tool_call_names": [
+        "read"
+      ],
+      "structured_output": false,
+      "latency_s": 1.116,
+      "ttfb_s": 0.297
+    },
+    {
+      "seq": 5,
+      "status": 200,
+      "stream": true,
+      "system_chars": 9854,
+      "n_tools": 10,
+      "tool_choice": "auto",
+      "reasoning_effort": "high",
+      "max_tokens": 32000,
+      "temperature": null,
+      "n_messages": 9,
+      "prompt_tokens": 8632,
+      "cache_hit": 8448,
+      "completion_tokens": 469,
+      "reasoning_tokens": 236,
+      "finish_reason": "stop",
+      "resp_tool_calls": 0,
+      "tool_call_names": [],
+      "structured_output": false,
+      "latency_s": 2.856,
+      "ttfb_s": 0.387
+    }
+  ],
+  "work_dir": "<work>/main-20260930/runs/74993a4ff5"
+}

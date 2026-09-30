@@ -1,0 +1,26 @@
+`semverlite` now matches docs/SPEC.md. Public signatures are unchanged (`parse(text) -> Version`, `compare(a, b) -> int`, `sort_versions(versions)`, `satisfies(version, range_str) -> bool`, `max_satisfying(versions, range_str)`; `__all__` untouched).
+
+What was wrong
+
+version.py (sections 1–2)
+- `compare` sorted on a string key `(str(major), str(minor), ...)`, so `1.10.0` sorted before `1.9.0`. It also compared prerelease as a joined string, which inverted `1.0.0-rc.1` vs `1.0.0` and mismatched numeric identifiers (`-2` vs `-10`).
+- `parse` accepted versions the spec rejects: leading zeros in MAJOR/MINOR/PATCH (`01.2.3`) and in numeric prerelease identifiers (`1.2.3-01`), and empty identifiers (`1.2.3-a..b`, `1.2.3+a..b`).
+
+ranges.py (section 3)
+- No `||` support at all — a union range raised `ValueError: invalid version: '||'`.
+- No validation: an empty range or empty set returned `True` (`all([])`).
+- `^` was implemented as "same major", ignoring the left-most non-zero rule (`^0.2.3` wrongly matched `0.3.0`) and the lower-bound `>=V` check was on the wrong side.
+- `~` was implemented as "same minor", so `~1.2.3` wrongly matched `2.3.0`.
+- The prerelease rule was missing entirely, and `*` matched prereleases.
+- `max_satisfying` picked the max with the same broken string key and skipped validating entries that happened not to match.
+
+What changed
+- `version.py`: regex rewritten with per-component leading-zero rules and non-empty prerelease/build identifiers; `Version.key()` now yields `(major, minor, patch, prerelease_key)` where a prerelease ranks below a release and identifiers rank `(0, int)` numeric < `(1, str)` alphanumeric, with longer-prerelease-greater by tuple comparison. BUILD is ignored.
+- `ranges.py`: ranges split into comparator sets by `||` (all sets validated up front, so an invalid range always raises `ValueError`); comparators parsed as `= V > >= < <= ^ ~ *` with no whitespace between operator and version; `^`/`~` expand to their documented lower/upper bounds; the prerelease rule is applied per set using the mentioned version (`^V`/`~V` → the lower bound `V`); `max_satisfying` validates every entry, then returns the original element with the highest precedence (first wins on ties).
+
+Verified
+- `pytest`: 119 passed, exit 0 (the reported `compare('1.10.0', '1.9.0') == 1` now passes, as do the pre-existing tests).
+- Added `tests/test_spec.py` transcribing SPEC.md: syntax accept/reject lists, the full precedence chain, sort stability, caret/tilde boundaries including `0.x`/`0.0.x`, unions, the six prerelease-rule examples in the spec, and invalid-range/entry cases.
+- Independent cross-check against a separately written recursive precedence implementation: 0 mismatches over 20,000 version pairs, plus transitivity/antisymmetry and sort agreement; a naive release-only range/reference agreed on 0 mismatches and matched `max_satisfying` argmax.
+
+Files: `semverlite/version.py`, `semverlite/ranges.py` (modified), `tests/test_spec.py` (new). Nothing committed.

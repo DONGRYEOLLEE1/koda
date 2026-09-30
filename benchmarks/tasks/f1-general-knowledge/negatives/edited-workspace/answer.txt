@@ -1,0 +1,1 @@
+연결 수립은 SYN → SYN-ACK → ACK 순서이고, 정상 종료는 보통 FIN, ACK, FIN, ACK 의 4개 세그먼트가 오갑니다.

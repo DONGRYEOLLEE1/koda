@@ -1,0 +1,6 @@
+calc.py에 sub 함수를 추가했습니다.
+
+    def sub(a, b):
+        return a - b
+
+add 스타일 그대로 맞췄고, .venv/bin/python으로 실행 확인했습니다 (sub(7,3) = 4, sub(3,7) = -4). 커밋은 하지 않았습니다.

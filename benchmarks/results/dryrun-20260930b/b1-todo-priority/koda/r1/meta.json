@@ -1,0 +1,114 @@
+{
+  "tool": "koda",
+  "tool_version": "koda 0.1.0 (feat/showcase@63fda57)",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:58080",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 28.231,
+  "input_tokens": 104327,
+  "output_tokens": 4729,
+  "tool_calls": 20,
+  "reasoning_tokens": 0,
+  "cache_read_tokens": 88320,
+  "llm_calls": 17,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): koda_entry.py: usage_metadata summed via run_task(extra_callbacks=[UsageTap]) + run_task result dict",
+  "model_tool_calls_proxy": 22,
+  "model_tool_calls_agentic_proxy": 20,
+  "cache_miss_tokens": 16007,
+  "cost_estimate": {
+    "usd_peak_basis": 0.011007,
+    "usd_offpeak_basis": 0.005503,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "workspace_changes": {
+    "root": "<work>/dryrun-20260930b/runs/25e2ee7c5b/w/todo",
+    "added": [],
+    "modified": [
+      "tests/test_cli.py",
+      "tests/test_models.py",
+      "tests/test_store.py",
+      "todo/cli.py",
+      "todo/models.py",
+      "todo/store.py"
+    ],
+    "deleted": [],
+    "n_changed": 6
+  },
+  "tool_state_drift": null,
+  "tool_reported": {
+    "available": true,
+    "source": "koda_entry.py: usage_metadata summed via run_task(extra_callbacks=[UsageTap]) + run_task result dict",
+    "llm_steps": 16,
+    "input_tokens": 103693,
+    "output_tokens": 4723,
+    "reasoning_tokens": 0,
+    "cache_read_tokens": 88064,
+    "calls_without_usage": 0,
+    "tool_calls": 20,
+    "tool_summary": "list_files×2 · run_readonly_command×4 · search_text · read_file×6 · multi_edit×5 · edit_file · run_command",
+    "route": "edit",
+    "verdict": "pass",
+    "empty_final": false,
+    "retries": 0,
+    "note": "calls outside the callback chain (e.g. make_title after run_task) can be missing -> the proxy is the wire truth"
+  },
+  "proxy": {
+    "http_requests": 17,
+    "llm_requests": 17,
+    "llm_requests_ok": 17,
+    "llm_requests_error": 0,
+    "llm_requests_with_tools": 15,
+    "llm_requests_aux": 2,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 104327,
+    "output_tokens": 4729,
+    "reasoning_tokens": 0,
+    "cache_read_tokens": 88320,
+    "cache_miss_tokens": 16007,
+    "model_tool_calls": 22,
+    "model_tool_calls_agentic": 20,
+    "llm_requests_structured_output": 2,
+    "reasoning_effort_values": {
+      "none": 17
+    },
+    "models": {
+      "deepseek-flash": 17
+    },
+    "resp_models": {
+      "deepseek-flash": 17
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 17
+    },
+    "finish_reasons": {
+      "tool_calls": 13,
+      "stop": 4
+    },
+    "first_main_request": {
+      "n_tools": 6,
+      "system_chars": 737,
+      "request_bytes": 7111,
+      "max_tokens": 4096,
+      "temperature": 0.0,
+      "reasoning_effort": "none",
+      "tool_names": [
+        "read_file",
+        "search_text",
+        "list_files",
+        "run_readonly_command",
+        "analyze_image",
+        "read_artifact"
+      ]
+    },
+    "llm_latency_sum_s": 26.465,
+    "errors": []
+  },
+  "started_at": "2026-09-30T11:41:43.663869+00:00",
+  "workspace": "<work>/dryrun-20260930b/runs/25e2ee7c5b/w/todo",
+  "prompt_file": "<koda>/benchmarks/tasks/b1-todo-priority/prompt.txt"
+}

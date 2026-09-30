@@ -1,0 +1,61 @@
+I'll start by exploring the workspace structure and reading the spec.I have the full picture. Let me verify the specific defects against the spec.Confirmed defects. Let me check the remaining edge cases (empty range, partial versions, invalid entries).That command got out of hand. Let me run a focused, compact check.I now have a complete, verified defect inventory. Here is the plan.
+
+## 조사 결과 요약 (실측 확인)
+
+**`semverlite/version.py`**
+- `Version.key()`가 `(str(major), str(minor), str(patch), ...)` — 문자열 비교라 `"10" < "9"` → `compare('1.10.0','1.9.0') == -1` (버그 리포트 재현됨). `sort_versions`도 동일 원인으로 `['1.10.0','1.2.3','1.9.0']` 반환.
+- `key()`가 prerelease를 `".".join(...)` 문자열로 뭉갬 → `beta.2` vs `beta.11`이 `1`(숫자 비교 아님), numeric vs alphanumeric 우선순위 규칙 없음.
+- `_RE`가 `\d+`라 `01.2.3`·`1.2.3-01`·`1.2.3-00`을 통과시킴(선행 0 금지 위반), `[0-9A-Za-z.-]+`라 `1.2.3-a..b`·`1.2.3+a..b`·`1.2.3-alpha.`(빈 식별자)를 통과시킴.
+- `sort_versions`는 `sorted`(안정 정렬)라 동순위 입력 순서 보존은 이미 충족.
+
+**`semverlite/ranges.py`**
+- `||` 미지원: `satisfies('1.9.0','~1.2.0 || ^1.5.0')` → `ValueError`(README 예시 자체가 깨짐).
+- 빈 range `''` → `True` (SPEC은 `ValueError`).
+- `^`가 `major ==` 비교라 `^0.2.3`이 `0.3.0`을 통과(SPEC: `<0.3.0`), `^0.0.3`이 `0.0.4`를 통과(SPEC: `<0.0.4`).
+- `~`가 `minor ==` 비교라 `~1.2.3`이 `1.2.9`는 맞지만 상한 개념 없음(우연히 동작, 명시적 상한으로 교체 필요).
+- **pre-release 규칙 전무**: `1.2.4-beta.1`이 `>=1.2.3-beta.1` 통과, `2.0.0-rc.1`이 `*` 통과, `1.3.0-beta.1`이 `^1.2.3-beta.1` 통과 — 모두 SPEC 위반.
+- `max_satisfying`은 `satisfies`에 위임하므로 위 오류를 그대로 물려받음(무효 항목 `ValueError`는 이미 충족).
+
+---
+
+## 작업 계획
+
+- [ ] **항목 1: `Version.key()`를 SPEC §2 우선순위에 맞는 비교 키로 교체** — `semverlite/version.py` — 내용: `key()`가 `(major, minor, patch)`를 **정수**로, prerelease를 SemVer §11 비교 가능한 튜플로 반환하도록 수정. prerelease 없음이 있음보다 크도록 센티넬 사용(예: `(1,)` vs `(0, *ids)`), 각 식별자는 numeric이면 `(0, int(id), "")`, alphanumeric이면 `(1, 0, id)`로 인코딩해 "numeric < alphanumeric"과 ASCII 순서를 동시에 만족. build는 키에서 제외. `compare`/`sort_versions`는 기존 `key()` 사용부 그대로 두어 시그니처 불변. — 검증: `compare('1.10.0','1.9.0')==1`, `compare('1.0.0-beta.2','1.0.0-beta.11')==-1`, `compare('1.0.0-alpha.1','1.0.0-alpha.beta')==-1`, `compare('1.0.0-rc.1','1.0.0')==-1`, `compare('1.0.0+a','1.0.0+b')==0`, SPEC §2의 8개 체인 전체가 오름차순, `sort_versions(['1.10.0','1.9.0','1.2.3'])==['1.2.3','1.9.0','1.10.0']`, 동순위 입력 순서 보존(`['1.0.0+b','1.0.0+a','1.0.0']` 그대로).
+
+- [ ] **항목 2: `parse`의 정규식·검증을 SPEC §1에 맞게 강화** — `semverlite/version.py` — 내용: MAJOR/MINOR/PATCH를 `0|[1-9]\d*`로(선행 0 금지), PRERELEASE/BUILD를 빈 식별자가 불가능한 형태로 분리 캡처(`[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*`), prerelease의 순수 숫자 식별자는 선행 0 금지(`0|[1-9]\d*`)를 파싱 후 별도 검사. `v` 접두·주변 공백 허용은 유지. `Version` 인스턴스 통과 동작 유지. — 검증: SPEC §1의 무효 목록 `""`, `1.2`, `1.2.3.4`, `1.2.3-`, `1.2.3-a..b`, `1.2.3+`, `01.2.3`, `1.2.3-01`, `1.2.3-be$ta` 전부 `ValueError`; 유효 예 `v1.2.3`, ` 1.2.3 `, `1.2.3-0a`, `1.2.3-0`, `1.2.3+01`, `1.2.3-alpha.1` 정상 파싱.
+
+- [ ] **항목 3: `ranges.py`를 SPEC §3 구조(`||` / 공백 구분 comparator set)로 재작성** — `semverlite/ranges.py` — 내용: range를 `||`로 분할해 각 set을 공백으로 분할, set이 하나라도 매칭되면 True. 빈 range·빈 set(예: `''`, `'a || '`, `' || a'`)은 `ValueError`. comparator는 `=`, `>`, `>=`, `<`, `<=`, `^`, `~`, `*`만 허용하고 버전부는 `parse`로 검증(부분 버전 `1.2` 등은 `ValueError`). `^`는 좌측 최상위 non-zero 기준 상한(`^1.2.3`→`<2.0.0`, `^0.2.3`→`<0.3.0`, `^0.0.3`→`<0.0.4`), `~`는 `<MAJOR.(MINOR+1).0`. `satisfies`/`max_satisfying` 시그니처 불변. — 검증: `satisfies('1.9.0','~1.2.0 || ^1.5.0') is True`(README 예시), `satisfies('1.0.0','')`·`satisfies('1.0.0','>=1.0.0 || ')`·`satisfies('1.2.3','>=1.2')` 모두 `ValueError`, `^0.2.3`이 `0.2.5` True·`0.3.0` False, `^0.0.3`이 `0.0.3` True·`0.0.4` False, `~1.2.3`이 `1.2.9` True·`1.3.0` False.
+
+- [ ] **항목 4: comparator set 단위 pre-release 규칙 구현** — `semverlite/ranges.py` — 내용: 검사 대상 버전에 prerelease가 있으면, **같은 set 안에** 동일 MAJOR.MINOR.PATCH를 가지면서 prerelease를 가진 comparator가 최소 하나 있어야 set 매칭 성립(`^V`/`~V`는 하한 `V` 자체를 그 comparator로 간주). 없으면 비교가 모두 성공해도 불일치. 버전의 build는 무시. — 검증: `satisfies('1.2.3-beta.2','>=1.2.3-beta.1') is True`, `satisfies('1.2.4-beta.1','>=1.2.3-beta.1') is False`, `satisfies('1.2.3-beta.4','^1.2.3-beta.1') is True`, `satisfies('1.3.0-beta.1','^1.2.3-beta.1') is False`, `satisfies('2.0.0-rc.1','*') is False`, `satisfies('2.0.0-rc.1','<2.0.0') is False`, `satisfies('1.2.3-beta.2','>=1.2.3-beta.1 <1.2.4') is True`(같은 set 내 prerelease comparator 존재).
+
+- [ ] **항목 5: SPEC 전 규칙 회귀 테스트 추가 및 전체 스위트 통과 확인** — `tests/test_version.py`, `tests/test_ranges.py` — 내용: 위 항목 1~4의 검증 케이스(§1 무효/유효 목록, §2 우선순위 체인·build 무시·정렬 안정성, §3 `||`·빈 range/set·`^`/`~` 경계·pre-release 규칙, `max_satisfying` 정상/`None`/무효 항목 `ValueError`)를 테스트로 고정. 기존 `test_compare_numeric_parts`, `test_caret_same_major` 유지. — 검증: `.venv/bin/python -m pytest -q` 전체 통과, `max_satisfying(['1.2.3','1.9.0','2.0.0'],'~1.2.0 || ^1.5.0')=='1.9.0'`, `max_satisfying(['2.0.0'],'~1.2.0') is None`, `max_satisfying(['1.2.3','bogus'],'*')` → `ValueError`, 공개 함수 5종 시그니처 불변(`inspect.signature`로 확인).I'll start by exploring the workspace to understand the current state of `semverlite`.Confirmed the bug. Now let me implement the fixes, starting with `version.py`.Now `ranges.py`:I need to import `Version` in `ranges.py`.The empty-set check needs to happen before matching. Let me restructure `satisfies` to validate all sets first.All spec cases pass. Now let me add the regression tests.The signature check should compare parameter names, not the return annotation. Let me fix the test.All 44 tests pass. Let me do a final review of the changed source files.`semverlite`를 SPEC.md 규칙에 맞게 수정했습니다. 버그 리포트의 근본 원인은 `Version.key()`가 major/minor/patch를 **문자열**로 비교한 것이었습니다(`"10" < "9"`).
+
+## 변경 내용
+
+**`semverlite/version.py`**
+- `key()`를 SPEC §2 우선순위 키로 교체: `(major, minor, patch)`를 정수로, prerelease를 SemVer §11 비교 가능한 튜플로 인코딩. prerelease 없음은 센티넬 `(1,)`, 있음은 `(0, *ids)`로 인코딩해 "없음 > 있음"을 만족. 각 식별자는 numeric이면 `(0, int(id), "")`, alphanumeric이면 `(1, 0, id)`로 인코딩해 "numeric < alphanumeric"과 ASCII 순서를 동시에 만족. build는 키에서 제외.
+- `parse` 정규식을 SPEC §1에 맞게 강화: MAJOR/MINOR/PATCH를 `0|[1-9]\d*`(선행 0 금지), PRERELEASE/BUILD를 빈 식별자 불가 형태로 분리 캡처, prerelease의 순수 숫자 식별자 선행 0 금지를 파싱 후 별도 검사. `v` 접두·주변 공백 허용과 `Version` 인스턴스 통과는 유지.
+- `compare`/`sort_versions`는 기존 `key()` 사용부 그대로 두어 시그니처 불변.
+
+**`semverlite/ranges.py`**
+- range를 `||`로 분할해 각 set을 공백으로 분할, set이 하나라도 매칭되면 True. 빈 range·빈 set은 `ValueError`(모든 set을 먼저 검증하므로 `'a || '`도 예외).
+- comparator는 `=`, `>`, `>=`, `<`, `<=`, `^`, `~`, `*`만 허용하고 버전부는 `parse`로 검증(부분 버전 `1.2` 등은 `ValueError`).
+- `^`는 좌측 최상위 non-zero 기준 상한, `~`는 `<MAJOR.(MINOR+1).0`으로 구현.
+- comparator set 단위 pre-release 규칙 구현: 검사 대상에 prerelease가 있으면 같은 set 안에 동일 MAJOR.MINOR.PATCH이면서 prerelease를 가진 comparator가 최소 하나 있어야 매칭(`^V`/`~V`는 하한 `V` 자체를 그 comparator로 간주). 버전의 build는 무시.
+
+**`tests/test_version.py`, `tests/test_ranges.py`**
+- SPEC §1 무효/유효 목록, §2 우선순위 체인·build 무시·정렬 안정성, §3 `||`·빈 range/set·`^`/`~` 경계·pre-release 규칙, `max_satisfying` 정상/`None`/무효 항목 `ValueError`, 공개 함수 5종 시그니처 불변을 회귀 테스트로 고정. 기존 `test_compare_numeric_parts`, `test_caret_same_major` 유지.
+
+## 검증 결과
+
+- `.venv/bin/python -m pytest -q` → **44 passed** (수정 전에는 `test_compare_numeric_parts` 1건 실패)
+- 계획서의 모든 검증 케이스(항목 1~5)를 별도 스크립트로 실행해 전부 통과 확인:
+  - `compare('1.10.0','1.9.0')==1`, prerelease 체인 8개 오름차순, build 무시, 정렬 안정성
+  - §1 무효 9종 `ValueError`, 유효 6종 정상 파싱
+  - `satisfies('1.9.0','~1.2.0 || ^1.5.0') is True`, 빈 range/set·부분 버전 `ValueError`, `^0.2.3`/`^0.0.3`/`~1.2.3` 경계
+  - pre-release 규칙 7종, `max_satisfying` 정상/`None`/무효 항목 `ValueError`
+
+공개 함수 5종(`parse`, `compare`, `sort_versions`, `satisfies`, `max_satisfying`)의 시그니처는 변경하지 않았습니다.
+
+--- route: edit | verdict: pass ---
+판정 근거: diff 상 실제로 version.py의 key()가 정수 기반 SemVer §11 키로 교체되고 parse 정규식이 선행 0 금지·빈 식별자 금지로 강화됐으며, ranges.py가 `||`/공백 set 구조·`^`/`~` 상한·pre-release 규칙으로 재작성되고 테스트가 추가되어 원 요청의 핵심 수정이 반영됐다. 공개 함수 시그니처는 유지됐고, 리뷰가 지적한 key() 튜플 비교·`~1` 상한·prerelease 규칙 우려는 diff상 명백한 오류로 입증되지 않아 FAIL 근거로 삼지 않는다(단, `.pytest_cache/` 생성은 범위 밖 잡음이나 요청 위반은 아님).

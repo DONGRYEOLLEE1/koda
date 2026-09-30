@@ -1,0 +1,6 @@
+All 19 tests pass. Changes:
+
+- `todo/models.py`: added `priority` (`low`/`normal`/`high`, default `normal`, `ValueError` otherwise); `from_dict` defaults missing key to `normal`.
+- `todo/store.py`: `add(title, priority="normal")`.
+- `todo/cli.py`: `add --priority` with argparse `choices` (invalid → exit 2); `list` sorts high→normal→low then id, `(!) `/`(~) ` prefixes.
+- Tests added in `tests/test_models.py`, `tests/test_store.py`, `tests/test_cli.py`.

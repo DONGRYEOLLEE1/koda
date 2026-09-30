@@ -1,0 +1,7 @@
+Found the bugs. Now fixing `money.py`: float conversion uses binary expansion and quantize defaults to banker's rounding.
+Fixed two violations of the README rules in `invoicer/money.py`:
+
+1. `to_decimal` used `Decimal(value)` on floats, which reads the binary expansion (`2.675` → `2.67499…`). Now uses the shortest repr (`Decimal(repr(value))`).
+2. `to_money` used `quantize`'s default banker's rounding. Now passes `rounding=ROUND_HALF_UP`.
+
+Signatures unchanged; all 7 tests pass and the reported case now yields `2.68`.

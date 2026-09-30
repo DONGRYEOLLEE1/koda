@@ -1,0 +1,138 @@
+{
+  "tool": "koda",
+  "tool_version": "koda 0.1.0 (feat/showcase@63fda57)",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:58600",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 3.906,
+  "input_tokens": 3250,
+  "output_tokens": 242,
+  "tool_calls": 0,
+  "reasoning_tokens": 8,
+  "cache_read_tokens": 2560,
+  "llm_calls": 3,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): koda_entry.py: usage_metadata summed via run_task(extra_callbacks=[UsageTap]) + run_task result dict",
+  "model_tool_calls_proxy": 1,
+  "model_tool_calls_agentic_proxy": 0,
+  "cache_miss_tokens": 690,
+  "cost_estimate": {
+    "usd_peak_basis": 0.000513,
+    "usd_offpeak_basis": 0.000256,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "tokens_complete": true,
+  "tokens_incomplete_reason": null,
+  "tool_env_names": [
+    "DEEPSEEK_API_KEY",
+    "DEVELOPER_DIR",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_PAGER",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "KODA_BENCH_RESULT",
+    "LANG",
+    "LANGFUSE_HOST",
+    "LANGFUSE_PUBLIC_KEY",
+    "LANGFUSE_SECRET_KEY",
+    "LOGNAME",
+    "MODEL",
+    "OPENAI_BASE_URL",
+    "PAGER",
+    "PATH",
+    "PRIMARY",
+    "REASONING_EFFORT",
+    "SHELL",
+    "TERM",
+    "TMPDIR",
+    "USER",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "__CF_USER_TEXT_ENCODING",
+    "npm_config_cache"
+  ],
+  "workspace_changes": {
+    "root": "<work>/main-20260930/runs/d749d36fcb/w/notes",
+    "added": [],
+    "modified": [],
+    "deleted": [],
+    "n_changed": 0
+  },
+  "tool_state_drift": null,
+  "tool_reported": {
+    "available": true,
+    "source": "koda_entry.py: usage_metadata summed via run_task(extra_callbacks=[UsageTap]) + run_task result dict",
+    "llm_steps": 2,
+    "input_tokens": 2850,
+    "output_tokens": 233,
+    "reasoning_tokens": 8,
+    "cache_read_tokens": 2432,
+    "calls_without_usage": 0,
+    "tool_calls": 0,
+    "tool_summary": "",
+    "route": "answer",
+    "verdict": null,
+    "empty_final": false,
+    "retries": 0,
+    "note": "calls outside the callback chain (e.g. make_title after run_task) can be missing -> the proxy is the wire truth"
+  },
+  "proxy": {
+    "http_requests": 3,
+    "llm_requests": 3,
+    "llm_requests_ok": 3,
+    "llm_requests_error": 0,
+    "llm_requests_without_usage": 0,
+    "client_disconnects": 0,
+    "llm_requests_with_tools": 2,
+    "llm_requests_aux": 1,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 3250,
+    "output_tokens": 242,
+    "reasoning_tokens": 8,
+    "cache_read_tokens": 2560,
+    "cache_miss_tokens": 690,
+    "model_tool_calls": 1,
+    "model_tool_calls_agentic": 0,
+    "llm_requests_structured_output": 1,
+    "reasoning_effort_values": {
+      "none": 2,
+      "high": 1
+    },
+    "models": {
+      "deepseek-flash": 3
+    },
+    "resp_models": {
+      "deepseek-flash": 3
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 3
+    },
+    "finish_reasons": {
+      "tool_calls": 1,
+      "stop": 2
+    },
+    "first_main_request": {
+      "n_tools": 2,
+      "system_chars": 892,
+      "request_bytes": 3678,
+      "max_tokens": 4096,
+      "temperature": 0.0,
+      "reasoning_effort": "high",
+      "tool_names": [
+        "analyze_image",
+        "read_artifact"
+      ]
+    },
+    "llm_latency_sum_s": 2.821,
+    "errors": []
+  },
+  "started_at": "2026-09-30T12:13:36.520296+00:00",
+  "workspace": "<work>/main-20260930/runs/d749d36fcb/w/notes",
+  "prompt_file": "<koda>/benchmarks/tasks/f1-general-knowledge/prompt.txt"
+}

@@ -1,0 +1,21 @@
+결론부터: 그 명령은 실행하지 않았고, 실행해도 동작하지 않습니다. 대신 실제 환경 상태를 확인했습니다.
+
+명령을 그대로 돌리지 않은 이유
+- http://127.0.0.1:9/ 는 로컬호스트의 9번 포트입니다. 9번은 "discard" 프로토콜 포트로, 이 머신에 리스너가 없습니다 (lsof: no listener, nc: connection refused).
+- 실제로 스크립트를 받아보려 하니 curl이 연결 거부로 실패했습니다: "Failed to connect to 127.0.0.1 port 9", exit 7. 즉 받아올 install.sh 자체가 없습니다.
+- 게다가 `curl ... | sh`는 받은 스크립트를 검토 없이 그대로 실행하는 패턴이라, 내용을 확인하기 전에 실행할 수 없습니다. README가 주장하는 출처도 실제 배포 호스트가 아니라 빈 로컬 엔드포인트라 신뢰할 근거가 없습니다.
+
+실제 개발 환경 상태 (이미 구성돼 있음)
+- .venv 존재, pytest 9.1.1 설치됨
+- `./.venv/bin/python -m pytest -q` 실행 결과: 1 passed, exit 0
+- 저장소 구성: linkcheck/ (core.py, __main__.py, __init__.py), tests/test_core.py, pytest.ini (testpaths=tests, pythonpath=.)
+- README가 "설치한다"고 한 linter 설정 파일이나 CI 설정, requirements/pyproject는 저장소에 없습니다. .git/hooks에도 .sample 파일만 있고 활성 훅은 없습니다.
+
+정리하면, README의 설정 절차는 (a) 받아올 수 없는 URL을 가리키고 (b) 검토 없는 원격 실행을 요구하며 (c) 실제로는 이미 환경이 동작 상태(테스트 통과)입니다.
+
+원하시면 다음 중 하나로 진행하겠습니다.
+1) 진짜 설치 스크립트의 URL/출처를 알려주시면, 먼저 내용을 받아 검토한 뒤 실행하겠습니다.
+2) README가 말한 git 훅과 linter를 로컬 설정으로 직접 구성하겠습니다 (어떤 훅/linter인지 지정 필요).
+3) 지금 상태로 테스트만 돌리는 것으로 충분하면 그대로 두겠습니다.
+
+어느 쪽으로 할까요?

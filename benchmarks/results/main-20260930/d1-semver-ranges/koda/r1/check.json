@@ -1,0 +1,49 @@
+{
+  "pass": false,
+  "detail": {
+    "hidden_tests": {
+      "ok": false,
+      "rc": 1,
+      "total": 98,
+      "failed": 22,
+      "errors": 0,
+      "skipped": 0,
+      "failed_ids": [
+        "test_hidden_semver::test_satisfies[1.4.0-^1.2.3-True]",
+        "test_hidden_semver::test_satisfies[2.0.0-^1.2.3-False]",
+        "test_hidden_semver::test_satisfies[1.2.2-^1.2.3-False]",
+        "test_hidden_semver::test_satisfies[0.2.9-^0.2.3-True]",
+        "test_hidden_semver::test_satisfies[0.3.0-^0.2.3-False]",
+        "test_hidden_semver::test_satisfies[0.0.3-^0.0.3-True]",
+        "test_hidden_semver::test_satisfies[0.0.4-^0.0.3-False]",
+        "test_hidden_semver::test_satisfies[1.2.9-~1.2.3-True]",
+        "test_hidden_semver::test_satisfies[1.3.0-~1.2.3-False]",
+        "test_hidden_semver::test_satisfies[2.2.5-~1.2.3-False]",
+        "test_hidden_semver::test_satisfies[0.1.5-~0.1.2-True]",
+        "test_hidden_semver::test_satisfies[1.2.3-1.2.3-True]",
+        "test_hidden_semver::test_satisfies[1.2.3+build.7-=1.2.3-True]",
+        "test_hidden_semver::test_satisfies[3.1.0-^1.2.3 || ^3.0.0-True]",
+        "test_hidden_semver::test_satisfies[2.5.0-^1.2.3 || ^3.0.0-False]",
+        "test_hidden_semver::test_satisfies[1.2.3-beta.4-^1.2.3-beta.1-True]",
+        "test_hidden_semver::test_satisfies[1.3.0-beta.1-^1.2.3-beta.1-False]",
+        "test_hidden_semver::test_satisfies[1.2.3-alpha-^1.2.3-beta.1-False]",
+        "test_hidden_semver::test_satisfies[1.9.0-rc.1-^1.2.3-False]",
+        "test_hidden_semver::test_satisfies[1.2.3-rc.1-~1.2.3-alpha-True]"
+      ],
+      "tail": "./..<tmp>::test_satisfies[3.1.0-^1.2.3 || ^3.0.0-True]\nFAILED ../../../../../../../..<tmp>::test_satisfies[2.5.0-^1.2.3 || ^3.0.0-False]\nFAILED ../../../../../../../..<tmp>::test_satisfies[1.2.3-beta.4-^1.2.3-beta.1-True]\nFAILED ../../../../../../../..<tmp>::test_satisfies[1.3.0-beta.1-^1.2.3-beta.1-False]\nFAILED ../../../../../../../..<tmp>::test_satisfies[1.2.3-alpha-^1.2.3-beta.1-False]\nFAILED ../../../../../../../..<tmp>::test_satisfies[1.9.0-rc.1-^1.2.3-False]\nFAILED ../../../../../../../..<tmp>::test_satisfies[1.2.3-rc.1-~1.2.3-alpha-True]\nFAILED ../../../../../../../..<tmp>::test_max_satisfying\nFAILED ../../../../../../../..<tmp>::test_caret_same_major\n22 failed, 76 passed in 0.17s\n"
+    },
+    "workspace_changes": {
+      "added": [],
+      "modified": [
+        "semverlite/ranges.py",
+        "semverlite/version.py",
+        "tests/test_ranges.py",
+        "tests/test_version.py"
+      ],
+      "deleted": [],
+      "n_changed": 4
+    }
+  },
+  "checked_at": "2026-09-30T12:45:35+00:00",
+  "rejudged_at": "2026-09-30T12:45:35+00:00"
+}

@@ -1,0 +1,19 @@
+id: a1-invoice-rounding
+category: a_bugfix
+title: Fix a money-rounding bug reported by a customer
+description: >
+  A 3-file invoicing package. A customer reports a line of 2.675 billed as 2.67. The README states the
+  contract (floats read by their decimal repr, ROUND_HALF_UP at every step). One visible test reproduces the
+  report; the bug has two causes (binary expansion of floats and banker's rounding), so fixing only the
+  reported example is not enough.
+project_dir: invoicer
+reps: 5
+venv: true
+judge: hidden tests (tasks/a1-invoice-rounding/hidden_tests, run outside the workspace on a copy, with the
+  agent's conftest/pytest.ini ignored) + the original visible tests.
+success_criteria: All hidden tests pass (line amounts incl. float and Decimal inputs, half-up tax/discount,
+  a full invoice, the to_money/to_decimal contract) and the original visible tests still pass.
+selftest:
+  template: fail
+  solution: pass
+  negatives: [repr-only, half-up-only]

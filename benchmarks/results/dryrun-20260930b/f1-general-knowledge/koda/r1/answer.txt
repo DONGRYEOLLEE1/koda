@@ -1,0 +1,5 @@
+**3-way handshake**: ① SYN → ② SYN+ACK → ③ ACK (클라이언트가 SYN 보내고, 서버가 SYN·ACK 함께 보내고, 클라이언트가 ACK로 마무리).
+
+**정상 종료**: 보통 4개 세그먼트다. 한쪽이 FIN, 상대가 ACK, 반대쪽이 FIN, 다시 ACK — 각 방향을 따로 닫기 때문이며, 두 번째 FIN과 ACK가 한 세그먼트로 합쳐지면 3개가 되기도 한다.
+
+--- route: answer ---

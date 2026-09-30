@@ -1,0 +1,19 @@
+{
+  "pass": true,
+  "detail": {
+    "facts": {
+      "handshake_in_order": true,
+      "close_four_segments": true
+    },
+    "answer_chars": 189,
+    "workspace_unchanged": true,
+    "workspace_changes": {
+      "added": [],
+      "modified": [],
+      "deleted": [],
+      "n_changed": 0
+    }
+  },
+  "checked_at": "2026-09-30T12:45:41+00:00",
+  "rejudged_at": "2026-09-30T12:45:41+00:00"
+}

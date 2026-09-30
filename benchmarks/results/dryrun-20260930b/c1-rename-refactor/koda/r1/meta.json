@@ -1,0 +1,123 @@
+{
+  "tool": "koda",
+  "tool_version": "koda 0.1.0 (feat/showcase@63fda57)",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:58121",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 18.858,
+  "input_tokens": 60395,
+  "output_tokens": 3192,
+  "tool_calls": 23,
+  "reasoning_tokens": 0,
+  "cache_read_tokens": 48896,
+  "llm_calls": 11,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): koda_entry.py: usage_metadata summed via run_task(extra_callbacks=[UsageTap]) + run_task result dict",
+  "model_tool_calls_proxy": 25,
+  "model_tool_calls_agentic_proxy": 23,
+  "cache_miss_tokens": 11499,
+  "cost_estimate": {
+    "usd_peak_basis": 0.007573,
+    "usd_offpeak_basis": 0.003787,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "workspace_changes": {
+    "root": "<work>/dryrun-20260930b/runs/bad628b030/w/shop",
+    "added": [],
+    "modified": [
+      "README.md",
+      "shop/__init__.py",
+      "shop/cart.py",
+      "shop/checkout.py",
+      "shop/pricing.py",
+      "shop/reports.py",
+      "tests/test_cart.py",
+      "tests/test_pricing.py"
+    ],
+    "deleted": [],
+    "n_changed": 8
+  },
+  "tool_state_drift": null,
+  "tool_reported": {
+    "available": true,
+    "source": "koda_entry.py: usage_metadata summed via run_task(extra_callbacks=[UsageTap]) + run_task result dict",
+    "llm_steps": 10,
+    "input_tokens": 59930,
+    "output_tokens": 3184,
+    "reasoning_tokens": 0,
+    "cache_read_tokens": 48768,
+    "calls_without_usage": 0,
+    "tool_calls": 23,
+    "tool_summary": "list_files · search_text×2 · read_file×10 · run_command×2 · multi_edit×8",
+    "route": "edit",
+    "verdict": "pass",
+    "empty_final": false,
+    "retries": 0,
+    "note": "calls outside the callback chain (e.g. make_title after run_task) can be missing -> the proxy is the wire truth"
+  },
+  "proxy": {
+    "http_requests": 11,
+    "llm_requests": 11,
+    "llm_requests_ok": 11,
+    "llm_requests_error": 0,
+    "llm_requests_with_tools": 8,
+    "llm_requests_aux": 3,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 60395,
+    "output_tokens": 3192,
+    "reasoning_tokens": 0,
+    "cache_read_tokens": 48896,
+    "cache_miss_tokens": 11499,
+    "model_tool_calls": 25,
+    "model_tool_calls_agentic": 23,
+    "llm_requests_structured_output": 2,
+    "reasoning_effort_values": {
+      "none": 11
+    },
+    "models": {
+      "deepseek-flash": 11
+    },
+    "resp_models": {
+      "deepseek-flash": 11
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 11
+    },
+    "finish_reasons": {
+      "tool_calls": 7,
+      "stop": 4
+    },
+    "first_main_request": {
+      "n_tools": 13,
+      "system_chars": 3676,
+      "request_bytes": 15380,
+      "max_tokens": 4096,
+      "temperature": 0.0,
+      "reasoning_effort": "none",
+      "tool_names": [
+        "read_file",
+        "search_text",
+        "list_files",
+        "run_command",
+        "write_file",
+        "edit_file",
+        "multi_edit",
+        "patch_file",
+        "create_dir",
+        "delete_path",
+        "analyze_image",
+        "explore",
+        "read_artifact"
+      ]
+    },
+    "llm_latency_sum_s": 17.147,
+    "errors": []
+  },
+  "started_at": "2026-09-30T11:42:25.091370+00:00",
+  "workspace": "<work>/dryrun-20260930b/runs/bad628b030/w/shop",
+  "prompt_file": "<koda>/benchmarks/tasks/c1-rename-refactor/prompt.txt"
+}

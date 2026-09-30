@@ -1,0 +1,16 @@
+Now I understand the codebase and the spec. Let me identify all deviations.
+My test assertion was wrong (that case *should* satisfy per the rule). Let me correct it.
+SPEC 위반 지점을 전부 수정했습니다. 공개 함수 시그니처는 그대로입니다.
+
+**`version.py`**
+- `compare`/`sort_versions`가 숫자 필드를 `str`로 비교하던 버그 수정(`"10" < "9"`). `key()`를 SemVer 2.0.0 §11 기준 precedence 튜플로 재작성 (numeric < alphanumeric, 식별자 수 비교, prerelease < release, BUILD 무시). → `compare('1.10.0','1.9.0') == 1`.
+- 정규식 강화: MAJOR/MINOR/PATCH 선행 0 금지, prerelease 식별자 비허용/숫자 선행 0 금지, BUILD는 선행 0 허용, 빈 식별자 금지. SPEC의 invalid 예시 전부 `ValueError`.
+- `sort_versions`는 Python stable sort라 동순위 입력 순서 유지.
+
+**`ranges.py`**
+- `||` union 및 comparator set(공백 구분, all-match) 구현. 빈 range/빈 set은 `ValueError`.
+- `^`를 left-most non-zero 기준 상한으로 수정 (`^0.2.3` → `<0.3.0`, `^0.0.3` → `<0.0.4`), `~`를 `<MAJOR.(MINOR+1).0`로 수정(기존엔 major 무시 버그).
+- prerelease rule 구현: 같은 set에서 동일 MMP + prerelease를 가진 comparator가 있어야 매칭. `*`/`<2.0.0`이 `2.0.0-rc.1`을 거부.
+- `max_satisfying`은 무효 버전 엔트리에서 `ValueError` 발생.
+
+검증: `pytest` 4 passed, SPEC 예시·경계값 수동 체크 전부 통과.

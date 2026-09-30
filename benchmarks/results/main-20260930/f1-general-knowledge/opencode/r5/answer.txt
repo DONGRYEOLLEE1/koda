@@ -1,0 +1,3 @@
+3-way handshake: **SYN → SYN-ACK → ACK** (3개).
+
+정상 종료(4-way)는 보통 **FIN → ACK → FIN → ACK** 4개가 오가며, 양쪽 FIN이 겹치면 3개가 될 수도 있습니다.

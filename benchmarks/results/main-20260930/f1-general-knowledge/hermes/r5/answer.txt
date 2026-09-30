@@ -1,0 +1,3 @@
+TCP 3-way handshake: 1) SYN → 2) SYN+ACK → 3) ACK.
+
+정상 종료(4-way teardown)는 보통 4개 세그먼트가 오갑니다: FIN → ACK → FIN → ACK (양방향 half-close를 각각 처리하므로). 상대의 FIN과 내 ACK가 한 세그먼트로 합쳐지는 경우엔 3개가 되기도 합니다.

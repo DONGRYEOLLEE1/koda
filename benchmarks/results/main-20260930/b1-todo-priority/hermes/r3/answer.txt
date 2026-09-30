@@ -1,0 +1,25 @@
+완료했습니다. 실제 CLI로 검증했고 23개 테스트 전부 통과합니다.
+
+변경 내용:
+
+- `todo/models.py` — `Task.priority: str = "normal"` 추가. `__post_init__` 에서 `low/normal/high` 이외 값이면 `ValueError`. `from_dict` 는 `data.get("priority", "normal")` 로 예전 파일을 그대로 읽음.
+- `todo/store.py` — `TaskStore.add(title, priority="normal")` 로 우선순위 전달.
+- `todo/cli.py` — `add --priority {low,normal,high}` (기본 `normal`). argparse `choices` 라서 잘못된 값은 종료 코드 2. `list` 는 `(우선순위순, id 오름차순)` 정렬 후 출력하며 high 는 `(!) `, low 는 `(~) ` 접두.
+- `README.md` — 사용법 한 줄 추가.
+
+실제 실행 확인:
+
+    $ todo --db demo.json list
+    [ ] 1 (!) 세금 신고
+    [ ] 4 (!) 청구서
+    [ ] 2 장보기
+    [ ] 3 (~) 정리
+
+    $ todo --db demo.json add x --priority urgent
+    todo add: error: argument --priority: invalid choice: 'urgent' (choose from low, normal, high)
+    exit=2
+
+    $ todo --db legacy.json list      # priority 키 없는 예전 파일
+    [ ] 1 legacy
+
+추가한 테스트 (`tests/`): 모델의 기본값·유효/무효 우선순위·직렬화 왕복·priority 누락 dict, 스토어의 우선순위 저장·legacy 파일 로드, CLI 의 `--priority` 지정/생략, 잘못된 값의 `SystemExit(2)`, 정렬·마커 출력, legacy 파일 목록 출력.

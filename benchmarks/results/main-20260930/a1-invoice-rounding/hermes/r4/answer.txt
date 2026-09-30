@@ -1,0 +1,16 @@
+Fixed. Two rule violations, both in `invoicer/money.py`:
+
+1. Float handling (README rule 1) — `to_decimal` did `Decimal(value)`, which takes a float's binary expansion: `Decimal(2.675)` is `2.67499999999999982236431605997495353221893310546875`. It now uses the shortest `repr` for floats (`invoicer/money.py:18`), so `2.675` means exactly `2.675`. Non-float inputs are still passed straight to `Decimal`.
+
+2. Rounding mode (README rule 2) — `quantize(CENT)` used the decimal context default `ROUND_HALF_EVEN`, so ties went to the even cent (`2.675` → `2.67`, `0.945` → `0.94`). It now passes `rounding=ROUND_HALF_UP` explicitly (`invoicer/money.py:25`).
+
+Also wrapped `Invoice.total()` in `to_money()` (`invoicer/invoice.py:38`) — the sum of already-rounded parts is exact, so this is a no-op that keeps the two-decimal invariant explicit. Public signatures and `__all__` are unchanged (verified via `inspect.signature`).
+
+Verification, all with the repo venv:
+- `python -m pytest` → 12 passed (was 1 failed, 6 passed).
+- The reported case: `LineItem("widget", 2.675, 1).amount()` → `Decimal("2.68")`.
+- 20,000 random floats: `to_decimal` matches `Decimal(repr(x))`; `to_money` matches a half-up reference on string inputs.
+- 5,000 random end-to-end invoices recomputed independently by the README formulas: subtotal/discount/tax/total all matched.
+- README example now yields subtotal 9.45, discount 0.95 (0.945 half-up), tax 0.68, total 9.18.
+
+I added tests covering the float-repr rule, half-up (including negatives and the half-even-differs case `0.005`), the README example, and rate non-rounding; your original tests are untouched. Nothing committed.

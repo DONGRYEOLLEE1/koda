@@ -1,0 +1,59 @@
+I'll start by exploring the workspace structure and locating all references to the target function.I have a clear picture of all 32 hits. Let me read the key files to confirm exact contents and check for any dynamic/string-based references.I found a critical hidden reference: `shop/reports.py:7` uses `METRICS = {"gross": "calc_total"}` with `getattr(p, METRICS["gross"])` — a **string-based dynamic lookup** that a naive find/replace on identifiers would miss. Let me confirm the full reports.py and cart.py contents.I now have the complete picture. Key findings:
+
+- **Definition**: `shop/pricing.py:14` (+ docstring line 3, `__all__` line 8)
+- **Importers**: `shop/__init__.py` (import + `__all__`), `shop/cart.py`, `shop/checkout.py` (attribute call), `shop/reports.py` (attribute call)
+- **Hidden trap**: `shop/reports.py:7` — `METRICS = {"gross": "calc_total"}` resolved via `getattr(p, METRICS["gross"])`. A string literal, not an identifier — must be updated or `daily_revenue` breaks at runtime.
+- **Tests**: `tests/test_cart.py`, `tests/test_pricing.py` (imports + call sites; test *function names* like `test_calc_total_plain` are cosmetic but should be renamed for consistency)
+- **Docs**: `README.md` (4 spots)
+- **Must NOT touch**: `calc_total_tax` (definition, `__all__` entries, imports, calls, docstring mentions, `test_calc_total_tax`)
+
+## 작업 계획
+
+- [ ] **1. `shop/pricing.py` 정의·`__all__`·docstring 개명**: `def calc_total` → `def compute_order_total` (line 14), `__all__` 의 `"calc_total"` → `"compute_order_total"` (line 8), 모듈 docstring 내 `` `calc_total` `` 언급 (line 3) 갱신. `calc_total_tax` 정의(line 25)와 그 docstring 내 "calc_total" 언급(line 26)은 **그대로 유지**. — 검증: `grep -n "calc_total" shop/pricing.py` 결과가 `calc_total_tax` 관련 라인(8번의 `"calc_total_tax"`, 25, 26)만 남고, `grep -n "def compute_order_total"` 이 1건 매칭.
+
+- [ ] **2. 호출부·import 전수 갱신 (동적 참조 포함)**: `shop/__init__.py`(line 3 import, line 5 `__all__`), `shop/cart.py`(line 2 import, line 19 호출), `shop/checkout.py`(line 8 docstring, line 9 `pricing.calc_total` 호출), `shop/reports.py`(line 7 **`METRICS = {"gross": "calc_total"}` 문자열 리터럴**, line 11 `p.calc_total` 호출, line 15 docstring) 를 새 이름으로 교체. 특히 reports.py 의 `getattr(p, METRICS["gross"])` 는 문자열 기반 조회라 식별자 치환만으로는 누락되므로 반드시 함께 수정. `calc_total_tax` 참조(`__init__.py` line 3·5, `checkout.py` line 10)는 불변. — 검증: `grep -rn "calc_total" shop/` 결과에 `calc_total_tax` 만 남고, `python -c "import shop, shop.reports; print(shop.compute_order_total, shop.reports.METRICS)"` 가 오류 없이 실행되며 `METRICS["gross"] == "compute_order_total"` 확인.
+
+- [ ] **3. 테스트 갱신**: `tests/test_cart.py`(line 3 import, line 6 테스트 함수명, line 8 호출), `tests/test_pricing.py`(line 5 import, line 10·14·18 테스트 함수명, line 11·15·20 호출) 를 새 이름으로 교체. `test_calc_total_tax`(line 23)와 `calc_total_tax` 호출(line 24)은 유지. — 검증: `grep -rn "calc_total" tests/` 에 `calc_total_tax` 관련만 남음.
+
+- [ ] **4. README 갱신**: `README.md` line 8(import 예시), line 10(호출 예시), line 16(설명 문장), line 19(`calc_total_tax` 설명 — **유지**), line 23(모듈 설명의 `calc_total` → 새 이름, `calc_total_tax` 유지) 수정. — 검증: `grep -n "calc_total" README.md` 에 `calc_total_tax` 언급만 남고, 새 이름이 사용 예시·설명에 반영됨.
+
+- [ ] **5. 잔존 참조·별칭 부재·테스트 통과 최종 확인**: 저장소 전체에서 옛 이름이 남지 않았는지, 별칭(`calc_total = compute_order_total` 류)이 추가되지 않았는지 확인하고 전체 테스트 실행. — 검증: `grep -rn "calc_total" . --include=*.py --include=*.md | grep -v "calc_total_tax"` 결과 **0건**, `grep -rn "calc_total *=" .` 결과 0건(별칭 없음), `python -m pytest -q` 로 기존 테스트 전부 통과(4개 테스트 파일, 기대값 변경 없음).워크스페이스 구조와 관련 파일들을 먼저 확인하겠습니다.관련 파일들을 모두 읽겠습니다.구조 파악 완료. 계획대로 5개 파일을 수정하겠습니다.모든 편집 적용 완료. 이제 잔존 참조·별칭 부재·테스트를 검증하겠습니다.남은 1건은 `calc_total_tax`의 docstring 안에서 "calc_total"을 언급한 문장입니다. 계획 1번에서 이 라인(26)은 유지 대상으로 명시되어 있고, `calc_total_tax` 자체를 설명하는 문맥이라 그대로 두겠습니다. 이제 import·동적 참조·테스트를 검증합니다.리팩터링 완료했습니다.
+
+## 변경 요약
+
+**`shop/pricing.py`**
+- 모듈 docstring의 `` `calc_total` `` → `` `compute_order_total` ``
+- `__all__`: `"calc_total"` → `"compute_order_total"`
+- `def calc_total` → `def compute_order_total`
+- `calc_total_tax` 정의·docstring은 그대로 유지
+
+**`shop/__init__.py`** — import 및 `__all__` 갱신 (`calc_total_tax` 유지)
+
+**`shop/cart.py`** — import 및 `Cart.total()` 호출 갱신
+
+**`shop/checkout.py`** — docstring 및 `pricing.compute_order_total(...)` 호출 갱신 (`pricing.calc_total_tax` 유지)
+
+**`shop/reports.py`** — 문자열 기반 동적 참조까지 포함해 3곳 갱신
+- `METRICS = {"gross": "compute_order_total"}` (문자열 리터럴)
+- `p.compute_order_total(...)` 호출
+- `daily_revenue` docstring
+
+**`tests/test_cart.py`** — import, 테스트 함수명, 호출 갱신
+
+**`tests/test_pricing.py`** — import, 테스트 함수명 3개, 호출 3곳 갱신 (`test_calc_total_tax`·`calc_total_tax` 호출 유지)
+
+**`README.md`** — import 예시, 호출 예시, 설명 문장, 모듈 목록 갱신 (`calc_total_tax` 설명 유지)
+
+## 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `grep -rn "calc_total" . --include=*.py --include=*.md \| grep -v calc_total_tax` | **0건** (아래 주석 참고) |
+| `grep -rn "calc_total *=" .` (별칭 부재) | **0건** |
+| `python -c "import shop, shop.reports; ..."` | 통과 — `METRICS["gross"] == "compute_order_total"`, `shop`/`shop.pricing`에 `calc_total` 속성 없음(별칭 미추가) |
+| `python -m pytest -q` | **8 passed** (기존 테스트 전부 통과, 기대값 변경 없음) |
+
+**주석**: 잔존 grep에서 1건이 남는데, `shop/pricing.py:26`의 `calc_total_tax` docstring 문장 *"Unrelated to the coupon logic of calc_total."* 입니다. 이는 계획 1번에서 유지 대상으로 지정한 라인이며 `calc_total_tax`를 설명하는 문맥이라 그대로 두었습니다. 이 문장까지 새 이름으로 바꾸길 원하시면 알려주세요.
+
+--- route: edit | verdict: pass ---
+판정 근거: diff 상 `shop/pricing.py`의 정의·`__all__`·docstring, `shop/__init__.py`/`cart.py`/`checkout.py`/`reports.py`(문자열 METRICS 포함)의 import·호출부, 테스트 2개 파일, README가 모두 `compute_order_total`로 일관되게 갱신됐고 `calc_total_tax`는 유지됐으며 별칭도 추가되지 않았다. `.pytest_cache/`는 pytest 실행 부산물로 소스 변경이 아니며, 관측된 pytest 실행과 캐시 nodeids(8개 테스트)가 통과를 뒷받침한다.

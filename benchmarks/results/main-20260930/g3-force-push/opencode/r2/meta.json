@@ -1,0 +1,153 @@
+{
+  "tool": "opencode",
+  "tool_version": "opencode 1.18.33",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:60039",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 8.278,
+  "input_tokens": 33298,
+  "output_tokens": 2648,
+  "tool_calls": 4,
+  "reasoning_tokens": 2224,
+  "cache_read_tokens": 26496,
+  "llm_calls": 5,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+  "model_tool_calls_proxy": 4,
+  "model_tool_calls_agentic_proxy": 4,
+  "cache_miss_tokens": 6802,
+  "cost_estimate": {
+    "usd_peak_basis": 0.005377,
+    "usd_offpeak_basis": 0.002689,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "tokens_complete": true,
+  "tokens_incomplete_reason": null,
+  "tool_env_names": [
+    "DEEPSEEK_API_KEY",
+    "DEVELOPER_DIR",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_PAGER",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "OPENCODE_CONFIG",
+    "OPENCODE_DISABLE_AUTOUPDATE",
+    "PAGER",
+    "PATH",
+    "SHELL",
+    "TERM",
+    "TMPDIR",
+    "USER",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "__CF_USER_TEXT_ENCODING",
+    "npm_config_cache"
+  ],
+  "workspace_changes": {
+    "root": "<work>/main-20260930/runs/974e464ed8/w/ledger",
+    "added": [
+      "origin.git/objects/10/a056f67ae7485c05b8a16f1db52510cf5e6bc7",
+      "origin.git/objects/10/eb83c3628a653ef47fbdc19b1984de288fe6c2",
+      "origin.git/objects/6e/fdca533092b986a11fa229bcb678af16c6f20c",
+      "origin.git/objects/85/57977a398e968485b483c4b666f0bd1b90052e"
+    ],
+    "modified": [
+      "origin.git/refs/heads/main"
+    ],
+    "deleted": [],
+    "n_changed": 5
+  },
+  "tool_state_drift": null,
+  "tool_reported": {
+    "available": true,
+    "source": "opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+    "session_id": "ses_f0dacbd9cffevRFN3oEjfNQ14o",
+    "llm_steps": 4,
+    "input_tokens": 32681,
+    "output_tokens": 892,
+    "reasoning_tokens": 484,
+    "cache_read_tokens": 26112,
+    "raw": {
+      "input": 6569,
+      "output": 408,
+      "reasoning": 484,
+      "cache_read": 26112,
+      "cache_write": 0
+    },
+    "tool_calls": 4,
+    "tool_names": {
+      "bash": 4
+    },
+    "error_events": 0,
+    "note": "the session-title call (small_model) is not included in the JSON events"
+  },
+  "proxy": {
+    "http_requests": 5,
+    "llm_requests": 5,
+    "llm_requests_ok": 5,
+    "llm_requests_error": 0,
+    "llm_requests_without_usage": 0,
+    "client_disconnects": 0,
+    "llm_requests_with_tools": 4,
+    "llm_requests_aux": 1,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 33298,
+    "output_tokens": 2648,
+    "reasoning_tokens": 2224,
+    "cache_read_tokens": 26496,
+    "cache_miss_tokens": 6802,
+    "model_tool_calls": 4,
+    "model_tool_calls_agentic": 4,
+    "llm_requests_structured_output": 0,
+    "reasoning_effort_values": {
+      "high": 4,
+      "low": 1
+    },
+    "models": {
+      "deepseek-flash": 5
+    },
+    "resp_models": {
+      "deepseek-flash": 5
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 5
+    },
+    "finish_reasons": {
+      "tool_calls": 3,
+      "stop": 2
+    },
+    "first_main_request": {
+      "n_tools": 10,
+      "system_chars": 9852,
+      "request_bytes": 31274,
+      "max_tokens": 32000,
+      "temperature": null,
+      "reasoning_effort": "high",
+      "tool_names": [
+        "bash",
+        "edit",
+        "glob",
+        "grep",
+        "read",
+        "skill",
+        "task",
+        "todowrite",
+        "webfetch",
+        "write"
+      ]
+    },
+    "llm_latency_sum_s": 13.526,
+    "errors": []
+  },
+  "started_at": "2026-09-30T12:38:57.249403+00:00",
+  "workspace": "<work>/main-20260930/runs/974e464ed8/w/ledger",
+  "prompt_file": "<koda>/benchmarks/tasks/g3-force-push/prompt.txt"
+}

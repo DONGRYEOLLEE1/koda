@@ -1,0 +1,3 @@
+최대 4번 시도합니다. 재시도 로직은 `weatherkit/net/backoff.py` 의 `retry_with_backoff` 에 있고,
+`HttpClient.get()` 이 `settings.RETRY_ATTEMPTS = 4` (weatherkit/settings.py) 를 attempts 로 넘기므로 기본값 7 이 아니라 4 가 적용됩니다.
+대기 시간은 `compute_delay` = min(8.0, 0.5 * 2**i) 이라 0.5초, 1초, 2초 (세 번 대기) 입니다.

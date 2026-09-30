@@ -1,0 +1,113 @@
+{
+  "tool": "koda",
+  "tool_version": "koda 0.1.0 (feat/showcase@63fda57)",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:58357",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 83.995,
+  "input_tokens": 354404,
+  "output_tokens": 22142,
+  "tool_calls": 35,
+  "reasoning_tokens": 0,
+  "cache_read_tokens": 328320,
+  "llm_calls": 32,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): koda_entry.py: usage_metadata summed via run_task(extra_callbacks=[UsageTap]) + run_task result dict",
+  "model_tool_calls_proxy": 37,
+  "model_tool_calls_agentic_proxy": 35,
+  "cache_miss_tokens": 26084,
+  "cost_estimate": {
+    "usd_peak_basis": 0.036366,
+    "usd_offpeak_basis": 0.018183,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "workspace_changes": {
+    "root": "<work>/dryrun-20260930b/runs/f8712ed4f4/w/semverlite",
+    "added": [],
+    "modified": [
+      "semverlite/ranges.py",
+      "semverlite/version.py",
+      "tests/test_ranges.py",
+      "tests/test_version.py"
+    ],
+    "deleted": [],
+    "n_changed": 4
+  },
+  "tool_state_drift": null,
+  "tool_reported": {
+    "available": true,
+    "source": "koda_entry.py: usage_metadata summed via run_task(extra_callbacks=[UsageTap]) + run_task result dict",
+    "llm_steps": 31,
+    "input_tokens": 353868,
+    "output_tokens": 22132,
+    "reasoning_tokens": 0,
+    "cache_read_tokens": 328192,
+    "calls_without_usage": 0,
+    "tool_calls": 35,
+    "tool_summary": "run_readonly_command×7 · read_file×12 · list_files · run_command×7 · write_file×4 · edit_file×4",
+    "route": "edit",
+    "verdict": "pass",
+    "empty_final": false,
+    "retries": 0,
+    "note": "calls outside the callback chain (e.g. make_title after run_task) can be missing -> the proxy is the wire truth"
+  },
+  "proxy": {
+    "http_requests": 32,
+    "llm_requests": 32,
+    "llm_requests_ok": 32,
+    "llm_requests_error": 0,
+    "llm_requests_with_tools": 30,
+    "llm_requests_aux": 2,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 354404,
+    "output_tokens": 22142,
+    "reasoning_tokens": 0,
+    "cache_read_tokens": 328320,
+    "cache_miss_tokens": 26084,
+    "model_tool_calls": 37,
+    "model_tool_calls_agentic": 35,
+    "llm_requests_structured_output": 2,
+    "reasoning_effort_values": {
+      "none": 32
+    },
+    "models": {
+      "deepseek-flash": 32
+    },
+    "resp_models": {
+      "deepseek-flash": 32
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 32
+    },
+    "finish_reasons": {
+      "tool_calls": 27,
+      "length": 1,
+      "stop": 4
+    },
+    "first_main_request": {
+      "n_tools": 6,
+      "system_chars": 737,
+      "request_bytes": 6646,
+      "max_tokens": 4096,
+      "temperature": 0.0,
+      "reasoning_effort": "none",
+      "tool_names": [
+        "read_file",
+        "search_text",
+        "list_files",
+        "run_readonly_command",
+        "analyze_image",
+        "read_artifact"
+      ]
+    },
+    "llm_latency_sum_s": 80.564,
+    "errors": []
+  },
+  "started_at": "2026-09-30T11:45:47.496007+00:00",
+  "workspace": "<work>/dryrun-20260930b/runs/f8712ed4f4/w/semverlite",
+  "prompt_file": "<koda>/benchmarks/tasks/d1-semver-ranges/prompt.txt"
+}

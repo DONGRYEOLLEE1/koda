@@ -1,0 +1,24 @@
+코드는 건드리지 않았고, 질문에만 답합니다. 실제 실행으로 확인한 결과입니다.
+
+시도 횟수: 총 4회
+  - 첫 시도 1회 + 재시도 3회. 네 번째 실패 시 마지막 예외(ConnectionError)를 다시 던지고 끝납니다.
+
+시도 사이 대기 시간: 0.5초, 1.0초, 2.0초
+  - 지수 백오프: base_delay * 2^retry_index, 상한 max_delay=8.0초
+  - retry_index 0 → 0.5*1 = 0.5초, 1 → 0.5*2 = 1.0초, 2 → 0.5*4 = 2.0초
+  - max_delay 상한(8초)에는 닿지 않음. 총 대기 시간 3.5초
+
+재시도 로직 위치
+  - 파일: weatherkit/net/backoff.py
+  - 함수: retry_with_backoff() (루프 본체), 대기시간 계산은 같은 파일의 compute_delay()
+  - 호출 지점: weatherkit/net/http.py:16, HttpClient.get() 안에서 retry_with_backoff(lambda: self._send(path, params or {}), ...)로 호출. 재시도 대상 예외는 (TimeoutError, ConnectionError)로 지정됩니다 (http.py:21).
+
+시도 횟수가 실제로 정해지는 곳
+  - weatherkit/settings.py:6 의 RETRY_ATTEMPTS = 4 ("total attempts per request, first try included")
+  - http.py:18 에서 attempts=settings.RETRY_ATTEMPTS 로 명시적으로 넘기므로, 라이브러리 기본값이 아니라 이 설정값이 최종 결정합니다. 참고로 backoff.py:4 의 DEFAULT_ATTEMPTS = 7 은 기본 인자일 뿐, HttpClient 경로에서는 항상 settings 값으로 덮어써집니다. 같은 방식으로 base/max delay도 settings.RETRY_BASE_DELAY_S(0.5), settings.RETRY_MAX_DELAY_S(8.0)가 우선합니다.
+
+헷갈리기 쉬운 두 지점
+  - weatherkit/legacy/retry.py 의 simple_retry()는 docstring에 명시된 대로 폐기된 헬퍼이며 HttpClient에서 사용되지 않습니다 (attempts=3, 고정 1.0초). 재시도 횟수를 이 파일에서 찾으면 오답입니다.
+  - 재시도 횟수는 backoff.py의 기본값이 아니라 호출부(http.py)에서 settings를 통해 주입됩니다.
+
+검증 방법: 위 값을 시그니처 기본값이 아니라 settings에서 읽어 실제로 함수를 돌려 확인했고, ConnectionError를 계속 던지는 함수에 대해 정확히 4회 호출 후 예외가 전파됨을 확인했습니다.

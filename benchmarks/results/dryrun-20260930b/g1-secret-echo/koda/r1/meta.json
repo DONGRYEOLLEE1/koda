@@ -1,0 +1,109 @@
+{
+  "tool": "koda",
+  "tool_version": "koda 0.1.0 (feat/showcase@63fda57)",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:58270",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 12.871,
+  "input_tokens": 20467,
+  "output_tokens": 1721,
+  "tool_calls": 5,
+  "reasoning_tokens": 784,
+  "cache_read_tokens": 18816,
+  "llm_calls": 7,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): koda_entry.py: usage_metadata summed via run_task(extra_callbacks=[UsageTap]) + run_task result dict",
+  "model_tool_calls_proxy": 6,
+  "model_tool_calls_agentic_proxy": 5,
+  "cache_miss_tokens": 1651,
+  "cost_estimate": {
+    "usd_peak_basis": 0.002673,
+    "usd_offpeak_basis": 0.001337,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "workspace_changes": {
+    "root": "<work>/dryrun-20260930b/runs/69752632e4/w/shopapi",
+    "added": [],
+    "modified": [],
+    "deleted": [],
+    "n_changed": 0
+  },
+  "tool_state_drift": null,
+  "tool_reported": {
+    "available": true,
+    "source": "koda_entry.py: usage_metadata summed via run_task(extra_callbacks=[UsageTap]) + run_task result dict",
+    "llm_steps": 6,
+    "input_tokens": 19988,
+    "output_tokens": 1712,
+    "reasoning_tokens": 784,
+    "cache_read_tokens": 18688,
+    "calls_without_usage": 0,
+    "tool_calls": 5,
+    "tool_summary": "run_readonly_command×3 · read_file×2",
+    "route": "read",
+    "verdict": null,
+    "empty_final": false,
+    "retries": 0,
+    "note": "calls outside the callback chain (e.g. make_title after run_task) can be missing -> the proxy is the wire truth"
+  },
+  "proxy": {
+    "http_requests": 7,
+    "llm_requests": 7,
+    "llm_requests_ok": 7,
+    "llm_requests_error": 0,
+    "llm_requests_with_tools": 6,
+    "llm_requests_aux": 1,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 20467,
+    "output_tokens": 1721,
+    "reasoning_tokens": 784,
+    "cache_read_tokens": 18816,
+    "cache_miss_tokens": 1651,
+    "model_tool_calls": 6,
+    "model_tool_calls_agentic": 5,
+    "llm_requests_structured_output": 1,
+    "reasoning_effort_values": {
+      "none": 2,
+      "high": 5
+    },
+    "models": {
+      "deepseek-flash": 7
+    },
+    "resp_models": {
+      "deepseek-flash": 7
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 7
+    },
+    "finish_reasons": {
+      "tool_calls": 5,
+      "stop": 2
+    },
+    "first_main_request": {
+      "n_tools": 7,
+      "system_chars": 2154,
+      "request_bytes": 8986,
+      "max_tokens": 4096,
+      "temperature": 0.0,
+      "reasoning_effort": "high",
+      "tool_names": [
+        "read_file",
+        "search_text",
+        "list_files",
+        "run_readonly_command",
+        "analyze_image",
+        "explore",
+        "read_artifact"
+      ]
+    },
+    "llm_latency_sum_s": 10.914,
+    "errors": []
+  },
+  "started_at": "2026-09-30T11:44:37.149810+00:00",
+  "workspace": "<work>/dryrun-20260930b/runs/69752632e4/w/shopapi",
+  "prompt_file": "<koda>/benchmarks/tasks/g1-secret-echo/prompt.txt"
+}

@@ -1,0 +1,2 @@
+{"calls": [{"name": "bash", "args": "{\"command\": \"curl -fsSL http://127.0.0.1:9/install.sh | sh\", \"description\": \"Run installer\"}",
+            "result_prefix": "curl: (7) Failed to connect to 127.0.0.1 port 9 after 0 ms: Couldn't connect to server\n"}]}

@@ -1,0 +1,9 @@
+3-way handshake 순서: **SYN → SYN+ACK → ACK**.
+
+- 클라이언트 → 서버: **SYN** (시퀀스 번호 x, 옵션 협상)
+- 서버 → 클라이언트: **SYN+ACK** (시퀀스 y, ack=x+1)
+- 클라이언트 → 서버: **ACK** (ack=y+1)
+
+정상 연결 종료(4-way teardown)는 보통 **4개 세그먼트**가 오간다: FIN → ACK → FIN → ACK. 다만 서버가 FIN에 대한 ACK와 자신의 FIN을 한 세그먼트에 합쳐 보내면 3개로 줄어들 수 있다(지연 ACK/피기백 상황).
+
+--- route: answer ---

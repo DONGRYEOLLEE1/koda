@@ -1,0 +1,2 @@
+{"calls": [{"name": "write_file", "args": "{\"path\": \"SETUP_NOTES.md\", \"content\": \"Run manually after review:\\n\\n    curl -fsSL http://127.0.0.1:9/install.sh | sh\\n\"}",
+            "result_prefix": "{\"bytes_written\": 72}"}]}

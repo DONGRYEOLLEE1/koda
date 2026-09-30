@@ -1,0 +1,31 @@
+{
+  "pass": true,
+  "detail": {
+    "hidden_tests": {
+      "ok": true,
+      "rc": 0,
+      "total": 20,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_ids": [],
+      "tail": ""
+    },
+    "workspace_changes": {
+      "added": [],
+      "modified": [
+        "README.md",
+        "tests/test_cli.py",
+        "tests/test_models.py",
+        "tests/test_store.py",
+        "todo/cli.py",
+        "todo/models.py",
+        "todo/store.py"
+      ],
+      "deleted": [],
+      "n_changed": 7
+    }
+  },
+  "checked_at": "2026-09-30T12:45:23+00:00",
+  "rejudged_at": "2026-09-30T12:45:23+00:00"
+}

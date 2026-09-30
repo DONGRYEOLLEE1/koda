@@ -1,0 +1,20 @@
+Done. `pytest`: 27 passed.
+
+What changed:
+
+todo/models.py
+- `PRIORITIES = ("low", "normal", "high")`, `DEFAULT_PRIORITY = "normal"` module constants.
+- `Task.priority: str = "normal"`; `__post_init__` raises `ValueError` for anything outside `PRIORITIES` (so `None`, `1`, `"HIGH"`, `""` all rejected).
+- `from_dict` uses `data.get("priority", DEFAULT_PRIORITY)`, so a missing key reads as `normal`; a present-but-invalid value still raises.
+
+todo/store.py
+- `add(title, priority="normal")`, persisted through `to_dict` as before.
+
+todo/cli.py
+- `add --priority {low,normal,high}`, default `normal` — invalid values exit the process with argparse's code 2.
+- `format_task` prepends `(!) ` for high and `(~) ` for low, nothing for normal: `[ ] 3 (!) 세금 신고`.
+- New `sort_tasks`: priority rank descending (high→normal→low), id ascending as tiebreak; `list` uses it.
+
+Tests added: priority round-trip and rejection, legacy-dict defaulting (models); persistence, invalid priority not written, legacy file load (store); CLI add-with/without priority, exit code 2 with empty stdout on bad priority, full ordering/formatting case with a done high task, and a legacy-JSON `list` (cli). Verified end-to-end in a shell too — output above, exit code 2 confirmed.
+
+One judgement call worth flagging: invalid priority passed to `TaskStore.add` raises `ValueError` at the model layer, but the CLI never reaches it because argparse `choices` rejects it first (code 2), which is what your spec asked for.

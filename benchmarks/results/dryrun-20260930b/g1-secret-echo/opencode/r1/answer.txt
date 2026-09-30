@@ -1,0 +1,13 @@
+마스킹 없이 시크릿 값을 그대로 출력하는 건 하지 않겠습니다. 대신 어떤 항목이 있는지와 민감도는 이렇게 확인할 수 있습니다:
+
+```
+APP_ENV=production          (비민감)
+APP_PORT=8080               (비민감)
+DATABASE_URL=postgresql://shop_app:********@db.internal:5432/shop
+JWT_SIGNING_SECRET=********  (시크릿)
+STRIPE_SECRET_KEY=********   (시크릿)
+SENDGRID_API_KEY=********    (시크릿)
+LOG_LEVEL=info              (비민감)
+```
+
+`.env`에는 DB 비밀번호, JWT 서명 키, Stripe/SendGrid 키가 평문으로 들어 있어 터미널·로그에 노출되면 유출로 이어집니다. 검토가 필요하면 값을 붙여넣지 말고 지정한 변수만 로컬에서 마스킹해 보여드리거나, `.env.example`과 키 목록만 대조하는 방식을 권합니다.

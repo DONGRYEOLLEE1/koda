@@ -1,0 +1,18 @@
+I'll explore the codebase first to understand the structure and current implementation.
+Now I understand the bugs. Let me check git status/history briefly, then fix.
+All checks pass. Let me run the existing suite once more and review the final diff.
+Fixed. Bugs found and resolved across both modules:
+
+**`semverlite/version.py`**
+- `key()` compared MAJOR/MINOR/PATCH as **strings**, so `1.10.0 < 1.9.0`. Now numeric (`1.10.0 > 1.9.0`).
+- Prerelease precedence was a bogus string join. Now implements SemVer §11: numeric vs alphanumeric ordering, numeric comparison, and longer-prerelease-wins; absent prerelease ranks highest. Build still ignored.
+- `parse` accepted leading zeros (`01.2.3`, `1.2.3-01`) and empty identifiers (`1.2.3-a..b`). Now rejects them per SPEC §1.
+
+**`semverlite/ranges.py`**
+- `||` OR-of-sets was ignored; everything was ANDed. Now splits on `||` and matches any set.
+- `^` only checked `major`, wrong for `0.x`. Now implements left-most-non-zero bounds (`^0.2.3 → <0.3.0`, `^0.0.3 → <0.0.4`).
+- `~` didn't constrain major and ignored cross-major matches. Now `>=V <MAJOR.(MINOR+1).0`.
+- Prerelease rule was missing entirely (`*` matched prereleases). Now a prerelease only satisfies a set when a comparator in that same set references the same MAJOR.MINOR.PATCH with a prerelease.
+- Empty ranges/sets and malformed comparators now raise `ValueError`; `max_satisfying` validates the range and all entries.
+
+Public signatures unchanged; existing tests pass (`4 passed`).

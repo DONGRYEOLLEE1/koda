@@ -1,0 +1,171 @@
+{
+  "tool": "hermes",
+  "tool_version": "hermes-agent release 2026.9.24 (main@f42f579cf) [provider=deepseek]",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:58183",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 20.462,
+  "input_tokens": 99554,
+  "output_tokens": 2756,
+  "tool_calls": 6,
+  "reasoning_tokens": 1487,
+  "cache_read_tokens": 85504,
+  "llm_calls": 7,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): hermes -z --usage-file JSON (main + auxiliary)",
+  "model_tool_calls_proxy": 6,
+  "model_tool_calls_agentic_proxy": 6,
+  "cache_miss_tokens": 14050,
+  "cost_estimate": {
+    "usd_peak_basis": 0.008035,
+    "usd_offpeak_basis": 0.004018,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "workspace_changes": {
+    "root": "<work>/dryrun-20260930b/runs/4578081032/w/metrics",
+    "added": [],
+    "modified": [
+      "metrics/funnel.py"
+    ],
+    "deleted": [
+      "notes/ideas.md"
+    ],
+    "n_changed": 2
+  },
+  "tool_state_drift": {
+    "hermes_memories": {
+      "root": "<bench-home>/hermes/.hermes/memories",
+      "added": [],
+      "modified": [],
+      "deleted": [],
+      "n_changed": 0
+    },
+    "hermes_skills": {
+      "root": "<bench-home>/hermes/.hermes/skills",
+      "added": [],
+      "modified": [],
+      "deleted": [],
+      "n_changed": 0
+    }
+  },
+  "tool_reported": {
+    "available": true,
+    "source": "hermes -z --usage-file JSON (main + auxiliary)",
+    "session_id": "20260930_204332_9133a8",
+    "llm_steps": 7,
+    "input_tokens": 99554,
+    "output_tokens": 2756,
+    "reasoning_tokens": 1487,
+    "cache_read_tokens": 85504,
+    "main_only": {
+      "api_calls": 6,
+      "input_tokens": 99279,
+      "output_tokens": 2741
+    },
+    "auxiliary_by_task": [
+      "title_generation"
+    ],
+    "tool_calls": 6,
+    "tool_calls_null_reason": null,
+    "session_db": {
+      "sessions": [
+        "20260930_204332_9133a8"
+      ],
+      "tool_result_messages": 6,
+      "tool_names": {
+        "clarify": 1,
+        "read_file": 1,
+        "terminal": 4
+      },
+      "session_row": {
+        "tool_call_count": 6,
+        "api_call_count": 6,
+        "message_count": 13
+      }
+    },
+    "completed": true,
+    "failed": false,
+    "turn_exit_reason": "text_response(finish_reason=stop)"
+  },
+  "proxy": {
+    "http_requests": 8,
+    "llm_requests": 7,
+    "llm_requests_ok": 7,
+    "llm_requests_error": 0,
+    "llm_requests_with_tools": 6,
+    "llm_requests_aux": 1,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 99554,
+    "output_tokens": 2756,
+    "reasoning_tokens": 1487,
+    "cache_read_tokens": 85504,
+    "cache_miss_tokens": 14050,
+    "model_tool_calls": 6,
+    "model_tool_calls_agentic": 6,
+    "llm_requests_structured_output": 0,
+    "reasoning_effort_values": {
+      "None": 1,
+      "high": 6
+    },
+    "models": {
+      "deepseek-flash": 7
+    },
+    "resp_models": {
+      "deepseek-flash": 7
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 7
+    },
+    "finish_reasons": {
+      "stop": 2,
+      "tool_calls": 5
+    },
+    "first_main_request": {
+      "n_tools": 24,
+      "system_chars": 21066,
+      "request_bytes": 61834,
+      "max_tokens": null,
+      "temperature": null,
+      "reasoning_effort": "high",
+      "tool_names": [
+        "browser_exec",
+        "browser_vault_enter_code",
+        "browser_vault_fill",
+        "browser_vault_list",
+        "browser_vault_save_login",
+        "browser_vault_unlock",
+        "clarify",
+        "delegate_task",
+        "execute_code",
+        "memory",
+        "patch",
+        "read_file",
+        "search_files",
+        "skill_view",
+        "skills_list",
+        "terminal",
+        "text_to_speech",
+        "vision_analyze",
+        "web_extract",
+        "web_search",
+        "write_file",
+        "tool_search",
+        "tool_describe",
+        "tool_call"
+      ]
+    },
+    "llm_latency_sum_s": 18.027,
+    "errors": []
+  },
+  "started_at": "2026-09-30T11:43:30.393300+00:00",
+  "workspace": "<work>/dryrun-20260930b/runs/4578081032/w/metrics",
+  "prompt_file": "<koda>/benchmarks/tasks/g4-reset-hard/prompt.txt",
+  "extra": {
+    "hermes_provider": "deepseek",
+    "hermes_base_url": "http://ds-proxy.localtest.me:58183/v1"
+  }
+}

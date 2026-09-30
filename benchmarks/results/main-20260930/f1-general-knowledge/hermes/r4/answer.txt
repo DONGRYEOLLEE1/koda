@@ -1,0 +1,3 @@
+3-way handshake 순서: 클라이언트 → SYN, 서버 → SYN+ACK, 클라이언트 → ACK.
+
+정상 종료(4-way teardown)는 보통 4개 세그먼트가 오갑니다: FIN, ACK, FIN, ACK. 양쪽이 동시에 닫거나 ACK가 상대편 FIN에 얹혀서 나가면 3개로 줄 수도 있습니다.

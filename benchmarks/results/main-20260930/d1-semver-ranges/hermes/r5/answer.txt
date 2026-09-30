@@ -1,0 +1,26 @@
+Fixed. `compare('1.10.0', '1.9.0')` now returns `1`; the full SPEC is satisfied. `pytest` passes (4/4) plus a 69-check conformance suite I ran against every rule in `docs/SPEC.md`.
+
+Public signatures of `parse`, `compare`, `sort_versions`, `satisfies`, `max_satisfying` are unchanged.
+
+Bugs found and fixed, by SPEC section:
+
+Section 1 — syntax (`semverlite/version.py`)
+- The regex let leading zeros through in MAJOR/MINOR/PATCH (`01.2.3` was accepted). Now rejected.
+- Prerelease identifiers were never validated individually: empty identifiers (`1.2.3-a..b`, `-.a`, `a.`) and purely-numeric leading zeros (`1.2.3-01`) were accepted. Now rejected; `0a` still valid.
+- Build identifiers were not checked for emptiness (`1.2.3+a..b` accepted). Now rejected (leading zeros still allowed, per spec).
+
+Section 2 — precedence
+- Numeric parts were compared as strings, so `1.10.0 < 1.9.0`. Now compared as integers.
+- The whole prerelease was compared as one joined string, which broke numeric-vs-numeric ordering (`beta.11 < beta.2`), needs "numeric identifier is lower than alphanumeric", and made a version *without* prerelease sort *below* one with it (`1.0.0 < 1.0.0-rc.1`) — the spec says the opposite. Replaced with a structured total-ordering key.
+- Build metadata was already ignored — still is.
+
+Section 3 — ranges (`semverlite/ranges.py`)
+- `||` was not implemented at all (treated as a token → error/garbage). Now splits into comparator sets, any set matching wins, all comparators in a set must match.
+- Empty range / empty set returned `True` (vacuous `all([])`). Now raises `ValueError`.
+- `^V` used a wrong rule (`same major`) that broke `^0.2.3` and `^0.0.3`. Now the left-most-non-zero rule: `^1.2.3→<2.0.0`, `^0.2.3→<0.3.0`, `^0.0.3→<0.0.4`.
+- `~V` used `same minor` and ignored major (`~1.2.3` wrongly matched `0.2.3`). Now `>=V <MAJOR.(MINOR+1).0`.
+- `*` matched everything unconditionally, including prereleases. Now subject to the pre-release rule.
+- The pre-release rule was entirely missing. Now a prerelease version matches a set only if some comparator in that same set references a version with the same MAJOR.MINOR.PATCH that also has a prerelease (for `^`/`~` the lower bound). All four spec examples now behave correctly.
+- `max_satisfying` validated versions via `satisfies`, but with an empty `versions` list it never validated the range; it now compiles the range first, and still raises `ValueError` on any invalid entry while returning elements as given.
+
+Files changed: `semverlite/version.py`, `semverlite/ranges.py`.

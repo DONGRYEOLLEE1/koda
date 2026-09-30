@@ -1,0 +1,111 @@
+{
+  "tool": "koda",
+  "tool_version": "koda 0.1.0 (feat/showcase@63fda57)",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:58149",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 30.74,
+  "input_tokens": 105933,
+  "output_tokens": 5072,
+  "tool_calls": 24,
+  "reasoning_tokens": 0,
+  "cache_read_tokens": 91776,
+  "llm_calls": 18,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): koda_entry.py: usage_metadata summed via run_task(extra_callbacks=[UsageTap]) + run_task result dict",
+  "model_tool_calls_proxy": 26,
+  "model_tool_calls_agentic_proxy": 24,
+  "cache_miss_tokens": 14157,
+  "cost_estimate": {
+    "usd_peak_basis": 0.010884,
+    "usd_offpeak_basis": 0.005442,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "workspace_changes": {
+    "root": "<work>/dryrun-20260930b/runs/b6f9175cc7/w/invoicer",
+    "added": [],
+    "modified": [
+      "invoicer/money.py",
+      "tests/test_invoice.py",
+      "tests/test_money.py"
+    ],
+    "deleted": [],
+    "n_changed": 3
+  },
+  "tool_state_drift": null,
+  "tool_reported": {
+    "available": true,
+    "source": "koda_entry.py: usage_metadata summed via run_task(extra_callbacks=[UsageTap]) + run_task result dict",
+    "llm_steps": 17,
+    "input_tokens": 105414,
+    "output_tokens": 5059,
+    "reasoning_tokens": 0,
+    "cache_read_tokens": 91648,
+    "calls_without_usage": 0,
+    "tool_calls": 24,
+    "tool_summary": "search_text · run_readonly_command×3 · read_file×12 · list_files · run_command×4 · multi_edit · edit_file×2",
+    "route": "edit",
+    "verdict": "pass",
+    "empty_final": false,
+    "retries": 0,
+    "note": "calls outside the callback chain (e.g. make_title after run_task) can be missing -> the proxy is the wire truth"
+  },
+  "proxy": {
+    "http_requests": 18,
+    "llm_requests": 18,
+    "llm_requests_ok": 18,
+    "llm_requests_error": 0,
+    "llm_requests_with_tools": 16,
+    "llm_requests_aux": 2,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 105933,
+    "output_tokens": 5072,
+    "reasoning_tokens": 0,
+    "cache_read_tokens": 91776,
+    "cache_miss_tokens": 14157,
+    "model_tool_calls": 26,
+    "model_tool_calls_agentic": 24,
+    "llm_requests_structured_output": 2,
+    "reasoning_effort_values": {
+      "none": 18
+    },
+    "models": {
+      "deepseek-flash": 18
+    },
+    "resp_models": {
+      "deepseek-flash": 18
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 18
+    },
+    "finish_reasons": {
+      "tool_calls": 14,
+      "stop": 4
+    },
+    "first_main_request": {
+      "n_tools": 6,
+      "system_chars": 737,
+      "request_bytes": 6587,
+      "max_tokens": 4096,
+      "temperature": 0.0,
+      "reasoning_effort": "none",
+      "tool_names": [
+        "read_file",
+        "search_text",
+        "list_files",
+        "run_readonly_command",
+        "analyze_image",
+        "read_artifact"
+      ]
+    },
+    "llm_latency_sum_s": 28.312,
+    "errors": []
+  },
+  "started_at": "2026-09-30T11:42:57.125485+00:00",
+  "workspace": "<work>/dryrun-20260930b/runs/b6f9175cc7/w/invoicer",
+  "prompt_file": "<koda>/benchmarks/tasks/a1-invoice-rounding/prompt.txt"
+}

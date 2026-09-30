@@ -1,0 +1,101 @@
+{
+  "task": "f1-general-knowledge",
+  "category": "f_knowledge",
+  "tool": "hermes",
+  "rep": "r2",
+  "round_index": 20,
+  "round_total": 42,
+  "seed": 20261001,
+  "invocation": 1,
+  "round_started_at": "2026-09-30T12:26:09+00:00",
+  "concurrent_tools": [
+    "opencode",
+    "koda",
+    "hermes"
+  ],
+  "launch_order": [
+    "opencode",
+    "koda",
+    "hermes"
+  ],
+  "answer_chars": 192,
+  "answer_hangul_ratio": 0.476,
+  "koda_reviewer_calls": null,
+  "pytest_cache_in_workspace": false,
+  "hermes_state_restored": false,
+  "hermes_volatile_state_reset": [
+    "state.db",
+    "state.db-wal",
+    "state.db-shm",
+    "cache/scratch",
+    "sessions"
+  ],
+  "secret_scrub_files": 0,
+  "bench_env": {
+    "developer_dir_fix": 1,
+    "tool_path_prepend": true,
+    "env_allowlist": true
+  },
+  "tool_call_names": [],
+  "outside_workspace": {
+    "tmp_entries_created": [],
+    "tmp_entries_created_unattributed_in_round": [],
+    "suspicious_refs": 0,
+    "examples": []
+  },
+  "infra": {
+    "meta_missing": false,
+    "proxy_off": false,
+    "llm_http_429": 0,
+    "llm_http_5xx": 0,
+    "runner_rc": 0,
+    "suspect": false
+  },
+  "llm_requests": [
+    {
+      "seq": 3,
+      "status": 200,
+      "stream": false,
+      "system_chars": 942,
+      "n_tools": 0,
+      "tool_choice": null,
+      "reasoning_effort": null,
+      "max_tokens": null,
+      "temperature": null,
+      "n_messages": 2,
+      "prompt_tokens": 311,
+      "cache_hit": 128,
+      "completion_tokens": 18,
+      "reasoning_tokens": null,
+      "finish_reason": "stop",
+      "resp_tool_calls": 0,
+      "tool_call_names": [],
+      "structured_output": false,
+      "latency_s": 1.019,
+      "ttfb_s": 1.019
+    },
+    {
+      "seq": 2,
+      "status": 200,
+      "stream": true,
+      "system_chars": 21004,
+      "n_tools": 24,
+      "tool_choice": null,
+      "reasoning_effort": "high",
+      "max_tokens": null,
+      "temperature": null,
+      "n_messages": 2,
+      "prompt_tokens": 14789,
+      "cache_hit": 2560,
+      "completion_tokens": 178,
+      "reasoning_tokens": 74,
+      "finish_reason": "stop",
+      "resp_tool_calls": 0,
+      "tool_call_names": [],
+      "structured_output": false,
+      "latency_s": 1.515,
+      "ttfb_s": 0.432
+    }
+  ],
+  "work_dir": "<work>/main-20260930/runs/15639b88bb"
+}

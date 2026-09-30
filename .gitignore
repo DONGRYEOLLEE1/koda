@@ -23,7 +23,6 @@ plan
 .ruff_cache
 # 프로젝트 MCP 설정(koda mcp add --scope project 가 만든다). 키가 들어갈 수 있고 .yaml·.yml 도 읽으므로 폴더째 막는다
 mcps/
-benchmarks
 .koda
 .harness
 scenario

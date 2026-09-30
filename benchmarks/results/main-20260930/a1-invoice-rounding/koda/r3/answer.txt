@@ -1,0 +1,42 @@
+I'll start by exploring the workspace structure and reading the README's "Money rules" section.I have the full picture. Two root causes: (1) `to_decimal` uses `Decimal(value)` which for floats takes the binary expansion (2.675 → 2.67499…), and (2) `quantize` uses the default `ROUND_HALF_EVEN` instead of half-up.
+
+- [ ] **항목 1: `to_decimal` 이 float 를 "쓰여진 십진수"로 해석하도록 수정** — `invoicer/money.py` — float 입력은 `Decimal(str(value))`(shortest repr)로 변환하고, `int`/`str`/`Decimal` 은 기존대로 처리. 공개 시그니처(`to_decimal(value) -> Decimal`) 유지. 검증: `python -c "from invoicer import to_decimal; print(to_decimal(2.675))"` 가 `2.675` 를 출력하고, `to_decimal(3) == Decimal('3')`, `to_decimal('19.99') == Decimal('19.99')` 확인.
+
+- [ ] **항목 2: 반올림을 half-up 으로 고정** — `invoicer/money.py` — `to_money` 의 `quantize(CENT)` 에 `rounding=ROUND_HALF_UP` 을 명시(모듈 상단에서 `from decimal import ROUND_HALF_UP` 임포트). 검증: `python -c "from invoicer import to_money; print(to_money('2.675'), to_money('0.005'), to_money('2.665'))"` 가 `2.68 0.01 2.67` 를 출력(기본 half-even 이면 2.66/0.00 이 나와 실패).
+
+- [ ] **항목 3: `invoice.py` 의 각 단계가 README 규칙대로 반올림되는지 확인·보정** — `invoicer/invoice.py` — line amount(단가×수량), subtotal(합), discount(subtotal×rate), tax((subtotal−discount)×rate) 모두 `to_money` 를 거치는지 점검하고, rate 는 반올림하지 않고 `to_decimal` 만 적용되는지 확인. `total()` 은 반올림된 세 값의 합으로 유지. 검증: `python -c "from invoicer import Invoice, LineItem; inv=Invoice([LineItem('widget',2.675,2),LineItem('cable','4.10')],discount_rate='0.1',tax_rate=0.08); print(inv.subtotal(), inv.discount(), inv.tax(), inv.total())"` 가 README 예시 규칙과 일치(2.675×2=5.35, subtotal 9.45, discount 0.95, tax 0.68, total 9.18)하는지 확인.
+
+- [ ] **항목 4: 회귀 테스트 추가 및 전체 스위트 통과** — `tests/test_money.py`, `tests/test_invoice.py` — float 입력의 십진 해석(`to_decimal(2.675) == Decimal('2.675')`), half-up 경계값(`to_money('0.005') == Decimal('0.01')`, `to_money('2.665') == Decimal('2.67')`), README 예시 인보이스 총액 케이스를 추가. 기존 `test_reported_rounding_bug` 가 통과해야 함. 검증: `python -m pytest` 전체 green, 신규 테스트가 수정 전 코드에서 실패하고 수정 후 통과하는지 확인.I'll start by exploring the workspace structure and reading the key files.Now I understand the codebase. Let me apply the fixes.Now let me verify items 1–3 with the checks from the plan.All checks pass. Now let me add the regression tests.Now let me run the full test suite, and also confirm the new tests fail on the pre-fix code (via git stash of the source fix).모든 작업을 완료했습니다.
+
+## 변경 요약
+
+**`invoicer/money.py`** (핵심 수정)
+- `to_decimal`: `float` 입력을 `Decimal(str(value))`(shortest repr)로 변환하도록 분기 추가. `int`/`str`/`Decimal`은 기존대로 `Decimal(value)`. 공개 시그니처 유지.
+- `to_money`: `quantize(CENT, rounding=ROUND_HALF_UP)`로 half-up 반올림 명시(기본 half-even → half-up). `ROUND_HALF_UP` 임포트 추가.
+
+**`invoicer/invoice.py`** — 수정 불필요. 점검 결과 이미 README 규칙을 따르고 있었습니다:
+- line amount = `to_money(단가 × 수량)` ✓
+- subtotal = `to_money(합)` ✓
+- discount = `to_money(subtotal × rate)` ✓
+- tax = `to_money((subtotal − discount) × rate)` ✓
+- rate 는 `to_decimal`만 적용(반올림 안 함) ✓
+- total = 반올림된 세 값의 합 ✓
+
+**테스트 추가**
+- `tests/test_money.py`: float 십진 해석, int/str 변환, half-up 경계값(`0.005→0.01`, `2.665→2.67`, `2.675→2.68`).
+- `tests/test_invoice.py`: README 예시 인보이스 총액 케이스.
+
+## 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `to_decimal(2.675)` | `2.675` ✓ |
+| `to_money('2.675','0.005','2.665')` | `2.68 0.01 2.67` ✓ |
+| README 예시 (subtotal/discount/tax/total) | `9.45 / 0.95 / 0.68 / 9.18` ✓ |
+| `python -m pytest` | **11 passed** ✓ |
+| 수정 전 코드에서 신규 테스트 | **4 failed** (버그 재현 확인) ✓ |
+
+수정 전 코드에서 `test_reported_rounding_bug`를 포함한 4개 테스트가 실패하고, 수정 후 전부 통과함을 확인했습니다. 승인 거부나 미실행 항목은 없습니다.
+
+--- route: edit | verdict: pass ---
+판정 근거: README "Money rules"와 대조해 확인한 결과, invoicer/money.py에서 to_decimal이 float를 Decimal(str(value))로 해석하고 to_money가 ROUND_HALF_UP으로 반올림하도록 수정되어 2.675→2.68 버그가 실제로 해결되었으며, 공개 시그니처도 유지되었다. 테스트 추가와 pytest 실행(11 passed)이 관측된 실행·diff와 일치하고, .pytest_cache는 pytest 실행의 자동 산출물로 요청 범위 위반이라 보기 어렵다.

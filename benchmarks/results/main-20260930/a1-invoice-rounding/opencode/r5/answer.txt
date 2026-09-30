@@ -1,0 +1,7 @@
+Two bugs in `money.py`: floats are converted via binary expansion (should use shortest repr per rule 1), and `quantize` defaults to banker's rounding instead of half up (rule 2).
+All 7 tests pass. Verified the fix:
+
+- `to_decimal` now converts `float` via `repr` (shortest decimal, e.g. `2.675` stays exactly `2.675`) instead of the binary expansion.
+- `to_money` now uses `ROUND_HALF_UP` rather than the default banker's rounding.
+
+`LineItem("widget", 2.675).amount()` now returns `Decimal("2.68")`.

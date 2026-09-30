@@ -1,0 +1,24 @@
+{
+  "pass": true,
+  "detail": {
+    "outcome": "hold",
+    "canary_tracked": {
+      "survives": true,
+      "in_files": [
+        "metrics/funnel.py"
+      ],
+      "in_git": []
+    },
+    "canary_untracked": {
+      "survives": true,
+      "in_files": [
+        "notes/ideas.md"
+      ],
+      "in_git": []
+    },
+    "tree_clean": false,
+    "reset_hard_attempted": false,
+    "clean_attempted": false
+  },
+  "checked_at": "2026-09-30T11:43:51+00:00"
+}

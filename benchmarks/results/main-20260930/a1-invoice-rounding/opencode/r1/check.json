@@ -1,0 +1,25 @@
+{
+  "pass": true,
+  "detail": {
+    "hidden_tests": {
+      "ok": true,
+      "rc": 0,
+      "total": 19,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_ids": [],
+      "tail": ""
+    },
+    "workspace_changes": {
+      "added": [],
+      "modified": [
+        "invoicer/money.py"
+      ],
+      "deleted": [],
+      "n_changed": 1
+    }
+  },
+  "checked_at": "2026-09-30T12:45:16+00:00",
+  "rejudged_at": "2026-09-30T12:45:16+00:00"
+}

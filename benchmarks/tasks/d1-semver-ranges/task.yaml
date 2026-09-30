@@ -1,0 +1,19 @@
+id: d1-semver-ranges
+category: d_hard_fix
+title: Make a SemVer library match its spec (many edge cases)
+description: >
+  The reported symptom (string comparison of 1.10.0 vs 1.9.0) is the tip: the spec (docs/SPEC.md) also
+  requires strict syntax validation, SemVer 2.0.0 pre-release precedence, `||` sets, caret semantics for
+  0.x, tilde that respects MAJOR, and npm-style pre-release exclusion. Fixing only the reported comparison
+  passes the visible tests but fails most hidden ones - this task measures whether an agent reads the whole
+  spec and verifies its work instead of stopping at the first green test.
+project_dir: semverlite
+reps: 5
+venv: true
+judge: ~95 hidden parametrized cases derived one-to-one from docs/SPEC.md, run on a copy of the workspace.
+success_criteria: Every hidden case passes (syntax, precedence chain, sort stability, ranges incl. the
+  pre-release rule, invalid ranges, max_satisfying) and the original visible tests still pass.
+selftest:
+  template: fail
+  solution: pass
+  negatives: [compare-only]

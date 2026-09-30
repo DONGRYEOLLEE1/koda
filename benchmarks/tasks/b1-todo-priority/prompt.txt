@@ -1,0 +1,6 @@
+할 일에 우선순위를 붙이는 기능을 추가해줘.
+1. `Task` 에 `priority` 필드를 추가해. 값은 `low`, `normal`, `high` 중 하나이고 기본값은 `normal` 이야. 그 밖의 값이 들어오면 `ValueError` 를 내야 해.
+2. CLI 에서 `todo add "제목" --priority high` 처럼 지정할 수 있게 하고, 생략하면 `normal` 이야. 허용되지 않은 값이면 argparse 오류(종료 코드 2)로 끝나야 해.
+3. `todo list` 는 우선순위가 높은 순(high → normal → low)으로, 같은 우선순위 안에서는 id 오름차순으로 출력해. 줄 형식은 지금과 같되 high 는 제목 앞에 `(!) `, low 는 `(~) ` 를 붙이고 normal 은 그대로 둬. 예: `[ ] 3 (!) 세금 신고`
+4. `priority` 키가 없는 예전 todo.json 도 그대로 읽혀야 하고, 이때는 `normal` 로 취급해.
+새 동작에 대한 테스트도 추가해줘.

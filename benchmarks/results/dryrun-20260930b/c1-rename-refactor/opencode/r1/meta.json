@@ -1,0 +1,129 @@
+{
+  "tool": "opencode",
+  "tool_version": "opencode 1.18.33",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:58119",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 26.469,
+  "input_tokens": 106885,
+  "output_tokens": 7040,
+  "tool_calls": 42,
+  "reasoning_tokens": 1503,
+  "cache_read_tokens": 95360,
+  "llm_calls": 9,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+  "model_tool_calls_proxy": 42,
+  "model_tool_calls_agentic_proxy": 42,
+  "cache_miss_tokens": 11525,
+  "cost_estimate": {
+    "usd_peak_basis": 0.012478,
+    "usd_offpeak_basis": 0.006239,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "workspace_changes": {
+    "root": "<work>/dryrun-20260930b/runs/3508a785db/w/shop",
+    "added": [],
+    "modified": [
+      "README.md",
+      "shop/__init__.py",
+      "shop/cart.py",
+      "shop/checkout.py",
+      "shop/pricing.py",
+      "shop/reports.py",
+      "tests/test_cart.py",
+      "tests/test_pricing.py"
+    ],
+    "deleted": [],
+    "n_changed": 8
+  },
+  "tool_state_drift": null,
+  "tool_reported": {
+    "available": true,
+    "source": "opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+    "session_id": "ses_f0de07f16ffeyBO9wn8T1SKQcI",
+    "llm_steps": 8,
+    "input_tokens": 106218,
+    "output_tokens": 6571,
+    "reasoning_tokens": 1049,
+    "cache_read_tokens": 94848,
+    "raw": {
+      "input": 11370,
+      "output": 5522,
+      "reasoning": 1049,
+      "cache_read": 94848,
+      "cache_write": 0
+    },
+    "tool_calls": 42,
+    "tool_names": {
+      "bash": 5,
+      "read": 18,
+      "edit": 19
+    },
+    "error_events": 0,
+    "note": "the session-title call (small_model) is not included in the JSON events"
+  },
+  "proxy": {
+    "http_requests": 9,
+    "llm_requests": 9,
+    "llm_requests_ok": 9,
+    "llm_requests_error": 0,
+    "llm_requests_with_tools": 8,
+    "llm_requests_aux": 1,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 106885,
+    "output_tokens": 7040,
+    "reasoning_tokens": 1503,
+    "cache_read_tokens": 95360,
+    "cache_miss_tokens": 11525,
+    "model_tool_calls": 42,
+    "model_tool_calls_agentic": 42,
+    "llm_requests_structured_output": 0,
+    "reasoning_effort_values": {
+      "high": 8,
+      "low": 1
+    },
+    "models": {
+      "deepseek-flash": 9
+    },
+    "resp_models": {
+      "deepseek-flash": 9
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 9
+    },
+    "finish_reasons": {
+      "tool_calls": 7,
+      "stop": 2
+    },
+    "first_main_request": {
+      "n_tools": 10,
+      "system_chars": 9854,
+      "request_bytes": 31469,
+      "max_tokens": 32000,
+      "temperature": null,
+      "reasoning_effort": "high",
+      "tool_names": [
+        "bash",
+        "edit",
+        "glob",
+        "grep",
+        "read",
+        "skill",
+        "task",
+        "todowrite",
+        "webfetch",
+        "write"
+      ]
+    },
+    "llm_latency_sum_s": 26.474,
+    "errors": []
+  },
+  "started_at": "2026-09-30T11:42:25.382925+00:00",
+  "workspace": "<work>/dryrun-20260930b/runs/3508a785db/w/shop",
+  "prompt_file": "<koda>/benchmarks/tasks/c1-rename-refactor/prompt.txt"
+}

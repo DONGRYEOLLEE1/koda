@@ -1,0 +1,1 @@
+고쳤습니다. `invoicer/money.py:12`에서 float를 `Decimal(repr(value))`로 변환(최단 repr)하고, `to_money`의 반올림을 `ROUND_HALF_UP`으로 지정했습니다. 시그니처는 그대로입니다. 테스트 7개 모두 통과.

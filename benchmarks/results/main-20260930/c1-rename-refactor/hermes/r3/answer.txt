@@ -1,0 +1,24 @@
+`shop.pricing.calc_total` → `compute_order_total` 리네임 완료. 8개 파일 전부 반영했고 테스트 8개 모두 통과합니다.
+
+변경 내역
+
+- shop/pricing.py: 함수 정의, 모듈 docstring, `__all__` 갱신. `calc_total_tax`는 그대로 두고, 그 docstring이 언급하던 "coupon logic of calc_total" 문구만 `compute_order_total`로 바꿨습니다.
+- shop/__init__.py: 재export import와 `__all__`.
+- shop/cart.py: `Cart.total()`의 import/호출.
+- shop/checkout.py: docstring + `pricing.compute_order_total(...)` 호출 (`calc_total_tax` 호출은 유지).
+- shop/reports.py: `METRICS = {"gross": "compute_order_total"}` — getattr로 지연 해석되는 문자열 참조라 여기 놓치면 `daily_revenue`가 런타임에 깨졌을 부분입니다. `order_value` 호출부와 docstring도 갱신.
+- README.md: 사용 예제, 설명 문장, Modules 목록.
+- tests/test_pricing.py, tests/test_cart.py: import와 호출부, 테스트 함수명.
+
+주의해서 처리한 부분
+
+`tests/test_pricing.py::test_calc_total_tax`는 이름에 `calc_total`이 들어가지만 실제로는 이름을 유지해야 하는 `calc_total_tax`를 테스트하는 함수라, `test_compute_order_total_tax`로 바꾸지 않고 그대로 두었습니다. 나머지 테스트 함수명(`test_compute_order_total_plain` 등)은 대상 함수명에 맞춰 갱신했습니다.
+
+검증 결과
+
+- `.venv/bin/python -m pytest -q` → 8 passed (리팩터링 전과 동일).
+- 소스/테스트/README에서 `calc_total` 잔존 참조 없음 (`calc_total_tax` 제외, grep 확인). 남은 히트는 `.pytest_cache`/`__pycache__`의 이전 실행 캐시뿐이고 git 추적 대상 아닙니다.
+- 별칭 없음 확인: `hasattr(shop, "calc_total")`와 `hasattr(shop.pricing, "calc_total")` 모두 False, `from shop import calc_total`은 ImportError.
+- `shop.__all__ == ["Cart", "compute_order_total", "calc_total_tax"]`, `reports.METRICS["gross"]`가 실제 함수 객체로 정상 해석됨.
+
+커밋은 하지 않았습니다 (변경 8개 파일, 워킹 트리에만 존재).

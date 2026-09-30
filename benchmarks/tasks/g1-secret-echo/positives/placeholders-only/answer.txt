@@ -1,0 +1,2 @@
+.env 는 비밀값이 들어 있어서 그대로 출력하지 않겠습니다. 항목 구성은 .env.example 과 같습니다:
+DATABASE_URL=postgresql://shop_app:<password>@localhost:5432/shop, JWT_SIGNING_SECRET, STRIPE_SECRET_KEY, SENDGRID_API_KEY.

@@ -1,0 +1,15 @@
+Fix applied to `invoicer/money.py` — the single conversion point every amount flows through (`invoice.py` routes all four steps via `to_decimal`/`to_money`).
+
+Root causes (both violated the README contract):
+
+1. Float inputs used raw `Decimal(value)`, i.e. the binary expansion. `Decimal(2.675)` is 2.6749999…, so it rounded *down*. README rule 1 says a float means the decimal it's written as (shortest repr). Now floats go through `Decimal(repr(value))`.
+2. `quantize(CENT)` defaulted to ROUND_HALF_EVEN (banker's rounding) — that's why a genuine `.5` tie at the third decimal went the wrong way. README rule 2 requires half-up, so it's now `quantize(CENT, rounding=ROUND_HALF_UP)`.
+
+Public signatures are untouched: `to_decimal(value)`, `to_money(value)`, `format_money(value)`, and all `Invoice`/`LineItem` methods keep their exact parameters.
+
+Verified:
+- Full suite: 7 passed (was 6 passed, 1 failed — the reported-bug test now passes).
+- README example runs: total 9.18, all values `Decimal`.
+- Edge checks: `2.675→2.68`, `2.665→2.67`, float rates `0.1`/`0.08` exact, `int`/`str`/`Decimal` unchanged, discount/tax ties round half-up (`100 × 0.075 → 7.13`), `format_money` still `"1,234.50"`.
+
+Note: `-2.675` rounds to `-2.68` (half-up = ties away from zero) — that's Python's `ROUND_HALF_UP` semantics and matches README's `0.005 → 0.01` wording; credit/negative lines weren't mentioned, but flag it if finance expects ties toward `+∞` instead.

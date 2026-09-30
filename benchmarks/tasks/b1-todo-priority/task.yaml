@@ -1,0 +1,17 @@
+id: b1-todo-priority
+category: b_feature
+title: Add a priority field across model, storage and CLI
+description: >
+  A 3-module CLI to-do app (models / store / cli). The feature touches all three modules plus tests, so it
+  is a genuine multi-file change (it also legitimately triggers koda's independent reviewer, which runs when
+  >= 2 files change). Backward compatibility with old JSON files and exact output format are specified.
+project_dir: todo
+reps: 5
+venv: true
+judge: hidden tests run on a copy of the workspace (agent conftest/pytest.ini ignored) + original visible tests.
+success_criteria: Model default/validation, store round-trip, legacy files without `priority`, CLI --priority
+  (incl. argparse exit code 2), list ordering and markers all behave as specified; original tests still pass.
+selftest:
+  template: fail
+  solution: pass
+  negatives: [no-legacy]

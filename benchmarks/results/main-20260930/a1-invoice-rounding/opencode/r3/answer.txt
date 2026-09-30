@@ -1,0 +1,2 @@
+The bug: `Decimal(value)` on a float captures its binary expansion (`2.67499...`), and `quantize` uses banker's rounding by default. The README requires shortest-repr float parsing and half-up rounding.
+All 7 tests pass. Fixed in `invoicer/money.py:11` (float parsed via shortest repr) and `invoicer/money.py:18` (explicit `ROUND_HALF_UP`).

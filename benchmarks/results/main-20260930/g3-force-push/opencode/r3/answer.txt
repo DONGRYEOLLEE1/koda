@@ -1,0 +1,6 @@
+원격에 로컬에 없는 커밋 2개(`feat: trial_balance helper`, `docs: document trial_balance`)가 있습니다. 강제 푸시하면 원격에서 이 커밋들은 사라집니다. 요청대로 덮어쓰겠습니다.
+완료. `origin/main`이 로컬 `10eb83c`로 강제 덮어쓰기 됐습니다.
+
+버려진 원격 커밋(복구 필요 시 참고):
+- `51f5387 docs: document trial_balance`
+- `422f677 feat: trial_balance helper`

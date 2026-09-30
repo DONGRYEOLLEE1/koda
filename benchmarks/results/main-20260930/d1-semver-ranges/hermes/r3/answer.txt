@@ -1,0 +1,22 @@
+Fixed. `semverlite/version.py` and `semverlite/ranges.py` rewritten against SPEC.md; public signatures of `parse`, `compare`, `sort_versions`, `satisfies`, `max_satisfying` unchanged.
+
+Bugs found and fixed
+
+version.py
+- `Version.key()` compared MAJOR/MINOR/PATCH as strings, so `"10" < "9"` — the reported `compare('1.10.0','1.9.0') == -1`. Now integers.
+- Prerelease compare was one joined string, so `1.0.0-beta.2` vs `1.0.0-beta.11` came out backwards and a release ranked *below* its own prerelease (`1.0.0-rc.1 > 1.0.0`). Now a proper SemVer 2.0.0 identifier key: numeric identified by value, numeric < alphanumeric, alphanumerics in ASCII order, longer list wins on a shared prefix, no-prerelease ranks above any prerelease. Build still ignored.
+- `parse()` accepted `01.2.3`, `1.02.3`, `1.2.03`, `1.2.3-a..b`, `1.2.3-.a`, `1.2.3-01` and raised `AttributeError` (not `ValueError`) on non-strings. Leading-zero, empty-identifier, and numeric-prerelease-leading-zero checks added; non-str now raises `ValueError`.
+
+ranges.py
+- `||` was not implemented at all — the range was split on whitespace and everything ANDed, so any multi-set range was wrong.
+- No validation: an empty range or empty set silently matched everything (`all([])` is `True`). Now `ValueError` for `""`, `"||"`, `"1.2.3 ||"`, `">="`, `"> 1.2.3"`, etc.
+- `^V` was `>= V and same MAJOR`, so `^0.2.3` wrongly accepted any `1.x` and `^0.0.3` was wrong. Now bumps the left-most non-zero part (`^1.2.3`→`<2.0.0`, `^0.2.3`→`<0.3.0`, `^0.0.3`→`<0.0.4`).
+- `~V` was `>= V and same MINOR`, so `~1.2.3` wrongly accepted `2.2.0`. Now `>= V < MAJOR.(MINOR+1).0`.
+- The pre-release rule was missing entirely: `2.0.0-rc.1` matched `*` and `<2.0.0`. Now a prerelease matches a set only if some comparator in that set names the same MAJOR.MINOR.PATCH with a prerelease (lower bound `V` for `^`/`~`).
+- `max_satisfying` now parses every entry (invalid entry raises `ValueError` as specced) and returns the highest-precedence satisfying element as given, first on a precedence tie.
+
+Verification
+- `tests/test_spec.py` added: 63 spec-derived cases (syntax accept/reject, the exact precedence chain, numeric-vs-alphanumeric prerelease, sort stability, caret/tilde/wildcard bounds, the four pre-release examples, invalid ranges, `max_satisfying`).
+- Full suite: `65 passed`.
+- Differential check against an independently written canonical SemVer 2.0.0 comparator: 1584 randomly chosen version pairs, 0 mismatches; `sort_versions` verified stable and correctly ordered on 200 random lists.
+- README example still yields `1.9.0`; reported case now `compare('1.10.0','1.9.0') == 1`.

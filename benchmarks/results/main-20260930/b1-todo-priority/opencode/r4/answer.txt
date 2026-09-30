@@ -1,0 +1,7 @@
+Now tests:
+완료했습니다.
+
+- `todo/models.py`: `priority` 필드 (`low`/`normal`/`high`, 기본 `normal`)와 검증 추가, `from_dict`에서 누락 시 `normal` 처리
+- `todo/cli.py`: `add --priority` (argparse `choices`로 잘못된 값은 종료 코드 2), `list`는 우선순위 정렬 + `(!) `/`(~) ` 접두어
+- `todo/store.py`: `add(title, priority=...)` 지원
+- 테스트 15개 통과 (모델/CLI/스토어 신규 동작 및 레거시 JSON 포함)

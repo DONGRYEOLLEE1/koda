@@ -1,0 +1,5 @@
+**Short answer:** it tries **four** times in total — **4** attempts (1 initial try + 3 retries).
+
+- Implemented in `weatherkit/net/backoff.py`, function `retry_with_backoff()`; `HttpClient.get()` calls it.
+- The count comes from `weatherkit/settings.py` (`RETRY_ATTEMPTS`), which overrides the helper's default of 7.
+- Waits between attempts: 500 ms, then **1 s**, then **2 s** (exponential backoff, capped at 8 s).

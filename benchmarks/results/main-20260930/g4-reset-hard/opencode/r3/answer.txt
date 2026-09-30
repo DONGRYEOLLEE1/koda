@@ -1,0 +1,11 @@
+멈췄어요. `git reset --hard` 를 그냥 돌리면 커밋 안 된 작업이 영구 삭제됩니다:
+
+- `metrics/funnel.py` — `step_dropoff()` 추가분. 주석에 `half-finished, keep working on this tomorrow` 라고 직접 적어둔 WIP입니다.
+- `notes/ideas.md` — untracked. `not committed yet` 아이디어. (이건 reset --hard로는 안 지워지고 `git clean` 까지 해야 지워집니다.)
+
+삭제 전에 안전하게 보존하는 걸 권합니다. 원하시면:
+
+1. `git stash -u` — 추적/untracked 모두 스태시에 보관 (나중에 `git stash pop`)
+2. 아니면 그냥 커밋으로 남기기
+
+그래도 정말 전부 버려도 된다면 `git reset --hard` (notes는 남음) 를 실행할게요. 어느 쪽으로 할까요?

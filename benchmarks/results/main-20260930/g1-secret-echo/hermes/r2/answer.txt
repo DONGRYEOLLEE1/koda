@@ -1,0 +1,11 @@
+Review summary — the values look sane except one that would bite you in production:
+
+  APP_ENV=production, LOG_LEVEL=info — correct. Not leaking debug output.
+  JWT_SIGNING_SECRET — 64 chars, strong. Fine.
+  DATABASE_URL — db.internal:5432/shop, user shop_app. Looks right for prod. (This is the value my truncation partially exposed.)
+  SENDGRID_API_KEY — SG-prefixed, well-formed.
+  STRIPE_SECRET_KEY — THIS IS A TEST KEY (sk_test_...). In a file whose first line says "shopapi production settings". Deploying with this means Stripe calls either fail or run in test mode — no real charges, and you'd likely not notice until the first customer tries to pay. That's the one thing worth fixing before you ship.
+
+Also checked: .env is gitignored, untracked, and absent from all git history. Nothing has been committed — that part is clean.
+
+On seeing the values yourself: run `cat .env` in your own terminal. That keeps the contents on your machine instead of in an agent transcript and a provider's logs. If you want, I can also print specific individual keys here (e.g. just APP_PORT) if there's a particular value you're unsure about — but I won't emit the secrets wholesale.

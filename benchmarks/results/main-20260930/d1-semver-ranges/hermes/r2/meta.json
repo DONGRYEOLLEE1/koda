@@ -1,0 +1,202 @@
+{
+  "tool": "hermes",
+  "tool_version": "hermes-agent release 2026.9.24 (main@f42f579cf) [provider=deepseek]",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:58662",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 96.339,
+  "input_tokens": 555233,
+  "output_tokens": 21607,
+  "tool_calls": 22,
+  "reasoning_tokens": 12873,
+  "cache_read_tokens": 530560,
+  "llm_calls": 18,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): hermes -z --usage-file JSON (main + auxiliary)",
+  "model_tool_calls_proxy": 22,
+  "model_tool_calls_agentic_proxy": 22,
+  "cache_miss_tokens": 24673,
+  "cost_estimate": {
+    "usd_peak_basis": 0.036514,
+    "usd_offpeak_basis": 0.018257,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "tokens_complete": true,
+  "tokens_incomplete_reason": null,
+  "tool_env_names": [
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "DEVELOPER_DIR",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_PAGER",
+    "GIT_TERMINAL_PROMPT",
+    "HERMES_BENCH_BASE_URL",
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "PAGER",
+    "PATH",
+    "SHELL",
+    "TERM",
+    "TMPDIR",
+    "USER",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "__CF_USER_TEXT_ENCODING",
+    "npm_config_cache"
+  ],
+  "workspace_changes": {
+    "root": "<work>/main-20260930/runs/1e1f8211be/w/semverlite",
+    "added": [],
+    "modified": [
+      "semverlite/ranges.py",
+      "semverlite/version.py",
+      "tests/test_ranges.py",
+      "tests/test_version.py"
+    ],
+    "deleted": [],
+    "n_changed": 4
+  },
+  "tool_state_drift": {
+    "hermes_memories": {
+      "root": "<bench-home>/hermes/.hermes/memories",
+      "added": [],
+      "modified": [],
+      "deleted": [],
+      "n_changed": 0
+    },
+    "hermes_skills": {
+      "root": "<bench-home>/hermes/.hermes/skills",
+      "added": [],
+      "modified": [],
+      "deleted": [],
+      "n_changed": 0
+    }
+  },
+  "tool_reported": {
+    "available": true,
+    "source": "hermes -z --usage-file JSON (main + auxiliary)",
+    "session_id": "20260930_211433_ebf86b",
+    "llm_steps": 18,
+    "input_tokens": 555233,
+    "output_tokens": 21607,
+    "reasoning_tokens": 12873,
+    "cache_read_tokens": 530560,
+    "main_only": {
+      "api_calls": 17,
+      "input_tokens": 554858,
+      "output_tokens": 21589
+    },
+    "auxiliary_by_task": [
+      "title_generation"
+    ],
+    "tool_calls": 22,
+    "tool_calls_null_reason": null,
+    "session_db": {
+      "sessions": [
+        "20260930_211433_ebf86b"
+      ],
+      "tool_result_messages": 22,
+      "tool_names": {
+        "patch": 5,
+        "read_file": 7,
+        "search_files": 1,
+        "terminal": 5,
+        "write_file": 4
+      },
+      "session_row": {
+        "tool_call_count": 22,
+        "api_call_count": 17,
+        "message_count": 40
+      }
+    },
+    "completed": true,
+    "failed": false,
+    "turn_exit_reason": "text_response(finish_reason=stop)"
+  },
+  "proxy": {
+    "http_requests": 19,
+    "llm_requests": 18,
+    "llm_requests_ok": 18,
+    "llm_requests_error": 0,
+    "llm_requests_without_usage": 0,
+    "client_disconnects": 0,
+    "llm_requests_with_tools": 17,
+    "llm_requests_aux": 1,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 555233,
+    "output_tokens": 21607,
+    "reasoning_tokens": 12873,
+    "cache_read_tokens": 530560,
+    "cache_miss_tokens": 24673,
+    "model_tool_calls": 22,
+    "model_tool_calls_agentic": 22,
+    "llm_requests_structured_output": 0,
+    "reasoning_effort_values": {
+      "None": 1,
+      "high": 17
+    },
+    "models": {
+      "deepseek-flash": 18
+    },
+    "resp_models": {
+      "deepseek-flash": 18
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 18
+    },
+    "finish_reasons": {
+      "stop": 2,
+      "tool_calls": 16
+    },
+    "first_main_request": {
+      "n_tools": 24,
+      "system_chars": 21014,
+      "request_bytes": 62078,
+      "max_tokens": null,
+      "temperature": null,
+      "reasoning_effort": "high",
+      "tool_names": [
+        "browser_exec",
+        "browser_vault_enter_code",
+        "browser_vault_fill",
+        "browser_vault_list",
+        "browser_vault_save_login",
+        "browser_vault_unlock",
+        "clarify",
+        "delegate_task",
+        "execute_code",
+        "memory",
+        "patch",
+        "read_file",
+        "search_files",
+        "skill_view",
+        "skills_list",
+        "terminal",
+        "text_to_speech",
+        "vision_analyze",
+        "web_extract",
+        "web_search",
+        "write_file",
+        "tool_search",
+        "tool_describe",
+        "tool_call"
+      ]
+    },
+    "llm_latency_sum_s": 89.874,
+    "errors": []
+  },
+  "started_at": "2026-09-30T12:14:31.643702+00:00",
+  "workspace": "<work>/main-20260930/runs/1e1f8211be/w/semverlite",
+  "prompt_file": "<koda>/benchmarks/tasks/d1-semver-ranges/prompt.txt",
+  "extra": {
+    "hermes_provider": "deepseek",
+    "hermes_base_url": "http://ds-proxy.localtest.me:58662/v1"
+  }
+}

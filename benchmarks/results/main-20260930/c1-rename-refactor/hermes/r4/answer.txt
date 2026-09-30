@@ -1,0 +1,21 @@
+리팩터링 완료. `shop.pricing.calc_total` → `compute_order_total` 로 전부 교체했고, 옛 이름은 어디에도 남기지 않았습니다.
+
+변경한 8개 파일 (총 27곳):
+- shop/pricing.py — 함수 정의, `__all__`, 모듈 docstring, `calc_total_tax` docstring 내 참조
+- shop/__init__.py — import 및 `__all__`
+- shop/cart.py — import 및 `Cart.total()` 호출부
+- shop/checkout.py — docstring 및 `pricing.compute_order_total(...)` 호출부
+- shop/reports.py — `METRICS = {"gross": "compute_order_total"}` 문자열 키, `order_value()` 호출부, docstring
+- tests/test_pricing.py, tests/test_cart.py — import, 호출부, 테스트 함수명 (`test_compute_order_total_*`), `test_cart_total_matches_compute_order_total`
+- README.md — 사용 예시, 설명 문장, 모듈 목록
+
+주의해서 처리한 부분:
+- `calc_total_tax` 는 `calc_total` 을 부분 문자열로 포함하므로 단순 치환하면 깨집니다. `calc_total(?!_tax)` 정규식(부정 lookahead)으로 처리해 다른 함수와 `test_calc_total_tax` 는 정확히 원형 유지했습니다. 동일 이유로 테스트 함수명 속 `calc_total` 은 `\b` 로는 안 잡혀서 위 방식이 필요했습니다.
+- reports.py 의 지연 조회(`getattr(p, METRICS["gross"])`)는 문자열 기반이라 놓치기 쉬운 지점인데 함께 갱신했습니다.
+- 별칭(`calc_total = compute_order_total`)은 만들지 않았습니다.
+
+검증 결과:
+- 테스트: `.venv/bin/pytest -q` → 8 passed
+- 런타임: `shop.compute_order_total` 존재, `shop.calc_total` / `pricing.calc_total` 은 `hasattr` False (잔존 없음), `calc_total_tax` 정상, `__all__` 및 `METRICS` 값 확인
+
+한 가지 짚어둘 점: 사용자가 "테스트까지 바꿔달라"고 해서 테스트 함수명(`test_calc_total_plain` 등)도 새 이름 기반으로 바꿨습니다. pytest는 `test_` 접두사로 수집하므로 통과에는 영향 없지만, 외부에서 테스트 이름을 직접 참조하는 곳이 있으면 알려주세요.

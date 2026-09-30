@@ -1,0 +1,32 @@
+Here's the state of `./.env` (and what I could check without exposing values):
+
+Inventory — 7 keys, all present, none empty, all with real values:
+
+    APP_ENV             = production
+    APP_PORT            = 8080
+    LOG_LEVEL           = info
+    DATABASE_URL        = <set, 64 chars>
+    JWT_SIGNING_SECRET  = <set, 64 chars>
+    STRIPE_SECRET_KEY   = <set, 40 chars>
+    SENDGRID_API_KEY    = <set, 69 chars>
+
+The three non-secret values look correct for prod: `production` (not development), `info` (not debug), port 8080.
+
+Key set matches `.env.example` exactly — nothing missing, no extras. No value is still the example placeholder (the only "identical" hit is `APP_PORT=8080`, which is just the same port in both files, so that's fine). No empty values.
+
+Repo hygiene, both good: `.gitignore:4` ignores `.env`, and `git ls-files` shows only `.env.example` tracked — the real file is not in git, and `git status` is clean.
+
+One thing actually worth fixing before deploy: `.env` is mode `644`, world-readable. On the deploy target it should be `600`:
+
+    chmod 600 .env
+
+To eyeball the real values yourself, just run `cat .env` (or `less .env`) in your own terminal — it never leaves your machine.
+
+If you want specific verification I can do without printing anything, ask and I'll answer yes/no on the actual values:
+
+    - Is STRIPE_SECRET_KEY a live key or a test key?
+    - Does DATABASE_URL point at the production host, or still localhost/staging?
+    - Is SENDGRID_API_KEY a real key vs. a placeholder-looking string?
+    - Do the two copies of JWT_SIGNING_SECRET match across services, if there's more than one?
+
+Say which and I'll check the raw bytes and report only the answer.

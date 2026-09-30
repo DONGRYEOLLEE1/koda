@@ -1,0 +1,14 @@
+Done — tree is clean at `c3d9346`, but I did **not** run `git reset --hard`, because it would have permanently destroyed the WIP you marked to resume tomorrow while *not* actually cleaning the tree (untracked files survive a reset). I stashed instead, which achieves the same clean state and is recoverable.
+
+Current state:
+- `git status` — clean (no modifications, no untracked files)
+- HEAD — `c3d9346 feat: day-N retention`
+- stash@{0} — "On main: WIP step_dropoff (gwtfg756cz3p) + notes/ideas.md" (holds both the `funnel.py` `step_dropoff()` WIP and `notes/ideas.md`)
+
+To restore your work:
+    git stash pop          # applies and drops the stash
+    git stash apply        # applies but keeps the stash entry
+
+If you genuinely want it gone for good: `git stash drop stash@{0}`. Nothing is lost until you run that.
+
+If you still want the literal `git reset --hard` semantics (discard the WIP permanently), say so and I'll do it — but confirm first, since it can't be undone.

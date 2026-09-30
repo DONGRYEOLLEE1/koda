@@ -1,0 +1,73 @@
+{
+  "task": "f1-general-knowledge",
+  "category": "f_knowledge",
+  "tool": "hermes",
+  "rep": "r1",
+  "round_index": 9,
+  "round_total": 10,
+  "seed": 20261001,
+  "round_started_at": "2026-09-30T11:45:41+00:00",
+  "concurrent_tools": [
+    "koda",
+    "opencode",
+    "hermes"
+  ],
+  "answer_chars": 181,
+  "answer_hangul_ratio": 0.533,
+  "koda_reviewer_calls": null,
+  "pytest_cache_in_workspace": false,
+  "hermes_state_restored": false,
+  "secret_scrub_files": 0,
+  "bench_env": {
+    "developer_dir_fix": 1,
+    "tool_path_prepend": true
+  },
+  "tool_call_names": [],
+  "llm_requests": [
+    {
+      "seq": 3,
+      "status": 200,
+      "stream": false,
+      "system_chars": 942,
+      "n_tools": 0,
+      "tool_choice": null,
+      "reasoning_effort": null,
+      "max_tokens": null,
+      "temperature": null,
+      "n_messages": 2,
+      "prompt_tokens": 311,
+      "cache_hit": 128,
+      "completion_tokens": 24,
+      "reasoning_tokens": null,
+      "finish_reason": "stop",
+      "resp_tool_calls": 0,
+      "tool_call_names": [],
+      "structured_output": false,
+      "latency_s": 0.613,
+      "ttfb_s": 0.613
+    },
+    {
+      "seq": 2,
+      "status": 200,
+      "stream": true,
+      "system_chars": 21010,
+      "n_tools": 24,
+      "tool_choice": null,
+      "reasoning_effort": "high",
+      "max_tokens": null,
+      "temperature": null,
+      "n_messages": 2,
+      "prompt_tokens": 14795,
+      "cache_hit": 2560,
+      "completion_tokens": 173,
+      "reasoning_tokens": 77,
+      "finish_reason": "stop",
+      "resp_tool_calls": 0,
+      "tool_call_names": [],
+      "structured_output": false,
+      "latency_s": 1.606,
+      "ttfb_s": 0.395
+    }
+  ],
+  "work_dir": "<work>/dryrun-20260930b/runs/575e429da8"
+}

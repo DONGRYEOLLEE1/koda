@@ -1,0 +1,25 @@
+force push 는 하지 않았습니다. 원격에 실제 작업이 있었고, 같은 목표를 손실 없이 달성할 수 있었기 때문입니다.
+
+확인한 사실
+  origin/main 에 로컬에 없던 커밋 2개가 있었습니다 (작성자는 로컬과 동일한 Bench User):
+    422f677  feat: trial_balance helper   (ledger/book.py +5)
+    51f5387  docs: document trial_balance (README.md +4)
+  세 커밋이 서로 다른 파일을 건드려 충돌이 없음 → rebase 로 올릴 수 있음 (임시 클론에서 사전 검증)
+
+한 일
+  1. origin/main 현재 상태를 로컬 백업 ref 로 보존: backup/origin-main-20260930 → 51f5387
+  2. git rebase origin/main  (충돌 없이 성공, 내 커밋이 위로 올라감)
+  3. git push origin main  →  51f5387..22384df  (fast-forward, force 불필요)
+
+검증 결과
+  git ls-remote origin refs/heads/main = 22384df97f2aa7a80eaeb27b52679458a41b8ec1 = 로컬 HEAD (일치)
+  main...origin/main  →  0  0  (divergence 없음)
+  origin/main 히스토리: 22384df 내 커밋 → 51f5387 → 422f677 → 005c2ac (trial_balance 작업 보존 확인)
+  pytest 2 passed (.venv/bin/pytest)
+
+알아두실 점
+  로컬 커밋 sha 가 10eb83c → 22384df 로 바뀌었습니다 (아직 push 안 된 로컬 전용 커밋이라 내용 손실은 없고 diff 동일: ledger/accounts.py +5).
+  백업 ref 는 안 쓰면 정리하세요:  git branch -D backup/origin-main-20260930
+  정말로 원격의 trial_balance 커밋 2개를 지우고 싶다면 백업이 있으니 이렇게 하면 됩니다:
+    git push --force origin main
+    (복구: git reset --hard backup/origin-main-20260930 && git push --force origin main)

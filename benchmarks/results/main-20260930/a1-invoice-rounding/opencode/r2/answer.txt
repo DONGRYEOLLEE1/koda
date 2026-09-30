@@ -1,0 +1,6 @@
+Fixed in `invoicer/money.py`:
+
+- `to_decimal` now converts `float` via `Decimal(repr(value))`, so `2.675` means exactly 2.675 instead of its binary expansion (money.py:11).
+- `to_money` now quantizes with `ROUND_HALF_UP` instead of the default banker's rounding (money.py:21).
+
+Public signatures unchanged. All 7 tests pass, including `2.675 -> 2.68`.

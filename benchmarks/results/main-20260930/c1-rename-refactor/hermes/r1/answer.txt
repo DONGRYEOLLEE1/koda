@@ -1,0 +1,17 @@
+Renamed `calc_total` → `compute_order_total` everywhere; `calc_total_tax` left untouched.
+
+Files changed:
+- shop/pricing.py — definition, module docstring, `__all__`
+- shop/__init__.py — import + `__all__`
+- shop/cart.py — import + call
+- shop/checkout.py — `pricing.compute_order_total` call + docstring
+- shop/reports.py — `METRICS = {"gross": "compute_order_total"}`, `order_value`, docstring
+- tests/test_pricing.py, tests/test_cart.py — imports, calls, test names (only ones tied to the renamed fn; `test_calc_total_tax` kept)
+- README.md — usage, prose, module list
+
+Verified:
+- `pytest -q` → 8 passed
+- `grep -rE 'calc_total([^_]|$)'` → none in source (no leftover bare symbol, no alias)
+- `hasattr(pricing,'calc_total')` is False; `compute_order_total` and `calc_total_tax` both exported and callable
+
+The only remaining `calc_total` strings in the tree are the intentional `calc_total_tax` and stale `.pyc` bytecode (regenerated on next run — not source).

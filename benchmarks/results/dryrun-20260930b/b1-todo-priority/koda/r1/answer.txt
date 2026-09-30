@@ -1,0 +1,44 @@
+워크스페이스 구조부터 파악하겠습니다.store.py와 cli.py의 생략된 부분을 확인하겠습니다.구조와 현재 코드를 모두 파악했습니다. 계획을 작성합니다.
+
+## 작업 계획
+
+- [ ] **1. `Task` 에 `priority` 필드 추가** — `todo/models.py` — `priority: str = "normal"` 필드를 추가하고, `__post_init__` 에서 `{"low","normal","high"}` 밖의 값이면 `ValueError` 를 발생시킨다. `from_dict` 는 `data.get("priority", "normal")` 로 읽어 구버전 JSON(키 없음)을 `normal` 로 처리한다(`to_dict` 는 `asdict` 라 자동 포함). — 검증: `python -c` 로 `Task(id=1,title="x",priority="high")` 정상 생성, `priority="urgent"` 시 `ValueError`, `Task.from_dict({"id":1,"title":"x"})` 의 `priority == "normal"` 확인.
+
+- [ ] **2. `TaskStore.add` 에 priority 전달 경로 추가** — `todo/store.py` — `add(self, title, priority="normal")` 로 시그니처를 확장해 `Task(..., priority=priority)` 로 생성한다. 기존 호출부(`store.add("a")`)는 기본값으로 그대로 동작해야 한다. — 검증: `tests/test_store.py` 기존 테스트 통과 + `store.add("a", priority="high")` 후 `store.load()[0].priority == "high"` 확인.
+
+- [ ] **3. CLI `add --priority` 옵션 추가 (argparse 오류 처리)** — `todo/cli.py` — `add.add_argument("--priority", choices=["low","normal","high"], default="normal")` 를 추가하고 `store.add(args.title, args.priority)` 로 전달한다. `choices` 로 인해 잘못된 값은 argparse 가 종료 코드 2로 처리한다. — 검증: `main(["--db",db,"add","x","--priority","high"])` 가 `(0,"added 1\n")` 반환, `--priority urgent` 는 `SystemExit.code == 2`(pytest `pytest.raises(SystemExit)` 로 확인).
+
+- [ ] **4. `list` 정렬 및 접두어 출력 구현** — `todo/cli.py` — `format_task` 에서 `high` → `(!) `, `low` → `(~) ` 를 제목 앞에 붙이고(예: `[ ] 3 (!) 세금 신고`), `list` 분기에서 `sorted(tasks, key=lambda t: ({"high":0,"normal":1,"low":2}[t.priority], t.id))` 로 정렬해 출력한다. — 검증: high/normal/low·동일 우선순위 혼합 데이터로 `list` 실행 시 순서와 접두어가 기대 문자열 목록과 일치하는지 확인.
+
+- [ ] **5. 새 동작 테스트 추가** — `tests/test_models.py`, `tests/test_store.py`, `tests/test_cli.py` — (a) 모델: 유효/무효 priority 및 `from_dict` 기본값, (b) 스토어: priority 저장·로드, (c) CLI: `--priority` 지정/생략, 잘못된 값의 종료 코드 2, 정렬·접두어 출력, `priority` 키 없는 구버전 JSON 로드. — 검증: `python -m pytest` 전체 통과(기존 테스트 포함 그린).워크스페이스 구조와 기존 구현을 먼저 파악하겠습니다.구조 파악 완료. 계획대로 4개 파일을 수정하겠습니다.이제 CLI 를 수정합니다.이제 테스트를 추가합니다.전체 테스트를 실행해 검증합니다.19개 테스트 전부 통과했습니다. 계획한 5개 항목을 모두 완료했습니다.
+
+## 변경 요약
+
+**`todo/models.py`**
+- `PRIORITIES = ("low", "normal", "high")` 상수 추가
+- `Task` 에 `priority: str = "normal"` 필드 추가, `__post_init__` 에서 허용값 밖이면 `ValueError`
+- `from_dict` 는 `data.get("priority", "normal")` 로 읽어 구버전 JSON(키 없음)을 `normal` 로 처리 (`to_dict` 는 `asdict` 라 자동 포함)
+
+**`todo/store.py`**
+- `add(self, title, priority="normal")` 로 확장해 `Task(..., priority=priority)` 생성. 기존 `store.add("a")` 호출은 그대로 동작
+
+**`todo/cli.py`**
+- `add` 서브커맨드에 `--priority` (`choices=["low","normal","high"]`, 기본 `normal`) 추가 → 잘못된 값은 argparse 가 종료 코드 2로 처리
+- `format_task` 에 접두어 적용: high `(!) `, low `(~) `, normal 없음
+- `list` 는 `(우선순위 순위, id)` 키로 정렬 출력
+
+**테스트 추가**
+- `tests/test_models.py`: 기본값, 유효/무효 priority, `from_dict` 기본값·명시값
+- `tests/test_store.py`: priority 저장·로드
+- `tests/test_cli.py`: `--priority` 지정/생략, 잘못된 값 종료 코드 2, 정렬·접두어 출력, `priority` 키 없는 구버전 JSON 로드
+
+## 검증 결과
+
+```
+python -m pytest -q  →  19 passed in 0.03s  (exit_code=0)
+```
+
+기존 테스트 포함 전부 그린입니다. 승인 거부나 미실행 항목, 남은 위험은 없습니다.
+
+--- route: edit | verdict: pass ---
+판정 근거: diff에서 models.py의 priority 필드·ValueError·from_dict 기본값, cli.py의 --priority(choices)·정렬·접두어, store.py의 priority 전달, 그리고 세 테스트 파일의 신규 테스트가 모두 요청대로 반영됨을 확인했다. store.py add의 priority 전달부는 diff가 잘렸으나 테스트(test_add_with_priority)가 이를 검증하며, .pytest_cache는 pytest 실행 부산물로 요청 범위 위반이라 보기 어렵다.

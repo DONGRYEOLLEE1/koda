@@ -1,0 +1,150 @@
+{
+  "tool": "opencode",
+  "tool_version": "opencode 1.18.33",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:59225",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 12.233,
+  "input_tokens": 59711,
+  "output_tokens": 1616,
+  "tool_calls": 11,
+  "reasoning_tokens": 377,
+  "cache_read_tokens": 50688,
+  "llm_calls": 7,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+  "model_tool_calls_proxy": 11,
+  "model_tool_calls_agentic_proxy": 11,
+  "cache_miss_tokens": 9023,
+  "cost_estimate": {
+    "usd_peak_basis": 0.00495,
+    "usd_offpeak_basis": 0.002475,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "tokens_complete": true,
+  "tokens_incomplete_reason": null,
+  "tool_env_names": [
+    "DEEPSEEK_API_KEY",
+    "DEVELOPER_DIR",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_PAGER",
+    "GIT_TERMINAL_PROMPT",
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "OPENCODE_CONFIG",
+    "OPENCODE_DISABLE_AUTOUPDATE",
+    "PAGER",
+    "PATH",
+    "SHELL",
+    "TERM",
+    "TMPDIR",
+    "USER",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "__CF_USER_TEXT_ENCODING",
+    "npm_config_cache"
+  ],
+  "workspace_changes": {
+    "root": "<work>/main-20260930/runs/d822e5784e/w/invoicer",
+    "added": [],
+    "modified": [
+      "invoicer/money.py"
+    ],
+    "deleted": [],
+    "n_changed": 1
+  },
+  "tool_state_drift": null,
+  "tool_reported": {
+    "available": true,
+    "source": "opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+    "session_id": "ses_f0db9b134ffemxij7nJXwJpzrS",
+    "llm_steps": 6,
+    "input_tokens": 59039,
+    "output_tokens": 1562,
+    "reasoning_tokens": 339,
+    "cache_read_tokens": 50176,
+    "raw": {
+      "input": 8863,
+      "output": 1223,
+      "reasoning": 339,
+      "cache_read": 50176,
+      "cache_write": 0
+    },
+    "tool_calls": 11,
+    "tool_names": {
+      "bash": 3,
+      "read": 7,
+      "edit": 1
+    },
+    "error_events": 0,
+    "note": "the session-title call (small_model) is not included in the JSON events"
+  },
+  "proxy": {
+    "http_requests": 7,
+    "llm_requests": 7,
+    "llm_requests_ok": 7,
+    "llm_requests_error": 0,
+    "llm_requests_without_usage": 0,
+    "client_disconnects": 0,
+    "llm_requests_with_tools": 6,
+    "llm_requests_aux": 1,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 59711,
+    "output_tokens": 1616,
+    "reasoning_tokens": 377,
+    "cache_read_tokens": 50688,
+    "cache_miss_tokens": 9023,
+    "model_tool_calls": 11,
+    "model_tool_calls_agentic": 11,
+    "llm_requests_structured_output": 0,
+    "reasoning_effort_values": {
+      "low": 1,
+      "high": 6
+    },
+    "models": {
+      "deepseek-flash": 7
+    },
+    "resp_models": {
+      "deepseek-flash": 7
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 7
+    },
+    "finish_reasons": {
+      "stop": 2,
+      "tool_calls": 5
+    },
+    "first_main_request": {
+      "n_tools": 10,
+      "system_chars": 9856,
+      "request_bytes": 31448,
+      "max_tokens": 32000,
+      "temperature": null,
+      "reasoning_effort": "high",
+      "tool_names": [
+        "bash",
+        "edit",
+        "glob",
+        "grep",
+        "read",
+        "skill",
+        "task",
+        "todowrite",
+        "webfetch",
+        "write"
+      ]
+    },
+    "llm_latency_sum_s": 10.664,
+    "errors": []
+  },
+  "started_at": "2026-09-30T12:24:48.433709+00:00",
+  "workspace": "<work>/main-20260930/runs/d822e5784e/w/invoicer",
+  "prompt_file": "<koda>/benchmarks/tasks/a1-invoice-rounding/prompt.txt"
+}

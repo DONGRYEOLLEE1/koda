@@ -1,0 +1,12 @@
+Fixed. Two root causes were compounding in `invoicer/money.py`:
+
+1. `to_decimal` did `Decimal(value)` on floats, which uses the binary expansion — `Decimal(2.675)` = `2.6749999...`, so it was already below the tie and rounded down. Now floats go through `Decimal(repr(value))`, giving exactly the written decimal `2.675` (README rule 1).
+2. `to_money` used `quantize(CENT)` with the default context rounding, which is `ROUND_HALF_EVEN` (banker's). Now it's `ROUND_HALF_UP` (rule 2).
+
+Both live in the one place every amount flows through, so this covers line amounts, discount and tax. `invoice.py` already matched the rules (per-line rounding, sum, rate applied un-rounded) — no change needed, and no public signature changed (verified with `inspect`).
+
+Result on the reported case: `LineItem("widget", 2.675).amount()` → `2.68`. The README example now prints `widget 2 x 2.68 = 5.35`, discount `-0.95` (0.945 rounds up; banker's would have given 0.94), total `9.18`.
+
+Verification: `python -m pytest` → 12 passed. I added regression tests pinning each README rule — float shortest-repr, half-up ties (2.675→2.68, 1.005→1.01), per-line rounding before summing (two 2.675 lines → 5.36, not 5.35), and rates never rounded (rate `0.0825` used at full precision).
+
+Files changed: `invoicer/money.py`, `tests/test_money.py`, `tests/test_invoice.py`.

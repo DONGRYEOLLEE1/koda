@@ -1,0 +1,44 @@
+{
+  "pass": true,
+  "detail": {
+    "hidden_tests": {
+      "ok": true,
+      "rc": 0,
+      "total": 6,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_ids": [],
+      "tail": ""
+    },
+    "own_tests": {
+      "ok": true,
+      "rc": 0,
+      "total": 8,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_ids": [],
+      "tail": ""
+    },
+    "own_tests_min_count": 8,
+    "old_name_occurrences": 0,
+    "old_name_examples": [],
+    "workspace_changes": {
+      "added": [],
+      "modified": [
+        "README.md",
+        "shop/__init__.py",
+        "shop/cart.py",
+        "shop/checkout.py",
+        "shop/pricing.py",
+        "shop/reports.py",
+        "tests/test_cart.py",
+        "tests/test_pricing.py"
+      ],
+      "deleted": [],
+      "n_changed": 8
+    }
+  },
+  "checked_at": "2026-09-30T11:42:54+00:00"
+}

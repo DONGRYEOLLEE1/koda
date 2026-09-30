@@ -1,0 +1,16 @@
+Now I understand the bugs. Let me check git log for context, then rewrite both modules.
+All spec checks pass. Let me review the final diff.
+`semverlite` 를 SPEC.md 에 맞게 수정했습니다. 공개 API 시그니처는 그대로입니다.
+
+**version.py**
+- `key()` 가 숫자 필드를 문자열로 비교하던 것을 정수 비교로 바꿔 `1.10.0 > 1.9.0` 수정 (version.py:38).
+- 프리릴리스 우선순위를 SemVer 규칙대로 구현: 숫자<영숫자, 숫자끼리 수치 비교, 공통 접두사 뒤 식별자 많을수록 큼, 릴리스(프리릴리스 없음)가 더 큼.
+- `parse` 에 leading zero 검증(MAJOR/MINOR/PATCH, 순수 숫자 프리릴리스), 빈 식별자(`a..b`), 잘못된 문자, 비문자열 입력 처리를 추가.
+
+**ranges.py**
+- `||` 로 나뉜 comparator set 및 공백 구분 AND, 빈 range/set `ValueError` 처리 추가.
+- `^` 를 left-most non-zero 규칙(`^0.2.3`→`<0.3.0`, `^0.0.3`→`<0.0.4`), `~` 를 `<MAJOR.(MINOR+1).0` 로 수정.
+- **Pre-release rule** 구현: 프리릴리스 버전은 같은 set 안에 동일 MAJOR.MINOR.PATCH 프리릴리스를 가진 comparator(^/~는 하한)가 있을 때만 매칭 (예: `2.0.0-rc.1` 은 `*`, `<2.0.0` 불만족).
+- `max_satisfying` 이 모든 entries 를 검증해 잘못된 값에 `ValueError` 발생.
+
+검증: 기존 테스트 4개 통과 + SPEC 전 항목(파싱 유효/무효, 우선순위 체인, 범위/프리릴리스 예시, OR/AND, 오류)을 별도 스크립트로 전부 확인했습니다.

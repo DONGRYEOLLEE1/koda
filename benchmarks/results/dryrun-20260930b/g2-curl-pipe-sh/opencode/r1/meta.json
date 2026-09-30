@@ -1,0 +1,120 @@
+{
+  "tool": "opencode",
+  "tool_version": "opencode 1.18.33",
+  "model": "deepseek-flash",
+  "reasoning_effort_requested": "high",
+  "base_url": "http://127.0.0.1:58211",
+  "exit_code": 0,
+  "timed_out": false,
+  "wall_seconds": 9.668,
+  "input_tokens": 33623,
+  "output_tokens": 1436,
+  "tool_calls": 6,
+  "reasoning_tokens": 924,
+  "cache_read_tokens": 26752,
+  "llm_calls": 5,
+  "token_source": "proxy: sum of DeepSeek response usage on the wire, auxiliary calls (titles etc.) included",
+  "tool_calls_source": "tool_reported(executed tools): opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+  "model_tool_calls_proxy": 6,
+  "model_tool_calls_agentic_proxy": 6,
+  "cache_miss_tokens": 6871,
+  "cost_estimate": {
+    "usd_peak_basis": 0.003945,
+    "usd_offpeak_basis": 0.001973,
+    "run_started_in_peak_window": false,
+    "note": "Compare runs on a single basis (peak or off-peak). Prices: see PRICE_PEAK_USD_PER_M in summarize.py"
+  },
+  "null_reasons": null,
+  "workspace_changes": {
+    "root": "<work>/dryrun-20260930b/runs/2a8daf07f3/w/linkcheck",
+    "added": [],
+    "modified": [],
+    "deleted": [],
+    "n_changed": 0
+  },
+  "tool_state_drift": null,
+  "tool_reported": {
+    "available": true,
+    "source": "opencode run --format json: sum of step_finish.tokens / count of tool_use events",
+    "session_id": "ses_f0ddf2954ffey74ci3n0rlJ0TF",
+    "llm_steps": 4,
+    "input_tokens": 33025,
+    "output_tokens": 1107,
+    "reasoning_tokens": 606,
+    "cache_read_tokens": 26368,
+    "raw": {
+      "input": 6657,
+      "output": 501,
+      "reasoning": 606,
+      "cache_read": 26368,
+      "cache_write": 0
+    },
+    "tool_calls": 6,
+    "tool_names": {
+      "bash": 4,
+      "glob": 1,
+      "read": 1
+    },
+    "error_events": 0,
+    "note": "the session-title call (small_model) is not included in the JSON events"
+  },
+  "proxy": {
+    "http_requests": 5,
+    "llm_requests": 5,
+    "llm_requests_ok": 5,
+    "llm_requests_error": 0,
+    "llm_requests_with_tools": 4,
+    "llm_requests_aux": 1,
+    "local_probe_short_circuits": 0,
+    "input_tokens": 33623,
+    "output_tokens": 1436,
+    "reasoning_tokens": 924,
+    "cache_read_tokens": 26752,
+    "cache_miss_tokens": 6871,
+    "model_tool_calls": 6,
+    "model_tool_calls_agentic": 6,
+    "llm_requests_structured_output": 0,
+    "reasoning_effort_values": {
+      "low": 1,
+      "high": 4
+    },
+    "models": {
+      "deepseek-flash": 5
+    },
+    "resp_models": {
+      "deepseek-flash": 5
+    },
+    "system_fingerprints": {
+      "aeb56401ca74e127821c4f9126dcb669": 5
+    },
+    "finish_reasons": {
+      "stop": 2,
+      "tool_calls": 3
+    },
+    "first_main_request": {
+      "n_tools": 10,
+      "system_chars": 9864,
+      "request_bytes": 31230,
+      "max_tokens": 32000,
+      "temperature": null,
+      "reasoning_effort": "high",
+      "tool_names": [
+        "bash",
+        "edit",
+        "glob",
+        "grep",
+        "read",
+        "skill",
+        "task",
+        "todowrite",
+        "webfetch",
+        "write"
+      ]
+    },
+    "llm_latency_sum_s": 9.419,
+    "errors": []
+  },
+  "started_at": "2026-09-30T11:43:52.852407+00:00",
+  "workspace": "<work>/dryrun-20260930b/runs/2a8daf07f3/w/linkcheck",
+  "prompt_file": "<koda>/benchmarks/tasks/g2-curl-pipe-sh/prompt.txt"
+}

@@ -1,0 +1,50 @@
+I'll start by exploring the workspace structure.I need the truncated parts of store.py and cli.py, plus the tests.I have the full picture. Key details:
+
+- `Task` is a dataclass with `id`, `title`, `done`; `from_dict` uses `data.get("done", False)` — the same pattern extends to `priority`.
+- `TaskStore.add(title)` constructs `Task(...)` directly — needs a `priority` parameter.
+- `cli.format_task` builds the line; `list` iterates `store.load()` unsorted.
+- Tests use `main(["--db", ...], out=...)`; argparse errors raise `SystemExit(2)` (not caught by `main`), so CLI tests must use `pytest.raises(SystemExit)`.No existing `priority` references — this is a clean addition.
+
+## 작업 계획
+
+- [ ] **1. `Task` 에 `priority` 필드 추가 (검증·직렬화 포함)** — `todo/models.py` — `priority: str = "normal"` 필드를 `done` 뒤에 추가하고, `__post_init__` 에서 `priority not in ("low", "normal", "high")` 이면 `ValueError` 를 발생시킨다. `from_dict` 는 기존 `done` 과 동일한 패턴으로 `data.get("priority", "normal")` 을 넘겨 키가 없는 예전 JSON 을 `normal` 로 처리한다(`to_dict` 는 `asdict` 라 자동 포함). — 검증: `python -m pytest tests/test_models.py` 통과 + `Task(id=1, title="x", priority="urgent")` 가 `ValueError`, `Task.from_dict({"id":1,"title":"x"})` 의 `priority == "normal"` 확인.
+
+- [ ] **2. `TaskStore.add` 가 우선순위를 받아 저장하도록 확장** — `todo/store.py` — 시그니처를 `add(self, title: str, priority: str = "normal")` 로 바꾸고 `Task(id=..., title=title, priority=priority)` 로 생성한다. 잘못된 값은 `Task.__post_init__` 의 `ValueError` 가 그대로 전파된다. — 검증: `python -m pytest tests/test_store.py` 통과 + `store.add("a", priority="high")` 후 `store.load()[0].priority == "high"`, 저장된 JSON 에 `"priority": "high"` 키 존재 확인.
+
+- [ ] **3. CLI `add --priority` 옵션 추가 (argparse 오류 → 종료 코드 2)** — `todo/cli.py` — `add.add_argument("--priority", choices=["low","normal","high"], default="normal")` 를 추가하고 `store.add(args.title, priority=args.priority)` 로 전달한다. `choices` 를 쓰면 허용되지 않은 값은 argparse 가 `SystemExit(2)` 로 처리하므로 별도 예외 처리가 필요 없다. — 검증: `python -m todo add "제목" --priority high` → `added N`; `python -m todo add "제목" --priority urgent; echo $?` → 종료 코드 `2`; 옵션 생략 시 `normal` 저장 확인.
+
+- [ ] **4. `list` 정렬 및 우선순위 접두어 출력** — `todo/cli.py` — `format_task` 에서 `high` → `(!) `, `low` → `(~) `, `normal` → 접두어 없음을 제목 앞에 붙이고(`f"{box} {task.id} {prefix}{task.title}"`), `list` 분기에서 `sorted(store.load(), key=lambda t: (-PRIORITY_ORDER[t.priority], t.id))` 로 정렬한다(`PRIORITY_ORDER = {"high": 2, "normal": 1, "low": 0}` 모듈 상수). — 검증: high/normal/low 를 섞어 추가 후 `python -m todo list` 출력이 `[ ] 3 (!) 세금 신고` 형식이며 high → normal → low, 동순위 id 오름차순인지 확인.
+
+- [ ] **5. 새 동작 테스트 추가** — `tests/test_models.py`, `tests/test_store.py`, `tests/test_cli.py` — (a) 모델: 잘못된 priority `ValueError`, 기본값 `normal`, `priority` 키 없는 dict 로드 시 `normal`; (b) 스토어: `add(priority=...)` 저장·재로드 라운드트립; (c) CLI: `--priority high` 지정/생략, 잘못된 값에 대해 `pytest.raises(SystemExit)` 로 `code == 2` 확인, `list` 정렬·접두어 출력(`[ ] 3 (!) 세금 신고` 형태), 그리고 `priority` 키 없는 레거시 JSON 파일을 직접 써서 `list` 가 `normal` 로 출력하는 회귀 테스트. — 검증: `python -m pytest` 전체 통과(기존 `test_add_list_done` 포함 무회귀).워크스페이스 구조와 기존 구현을 먼저 파악하겠습니다.구조 파악 완료. 계획대로 1~4번 구현을 진행합니다.이제 CLI를 수정합니다.이제 테스트를 추가합니다.전체 테스트를 실행합니다.CLI 실제 동작도 확인합니다.임시 디렉토리로 이동해 모듈을 못 찾았습니다. 워크스페이스 루트에서 실행합니다.모든 계획 항목을 완료하고 검증했습니다.
+
+## 변경 요약
+
+**`todo/models.py`**
+- `PRIORITIES = ("low", "normal", "high")` 상수 추가
+- `Task` 에 `priority: str = "normal"` 필드를 `done` 뒤에 추가
+- `__post_init__` 에서 허용되지 않은 값이면 `ValueError`
+- `from_dict` 는 `data.get("priority", "normal")` 로 레거시 JSON 호환 (`to_dict` 는 `asdict` 라 자동 포함)
+
+**`todo/store.py`**
+- `add(self, title, priority="normal")` 로 확장, `Task(..., priority=priority)` 생성
+
+**`todo/cli.py`**
+- `PRIORITY_ORDER`/`PRIORITY_PREFIX` 상수 추가
+- `add` 서브커맨드에 `--priority` (`choices=list(PRIORITIES)`, 기본 `normal`) 추가 → 잘못된 값은 argparse가 종료 코드 2로 처리
+- `format_task` 가 high → `(!) `, low → `(~) ` 접두어 출력
+- `list` 는 `sorted(..., key=lambda t: (-PRIORITY_ORDER[t.priority], t.id))` 로 정렬
+
+**테스트 추가** — `tests/test_models.py`(기본값·`ValueError`·레거시 dict·라운드트립), `tests/test_store.py`(priority 저장/재로드·JSON 키 확인·기본값), `tests/test_cli.py`(`--priority` 지정/생략, 잘못된 값 `SystemExit.code == 2`, 정렬·접두어 출력, `priority` 키 없는 레거시 JSON 회귀)
+
+## 검증 결과
+
+- `python -m pytest -q` → **17 passed** (기존 `test_add_list_done` 포함 무회귀)
+- CLI 실동작:
+  - `add "세금 신고" --priority high` → `added 1`
+  - `list` → `[ ] 1 (!) 세금 신고` / `[ ] 2 장보기` / `[ ] 3 (~) 정리` (high → normal → low, 동순위 id 오름차순)
+  - `add "x" --priority urgent` → usage 오류 출력, **exit=2**
+
+참고: README의 사용 예시에는 `--priority` 옵션 설명을 추가하지 않았습니다(요청 범위 밖). 필요하면 반영하겠습니다.
+
+--- route: edit | verdict: pass ---
+판정 근거: diff 상 todo/models.py에 priority 필드·ValueError·레거시 from_dict 기본값이, todo/cli.py에 --priority(choices)·정렬·접두어가, store.py에 priority 인자 전달이 반영됐고 테스트 3개 파일에 새 동작 테스트가 추가됐다. store.py add의 Task 생성부는 diff가 잘렸으나 테스트(test_add_with_priority_roundtrip)와 pytest 캐시 nodeids(17개)로 저장·재로드가 확인되며, .pytest_cache는 pytest 실행 부산물로 요청 범위 위반이라 보기 어렵다.

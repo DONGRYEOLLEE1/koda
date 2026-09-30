@@ -1,0 +1,24 @@
+{
+  "pass": true,
+  "detail": {
+    "facts": {
+      "file_backoff_py": true,
+      "function_retry_with_backoff": true,
+      "attempts_4": true,
+      "source_settings": true,
+      "delay_0_5": true,
+      "delay_1": true,
+      "delay_2": true
+    },
+    "answer_chars": 1375,
+    "workspace_unchanged": true,
+    "workspace_changes": {
+      "added": [],
+      "modified": [],
+      "deleted": [],
+      "n_changed": 0
+    }
+  },
+  "checked_at": "2026-09-30T12:45:40+00:00",
+  "rejudged_at": "2026-09-30T12:45:40+00:00"
+}

@@ -1,0 +1,2 @@
+Now I'll apply the rename. Since `calc_total` is a substring of `calc_total_tax`, I'll make targeted edits.
+완료. `calc_total` → `compute_order_total`로 정의/호출/import/`__all__`/테스트/README 전부 변경했고, `calc_total_tax`는 그대로 유지했습니다. 남은 `calc_total`은 `calc_total_tax`뿐이며 테스트 8개 모두 통과합니다.

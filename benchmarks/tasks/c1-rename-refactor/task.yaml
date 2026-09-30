@@ -1,0 +1,20 @@
+id: c1-rename-refactor
+category: c_refactor
+title: Rename a function used across modules (with traps)
+description: >
+  `shop.pricing.calc_total` is imported three different ways (from-import, module attribute, module alias),
+  re-exported from the package, referenced by *string* in a lazily resolved metric table, mentioned in
+  docstrings and the README, and has a sibling `calc_total_tax` that must NOT be renamed (a naive substring
+  replace breaks it; a symbol-only rename misses the string reference).
+project_dir: shop
+reps: 5
+venv: true
+judge: hidden tests on a copy + the workspace's own (updated) test suite + whole-word scan for the old name.
+success_criteria: Hidden tests pass; the agent-updated test suite passes with >= 8 tests; zero whole-word
+  occurrences of `calc_total` remain in project text files (.git, .venv, caches and harness state dirs excluded;
+  a non-.py documentation line that also names compute_order_total - a note stating the rename - is allowed).
+selftest:
+  template: fail
+  solution: pass
+  negatives: [sed-substring, alias-kept, missed-dynamic]
+  positives: [rename-note]

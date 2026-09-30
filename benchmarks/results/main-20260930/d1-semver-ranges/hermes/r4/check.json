@@ -1,0 +1,28 @@
+{
+  "pass": true,
+  "detail": {
+    "hidden_tests": {
+      "ok": true,
+      "rc": 0,
+      "total": 98,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_ids": [],
+      "tail": ""
+    },
+    "workspace_changes": {
+      "added": [
+        "tests/test_spec.py"
+      ],
+      "modified": [
+        "semverlite/ranges.py",
+        "semverlite/version.py"
+      ],
+      "deleted": [],
+      "n_changed": 3
+    }
+  },
+  "checked_at": "2026-09-30T12:45:39+00:00",
+  "rejudged_at": "2026-09-30T12:45:39+00:00"
+}

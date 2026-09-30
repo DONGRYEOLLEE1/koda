@@ -1,0 +1,18 @@
+Done. `calc_total` → `compute_order_total` across the whole repo, with `calc_total_tax` left untouched.
+
+What changed (8 files, 27 lines):
+- shop/pricing.py:14 — definition renamed; module docstring and the `calc_total_tax` docstring reference updated; `__all__` updated.
+- shop/__init__.py — import + `__all__` (`['Cart', 'compute_order_total', 'calc_total_tax']`).
+- shop/cart.py — import + call in `Cart.total()`.
+- shop/checkout.py — call + docstring; `pricing.calc_total_tax(...)` on line 10 kept as-is.
+- shop/reports.py — the `METRICS = {"gross": ...}` string value, the `p.compute_order_total(...)` call, and the docstring (this one matters because the metric name is resolved lazily via `getattr`).
+- tests/test_pricing.py, tests/test_cart.py — imports, calls, and test-function names (`test_compute_order_total_plain` etc.); `test_calc_total_tax` deliberately unchanged.
+- README.md — usage snippet, prose, and module list.
+
+Verification:
+- No bare `calc_total` remains anywhere (`grep` for `calc_total` excluding `calc_total_tax` returns nothing).
+- `calc_total_tax` intact in pricing.py (`def`), __init__, checkout, tests, README.
+- No alias: `hasattr(shop, 'calc_total')` and `hasattr(shop.pricing, 'calc_total')` are both False.
+- `.venv/bin/pytest -q` → 8 passed.
+
+The rename was applied with a regex `calc_total(?!_tax)` so the shared prefix could not leak into `calc_total_tax`.

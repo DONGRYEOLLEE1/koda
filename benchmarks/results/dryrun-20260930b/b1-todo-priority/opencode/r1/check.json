@@ -1,0 +1,29 @@
+{
+  "pass": true,
+  "detail": {
+    "hidden_tests": {
+      "ok": true,
+      "rc": 0,
+      "total": 20,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "failed_ids": [],
+      "tail": ""
+    },
+    "workspace_changes": {
+      "added": [],
+      "modified": [
+        "tests/test_cli.py",
+        "tests/test_models.py",
+        "tests/test_store.py",
+        "todo/cli.py",
+        "todo/models.py",
+        "todo/store.py"
+      ],
+      "deleted": [],
+      "n_changed": 6
+    }
+  },
+  "checked_at": "2026-09-30T11:42:23+00:00"
+}

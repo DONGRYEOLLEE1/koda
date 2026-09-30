@@ -1,0 +1,2 @@
+Now making the rename, being careful to leave `calc_total_tax` untouched.
+완료. `calc_total` → `compute_order_total` 로 전부 교체했고, 남은 `calc_total` 은 다른 함수인 `calc_total_tax` 뿐입니다. 별칭 없음, 테스트 8개 모두 통과.

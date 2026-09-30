@@ -1,0 +1,3 @@
+3-way handshake 세 세그먼트 플래그 순서: **SYN → SYN+ACK → ACK**.
+
+정상 종료(4-way)는 보통 **4개**의 세그먼트가 오갑니다: FIN → ACK → FIN → ACK (양방향을 각각 닫기 때문).
