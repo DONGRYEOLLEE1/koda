@@ -1,8 +1,8 @@
 # TUI 가이드
 
-`koda`(= `koda tui`)로 뜨는 Textual 화면의 구성과 표시 규칙이다. 설치와 첫 실행은 [온보딩 가이드](onboarding.md), 요약은 루트 [README](../README.ko.md#기능) 에 있다.
+`koda`(= `koda tui`)로 뜨는 Textual 화면의 구성과 표시 규칙이다. 설치와 첫 실행은 [온보딩 가이드](onboarding.md), 요약은 [기능 문서](features.ko.md#tui-와-세션) 에 있다.
 
-> English summary: the TUI section of the [README](../README.md#features) covers the same ground in short form. This page keeps the full original notes (Korean).
+> English summary: the TUI section of [features.md](features.md#tui-and-sessions) covers the same ground in short form. This page keeps the full original notes (Korean).
 
 ## 시작과 승인 모드
 

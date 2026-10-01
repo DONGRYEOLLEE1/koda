@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1218" viewBox="0 0 1600 1218" role="img" aria-labelledby="archov-title archov-desc" lang="ko" xml:lang="ko" font-family="&quot;Apple SD Gothic Neo&quot;, &quot;Pretendard&quot;, &quot;Noto Sans KR&quot;, &quot;Noto Sans CJK KR&quot;, &quot;Malgun Gothic&quot;, system-ui, sans-serif">
+<title id="archov-title">koda 에이전트 아키텍처(개요)</title>
+<desc id="archov-desc">턴 하나가 LangGraph 실행 한 번이다. router 가 요청을 answer, reader, investigator, 편집 경로 중 하나로 보낸다. 읽기 경로는 검증 없이 끝난다. 편집 경로는 선택적인 planner, 쓰기 도구를 가진 coder, 해시 스냅샷 diff 와 관측된 도구 실행 기록으로 판정하는 verifier 로 이어지고, 실패하면 한 번 다시 시도한다.</desc>
+<defs><marker id="archov-arrow-muted" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#6e77a6"/></marker><marker id="archov-arrow-fg" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#9aa5ce"/></marker><marker id="archov-arrow-primary" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#7c74f4"/></marker><marker id="archov-arrow-green" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#7ee787"/></marker><marker id="archov-arrow-rose" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#f7768e"/></marker><marker id="archov-arrow-amber" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#e0af68"/></marker></defs>
+<rect width="1600" height="1218" fill="#191a24"/>
+<text x="48" y="66" font-size="36" fill="#c0caf5"><tspan fill="#e6e9ff" font-weight="800">koda</tspan><tspan fill="#9aa5ce" font-weight="400">  에이전트 아키텍처</tspan></text>
+<text x="48" y="102" font-size="19" fill="#9aa5ce">턴 하나가 LangGraph 실행 한 번이다. 요청은 가장 좁은 경로로 가고, 쓰기 도구를 받고 검증을 거치는 것은 편집 경로뿐이다.</text>
+<text x="48" y="164" font-size="17" font-weight="700" fill="#9aa5ce" letter-spacing="0.4">진입점</text>
+<rect x="48" y="180" width="440" height="40" rx="10" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="archov-entry0"/>
+<text x="66" y="207" font-size="18" font-weight="600" fill="#e6e9ff" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archov-entry0">koda</text>
+<text x="190" y="207" font-size="18" fill="#9aa5ce" data-box="archov-entry0">TUI · 병렬 세션</text>
+<rect x="48" y="226" width="440" height="40" rx="10" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="archov-entry1"/>
+<text x="66" y="253" font-size="18" font-weight="600" fill="#e6e9ff" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archov-entry1">koda chat</text>
+<text x="190" y="253" font-size="18" fill="#9aa5ce" data-box="archov-entry1">REPL · stdin 배치 실행</text>
+<rect x="48" y="272" width="440" height="40" rx="10" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="archov-entry2"/>
+<text x="66" y="299" font-size="18" font-weight="600" fill="#e6e9ff" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archov-entry2">koda run</text>
+<text x="190" y="299" font-size="18" fill="#9aa5ce" data-box="archov-entry2">헤드리스 · 실패하면 exit 1</text>
+<path d="M488 200 H520" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M488 246 H520" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M488 292 H520" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M520 200 V292" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M520 246 H656" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-muted)"/>
+<text x="590" y="236" font-size="16" fill="#9aa5ce" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">task +</text>
+<text x="590" y="270" font-size="16" fill="#9aa5ce" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">history</text>
+<rect x="660" y="150" width="400" height="152" rx="14" fill="#2a2d3e" stroke="#5b6390" stroke-width="2" id="archov-route"/>
+<text x="684" y="196" font-size="36" font-weight="700" fill="#e6e9ff" data-box="archov-route">route</text>
+<text x="808" y="194" font-size="18" fill="#9aa5ce" data-box="archov-route">구조화된 LLM 호출 1회</text>
+<text x="684" y="228" font-size="17" fill="#c0caf5" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archov-route">answer | read | inspect | edit</text>
+<text x="684" y="256" font-size="18" fill="#c0caf5" data-box="archov-route">+ 편집이면 plan_needed 도 판정</text>
+<text x="684" y="284" font-size="18" fill="#9aa5ce" data-box="archov-route">파싱 실패 → inspect(읽기 전용)</text>
+<text x="1100" y="164" font-size="17" font-weight="700" fill="#9aa5ce" letter-spacing="0.4">범례</text>
+<rect x="1100" y="178" width="93" height="28" rx="14" fill="#191a24" stroke="#9aa5ce" stroke-width="1.5" id="archov-chip26"/>
+<text x="1146.5" y="197.4" font-size="15" font-weight="700" fill="#9aa5ce" text-anchor="middle" letter-spacing="0.3" data-box="archov-chip26">도구 없음</text>
+<rect x="1201" y="178" width="93" height="28" rx="14" fill="#191a24" id="archov-chip28-bg"/>
+<rect x="1201" y="178" width="93" height="28" rx="14" fill="#c0caf5" fill-opacity="0.12" stroke="#c0caf5" stroke-width="1" id="archov-chip28"/>
+<text x="1247.5" y="197.4" font-size="15" font-weight="700" fill="#c0caf5" text-anchor="middle" letter-spacing="0.3" data-box="archov-chip28">읽기 전용</text>
+<rect x="1302" y="178" width="114" height="28" rx="14" fill="#7c74f4" id="archov-chip31"/>
+<text x="1359" y="197.4" font-size="15" font-weight="700" fill="#14151d" text-anchor="middle" letter-spacing="0.3" data-box="archov-chip31">읽기 + 쓰기</text>
+<path d="M1100 234 H1144" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-muted)"/>
+<text x="1156" y="240" font-size="18" fill="#9aa5ce">항상</text>
+<path d="M1230 234 H1274" fill="none" stroke="#f7768e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 5" marker-end="url(#archov-arrow-rose)"/>
+<text x="1286" y="240" font-size="18" fill="#9aa5ce">검증 실패 시 재시도(1회)</text>
+<text x="1100" y="272" font-size="18" fill="#9aa5ce"><tspan fill="#c0caf5" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">explore</tspan><tspan > = 읽기 전용 서브에이전트 도구.</tspan></text>
+<text x="1100" y="296" font-size="18" fill="#9aa5ce">요약만 돌려주고, 턴당 한 번만 쓸 수 있다</text>
+<path d="M860 302 V334" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M188 334 H988" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="956" y="392" width="596" height="668" rx="18" fill="#7c74f4" fill-opacity="0.1" stroke="#7c74f4" stroke-width="2" id="archov-edit"/>
+<path d="M188 334 V396" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-muted)"/>
+<rect x="148.72" y="348" width="78.56" height="26" rx="6" fill="#191a24" stroke="#5b6390" stroke-width="1.5" id="archov-drop-answer"/>
+<text x="188" y="366" font-size="16" fill="#c0caf5" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archov-drop-answer">answer</text>
+<path d="M488 334 V396" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-muted)"/>
+<rect x="458.48" y="348" width="59.04" height="26" rx="6" fill="#191a24" stroke="#5b6390" stroke-width="1.5" id="archov-drop-read"/>
+<text x="488" y="366" font-size="16" fill="#c0caf5" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archov-drop-read">read</text>
+<path d="M788 334 V396" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-muted)"/>
+<rect x="743.84" y="348" width="88.32" height="26" rx="6" fill="#191a24" stroke="#5b6390" stroke-width="1.5" id="archov-drop-inspect"/>
+<text x="788" y="366" font-size="16" fill="#c0caf5" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archov-drop-inspect">inspect</text>
+<path d="M988 334 V482" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="958.48" y="348" width="59.04" height="26" rx="6" fill="#191a24" stroke="#7c74f4" stroke-width="1.5" id="archov-drop-edit"/>
+<text x="988" y="366" font-size="16" fill="#a59ffb" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archov-drop-edit">edit</text>
+<rect x="48" y="398" width="280" height="300" rx="14" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="archov-col-answer"/>
+<text x="70" y="442" font-size="32" font-weight="700" fill="#e6e9ff" data-box="archov-col-answer">answer</text>
+<text x="70" y="470" font-size="18" fill="#9aa5ce" data-box="archov-col-answer">일반 질문</text>
+<rect x="70" y="486" width="133" height="28" rx="14" fill="#191a24" stroke="#9aa5ce" stroke-width="1.5" id="archov-chip57"/>
+<text x="136.5" y="505.4" font-size="15" font-weight="700" fill="#9aa5ce" text-anchor="middle" letter-spacing="0.3" data-box="archov-chip57">파일 도구 없음</text>
+<path d="M70 532 H306" fill="none" stroke="#3b3f57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="70" y="560" font-size="18" fill="#c0caf5" data-box="archov-col-answer">MCP 도구</text>
+<text x="70" y="586" font-size="18" fill="#c0caf5" data-box="archov-col-answer">analyze_image</text>
+<text x="70" y="612" font-size="18" fill="#c0caf5" data-box="archov-col-answer">read_artifact</text>
+<text x="70" y="638" font-size="18" fill="#9aa5ce" data-box="archov-col-answer">explore·skills 없음</text>
+<text x="70" y="678" font-size="18" fill="#9aa5ce" data-box="archov-col-answer">사고 켬 · ≤ 5스텝</text>
+<rect x="348" y="398" width="280" height="300" rx="14" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="archov-col-read"/>
+<text x="370" y="442" font-size="32" font-weight="700" fill="#e6e9ff" data-box="archov-col-read">reader</text>
+<text x="370" y="470" font-size="18" fill="#9aa5ce" data-box="archov-col-read">파일을 읽고 답한다</text>
+<rect x="370" y="486" width="93" height="28" rx="14" fill="#191a24" id="archov-chip68-bg"/>
+<rect x="370" y="486" width="93" height="28" rx="14" fill="#c0caf5" fill-opacity="0.12" stroke="#c0caf5" stroke-width="1" id="archov-chip68"/>
+<text x="416.5" y="505.4" font-size="15" font-weight="700" fill="#c0caf5" text-anchor="middle" letter-spacing="0.3" data-box="archov-chip68">읽기 전용</text>
+<path d="M370 532 H606" fill="none" stroke="#3b3f57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="370" y="560" font-size="18" fill="#c0caf5" data-box="archov-col-read">파일 읽기 · 검색 · 목록</text>
+<text x="370" y="586" font-size="18" fill="#c0caf5" data-box="archov-col-read">읽기 전용 셸</text>
+<text x="370" y="612" font-size="18" fill="#c0caf5" data-box="archov-col-read">explore 서브에이전트</text>
+<text x="370" y="638" font-size="18" fill="#c0caf5" data-box="archov-col-read">MCP · skills · 비전</text>
+<text x="370" y="678" font-size="18" fill="#9aa5ce" data-box="archov-col-read">사고 켬 · ≤ 20스텝</text>
+<rect x="648" y="398" width="280" height="300" rx="14" fill="#22242f" stroke="#3b3f57" stroke-width="1.5" id="archov-col-inspect"/>
+<text x="670" y="442" font-size="32" font-weight="700" fill="#e6e9ff" data-box="archov-col-inspect">investigator</text>
+<text x="670" y="470" font-size="18" fill="#9aa5ce" data-box="archov-col-inspect">셸 위주로 조사</text>
+<rect x="670" y="486" width="93" height="28" rx="14" fill="#191a24" id="archov-chip80-bg"/>
+<rect x="670" y="486" width="93" height="28" rx="14" fill="#c0caf5" fill-opacity="0.12" stroke="#c0caf5" stroke-width="1" id="archov-chip80"/>
+<text x="716.5" y="505.4" font-size="15" font-weight="700" fill="#c0caf5" text-anchor="middle" letter-spacing="0.3" data-box="archov-chip80">읽기 전용</text>
+<path d="M670 532 H906" fill="none" stroke="#3b3f57" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="670" y="560" font-size="18" fill="#c0caf5" data-box="archov-col-inspect">reader 와 같은 도구</text>
+<text x="670" y="586" font-size="18" fill="#c0caf5" data-box="archov-col-inspect">셸 우선 프롬프트</text>
+<text x="670" y="612" font-size="18" fill="#9aa5ce" data-box="archov-col-inspect">router 응답을 파싱하지</text>
+<text x="670" y="638" font-size="18" fill="#9aa5ce" data-box="archov-col-inspect">못하면 여기로 온다</text>
+<text x="670" y="678" font-size="18" fill="#9aa5ce" data-box="archov-col-inspect">사고 켬 · ≤ 25스텝</text>
+<text x="1024" y="428" font-size="17" font-weight="800" fill="#a59ffb" letter-spacing="0.4" data-box="archov-edit">편집 경로</text>
+<text x="1024" y="454" font-size="18" fill="#9aa5ce" data-box="archov-edit">쓰기 도구를 받는 유일한 경로 · 검증도 이 경로만</text>
+<path d="M988 482 L1002 496 L988 510 L974 496 Z" fill="#191a24" stroke="#7c74f4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1014" y="502" font-size="17" fill="#c0caf5" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">plan_needed?</text>
+<path d="M988 510 V755 Q988 767 1000 767 H1048" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-primary)"/>
+<path d="M988 596 H1048" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-primary)"/>
+<text x="1019" y="586" font-size="16" fill="#a59ffb" text-anchor="middle">예</text>
+<text x="1019" y="757" font-size="16" fill="#a59ffb" text-anchor="middle">아니오</text>
+<rect x="1050" y="540" width="312" height="112" rx="14" fill="#191a24" stroke="#7c74f4" stroke-width="2" stroke-dasharray="8 6" id="archov-plan"/>
+<text x="1072" y="584" font-size="34" font-weight="700" fill="#e6e9ff" data-box="archov-plan">plan</text>
+<rect x="1251" y="558" width="93" height="28" rx="14" fill="#191a24" id="archov-chip99-bg"/>
+<rect x="1251" y="558" width="93" height="28" rx="14" fill="#c0caf5" fill-opacity="0.12" stroke="#c0caf5" stroke-width="1" id="archov-chip99"/>
+<text x="1297.5" y="577.4" font-size="15" font-weight="700" fill="#c0caf5" text-anchor="middle" letter-spacing="0.3" data-box="archov-chip99">읽기 전용</text>
+<text x="1072" y="616" font-size="18" fill="#c0caf5" data-box="archov-plan">체크리스트 ≤ 5개, 코드로 강제</text>
+<text x="1072" y="642" font-size="18" fill="#9aa5ce" data-box="archov-plan">선택 · 사고 끔 · ≤ 15스텝</text>
+<rect x="1050" y="696" width="312" height="142" rx="14" fill="#191a24" stroke="#7c74f4" stroke-width="2.5" id="archov-coder"/>
+<text x="1072" y="740" font-size="34" font-weight="700" fill="#e6e9ff" data-box="archov-coder">coder</text>
+<rect x="1230" y="714" width="114" height="28" rx="14" fill="#7c74f4" id="archov-chip106"/>
+<text x="1287" y="733.4" font-size="15" font-weight="700" fill="#14151d" text-anchor="middle" letter-spacing="0.3" data-box="archov-chip106">읽기 + 쓰기</text>
+<text x="1072" y="772" font-size="18" fill="#c0caf5" data-box="archov-coder">읽기 · 셸 · 편집 도구 6개</text>
+<text x="1072" y="798" font-size="18" fill="#9aa5ce" data-box="archov-coder">편집 전 워크스페이스 스냅샷</text>
+<text x="1072" y="824" font-size="18" fill="#9aa5ce" data-box="archov-coder">사고 끔 · ≤ 35스텝</text>
+<rect x="1050" y="882" width="312" height="164" rx="14" fill="#191a24" stroke="#7c74f4" stroke-width="2.5" id="archov-verify"/>
+<text x="1072" y="926" font-size="34" font-weight="700" fill="#e6e9ff" data-box="archov-verify">verify</text>
+<rect x="1251" y="900" width="93" height="28" rx="14" fill="#191a24" stroke="#9aa5ce" stroke-width="1.5" id="archov-chip113"/>
+<text x="1297.5" y="919.4" font-size="15" font-weight="700" fill="#9aa5ce" text-anchor="middle" letter-spacing="0.3" data-box="archov-chip113">도구 없음</text>
+<text x="1072" y="958" font-size="18" fill="#c0caf5" data-box="archov-verify">스냅샷 diff + 도구 실행 기록</text>
+<text x="1072" y="984" font-size="18" fill="#c0caf5" data-box="archov-verify">→ 구조화된 판정 1개</text>
+<text x="1072" y="1010" font-size="18" fill="#9aa5ce" data-box="archov-verify">+ reviewer: 파일 ≥ 2개</text>
+<text x="1072" y="1036" font-size="18" fill="#9aa5ce" data-box="archov-verify">  또는 diff &gt; 2,000자일 때</text>
+<path d="M1206 652 V694" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-primary)"/>
+<path d="M1206 838 V880" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-primary)"/>
+<path d="M1362 964 H1502 Q1514 964 1514 952 V608 Q1514 596 1502 596 H1364" fill="none" stroke="#f7768e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="7 6" marker-end="url(#archov-arrow-rose)"/>
+<path d="M1514 767 H1364" fill="none" stroke="#f7768e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="7 6" marker-end="url(#archov-arrow-rose)"/>
+<text x="1438" y="584" font-size="16" fill="#f7768e" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace"><tspan >plan_needed</tspan><tspan font-family="&quot;Apple SD Gothic Neo&quot;, &quot;Pretendard&quot;, &quot;Noto Sans KR&quot;, &quot;Noto Sans CJK KR&quot;, &quot;Malgun Gothic&quot;, system-ui, sans-serif"> 이면</tspan></text>
+<text x="1438" y="755" font-size="16" fill="#f7768e" text-anchor="middle">아니면</text>
+<rect x="1382.5" y="950" width="111" height="28" rx="14" fill="#191a24" stroke="#f7768e" stroke-width="1.5" id="archov-chip125"/>
+<text x="1438" y="969.4" font-size="15" font-weight="700" fill="#f7768e" text-anchor="middle" letter-spacing="0.3" data-box="archov-chip125">실패 · 1회</text>
+<text x="1438" y="1006" font-size="16" fill="#f7768e" text-anchor="middle">verifier 피드백을</text>
+<text x="1438" y="1028" font-size="16" fill="#f7768e" text-anchor="middle">들고 돌아간다</text>
+<path d="M1206 1046 V1094" fill="none" stroke="#7c74f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-primary)"/>
+<text x="1220" y="1084" font-size="16" fill="#a59ffb">통과, 또는 재시도 소진</text>
+<path d="M188 698 V1094" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-muted)"/>
+<path d="M488 698 V1094" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-muted)"/>
+<path d="M788 698 V1094" fill="none" stroke="#6e77a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-muted)"/>
+<rect x="48" y="834" width="880" height="116" rx="24" fill="#191a24" stroke="#5b6390" stroke-width="1.5" stroke-dasharray="5 5" id="archov-noverify"/>
+<text x="488" y="870" font-size="21" font-weight="700" fill="#c0caf5" text-anchor="middle" data-box="archov-noverify">읽기 경로에는 검증 단계가 없다</text>
+<text x="488" y="900" font-size="18" fill="#9aa5ce" text-anchor="middle" data-box="archov-noverify">쓰기 도구를 받지 않기 때문이다. 검증은 답변 글이 아니라 부수효과를 거른다</text>
+<text x="488" y="928" font-size="18" fill="#e0af68" text-anchor="middle" data-box="archov-noverify">bwrap 이 없으면(macOS) 자동 승인되는 읽기 전용 셸도 파일을 쓸 수 있다</text>
+<rect x="48" y="1096" width="1504" height="54" rx="12" fill="#2a2d3e" stroke="#5b6390" stroke-width="1.5" id="archov-end"/>
+<text x="800" y="1131" font-size="19" fill="#c0caf5" text-anchor="middle" data-box="archov-end"><tspan fill="#e6e9ff" font-weight="800" font-size="22">END</tspan><tspan fill="#9aa5ce">   답변을 사용자에게 스트리밍 · chat / TUI 는 턴을 세션에 덧붙임 · Langfuse 를 설정했으면 턴마다 trace 하나</tspan></text>
+<text x="48" y="1192" font-size="16" fill="#9aa5ce" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace"><tspan font-family="&quot;Apple SD Gothic Neo&quot;, &quot;Pretendard&quot;, &quot;Noto Sans KR&quot;, &quot;Noto Sans CJK KR&quot;, &quot;Malgun Gothic&quot;, system-ui, sans-serif">개요. 미들웨어 체인·메모리·프롬프트 캐시·확장·provider 까지 담은 전체 다이어그램은 </tspan><tspan >docs/architecture.ko.md</tspan><tspan font-family="&quot;Apple SD Gothic Neo&quot;, &quot;Pretendard&quot;, &quot;Noto Sans KR&quot;, &quot;Noto Sans CJK KR&quot;, &quot;Malgun Gothic&quot;, system-ui, sans-serif"> · 기준: </tspan><tspan >koda @ 6d242f2</tspan></text>
+</svg>

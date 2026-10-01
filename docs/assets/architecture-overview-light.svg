@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1218" viewBox="0 0 1600 1218" role="img" aria-labelledby="archov-title archov-desc" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, &quot;Noto Sans&quot;, sans-serif">
+<title id="archov-title">koda agent architecture (overview)</title>
+<desc id="archov-desc">Each turn is one LangGraph run. A router sends the request to answer, reader, investigator or the edit path. Read paths end without verification; the edit path runs an optional planner, a coder with write tools, and a verifier that judges a hash-snapshot diff plus the observed tool log, retrying once on failure.</desc>
+<defs><marker id="archov-arrow-muted" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#8a8a8a"/></marker><marker id="archov-arrow-fg" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#626262"/></marker><marker id="archov-arrow-primary" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#006fea"/></marker><marker id="archov-arrow-green" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#0a7e3a"/></marker><marker id="archov-arrow-rose" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#e7000b"/></marker><marker id="archov-arrow-amber" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#aa6a00"/></marker></defs>
+<rect width="1600" height="1218" fill="#ffffff"/>
+<text x="48" y="66" font-size="36" fill="#262626"><tspan fill="#0a0a0a" font-weight="800">koda</tspan><tspan fill="#626262" font-weight="400">  agent architecture</tspan></text>
+<text x="48" y="102" font-size="19" fill="#626262">Each turn is one LangGraph run. Requests go to the narrowest path; only the edit path gets write tools, and only it is verified.</text>
+<text x="48" y="164" font-size="16" font-weight="700" fill="#626262" letter-spacing="1.6">ENTRY</text>
+<rect x="48" y="180" width="440" height="40" rx="10" fill="#fafafa" stroke="#e5e5e5" stroke-width="1.5" id="archov-entry0"/>
+<text x="66" y="207" font-size="18" font-weight="600" fill="#0a0a0a" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archov-entry0">koda</text>
+<text x="190" y="207" font-size="18" fill="#626262" data-box="archov-entry0">TUI · parallel sessions</text>
+<rect x="48" y="226" width="440" height="40" rx="10" fill="#fafafa" stroke="#e5e5e5" stroke-width="1.5" id="archov-entry1"/>
+<text x="66" y="253" font-size="18" font-weight="600" fill="#0a0a0a" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archov-entry1">koda chat</text>
+<text x="190" y="253" font-size="18" fill="#626262" data-box="archov-entry1">REPL · stdin batch</text>
+<rect x="48" y="272" width="440" height="40" rx="10" fill="#fafafa" stroke="#e5e5e5" stroke-width="1.5" id="archov-entry2"/>
+<text x="66" y="299" font-size="18" font-weight="600" fill="#0a0a0a" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archov-entry2">koda run</text>
+<text x="190" y="299" font-size="18" fill="#626262" data-box="archov-entry2">headless · exit 1 on fail</text>
+<path d="M488 200 H520" fill="none" stroke="#8a8a8a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M488 246 H520" fill="none" stroke="#8a8a8a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M488 292 H520" fill="none" stroke="#8a8a8a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M520 200 V292" fill="none" stroke="#8a8a8a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M520 246 H656" fill="none" stroke="#8a8a8a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-muted)"/>
+<text x="590" y="236" font-size="16" fill="#626262" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">task +</text>
+<text x="590" y="270" font-size="16" fill="#626262" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">history</text>
+<rect x="660" y="150" width="400" height="152" rx="14" fill="#f3f3f3" stroke="#a1a1a1" stroke-width="2" id="archov-route"/>
+<text x="684" y="196" font-size="36" font-weight="700" fill="#0a0a0a" data-box="archov-route">route</text>
+<text x="808" y="194" font-size="18" fill="#626262" data-box="archov-route">1 structured LLM call</text>
+<text x="684" y="228" font-size="17" fill="#262626" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archov-route">answer | read | inspect | edit</text>
+<text x="684" y="256" font-size="18" fill="#262626" data-box="archov-route">+ plan_needed for edits</text>
+<text x="684" y="284" font-size="18" fill="#626262" data-box="archov-route">unparseable → inspect (read-only)</text>
+<text x="1100" y="164" font-size="16" font-weight="700" fill="#626262" letter-spacing="1.6">LEGEND</text>
+<rect x="1100" y="178" width="114" height="28" rx="14" fill="#ffffff" stroke="#626262" stroke-width="1.5" id="archov-chip26"/>
+<text x="1157" y="197.4" font-size="15" font-weight="700" fill="#626262" text-anchor="middle" letter-spacing="0.8" data-box="archov-chip26">NO TOOLS</text>
+<rect x="1222" y="178" width="125" height="28" rx="14" fill="#ffffff" id="archov-chip28-bg"/>
+<rect x="1222" y="178" width="125" height="28" rx="14" fill="#262626" fill-opacity="0.08" stroke="#262626" stroke-width="1" id="archov-chip28"/>
+<text x="1284.5" y="197.4" font-size="15" font-weight="700" fill="#262626" text-anchor="middle" letter-spacing="0.8" data-box="archov-chip28">READ-ONLY</text>
+<rect x="1355" y="178" width="159" height="28" rx="14" fill="#006fea" id="archov-chip31"/>
+<text x="1434.5" y="197.4" font-size="15" font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="0.8" data-box="archov-chip31">READ + WRITE</text>
+<path d="M1100 234 H1144" fill="none" stroke="#8a8a8a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-muted)"/>
+<text x="1156" y="240" font-size="18" fill="#626262">always</text>
+<path d="M1230 234 H1274" fill="none" stroke="#e7000b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 5" marker-end="url(#archov-arrow-rose)"/>
+<text x="1286" y="240" font-size="18" fill="#626262">retry on verify fail (once)</text>
+<text x="1100" y="272" font-size="18" fill="#626262"><tspan fill="#262626" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">explore</tspan><tspan > = read-only sub-agent tool;</tspan></text>
+<text x="1100" y="296" font-size="18" fill="#626262">returns only a summary, once per turn</text>
+<path d="M860 302 V334" fill="none" stroke="#8a8a8a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M188 334 H988" fill="none" stroke="#8a8a8a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="956" y="392" width="596" height="668" rx="18" fill="#006fea" fill-opacity="0.05" stroke="#006fea" stroke-width="2" id="archov-edit"/>
+<path d="M188 334 V396" fill="none" stroke="#8a8a8a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-muted)"/>
+<rect x="148.72" y="348" width="78.56" height="26" rx="6" fill="#ffffff" stroke="#a1a1a1" stroke-width="1.5" id="archov-drop-answer"/>
+<text x="188" y="366" font-size="16" fill="#262626" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archov-drop-answer">answer</text>
+<path d="M488 334 V396" fill="none" stroke="#8a8a8a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-muted)"/>
+<rect x="458.48" y="348" width="59.04" height="26" rx="6" fill="#ffffff" stroke="#a1a1a1" stroke-width="1.5" id="archov-drop-read"/>
+<text x="488" y="366" font-size="16" fill="#262626" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archov-drop-read">read</text>
+<path d="M788 334 V396" fill="none" stroke="#8a8a8a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-muted)"/>
+<rect x="743.84" y="348" width="88.32" height="26" rx="6" fill="#ffffff" stroke="#a1a1a1" stroke-width="1.5" id="archov-drop-inspect"/>
+<text x="788" y="366" font-size="16" fill="#262626" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archov-drop-inspect">inspect</text>
+<path d="M988 334 V482" fill="none" stroke="#006fea" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="958.48" y="348" width="59.04" height="26" rx="6" fill="#ffffff" stroke="#006fea" stroke-width="1.5" id="archov-drop-edit"/>
+<text x="988" y="366" font-size="16" fill="#0055dc" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="archov-drop-edit">edit</text>
+<rect x="48" y="398" width="280" height="300" rx="14" fill="#fafafa" stroke="#e5e5e5" stroke-width="1.5" id="archov-col-answer"/>
+<text x="70" y="442" font-size="32" font-weight="700" fill="#0a0a0a" data-box="archov-col-answer">answer</text>
+<text x="70" y="470" font-size="18" fill="#626262" data-box="archov-col-answer">general question</text>
+<rect x="70" y="486" width="170" height="28" rx="14" fill="#ffffff" stroke="#626262" stroke-width="1.5" id="archov-chip57"/>
+<text x="155" y="505.4" font-size="15" font-weight="700" fill="#626262" text-anchor="middle" letter-spacing="0.8" data-box="archov-chip57">NO FILE TOOLS</text>
+<path d="M70 532 H306" fill="none" stroke="#e5e5e5" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="70" y="560" font-size="18" fill="#262626" data-box="archov-col-answer">MCP tools</text>
+<text x="70" y="586" font-size="18" fill="#262626" data-box="archov-col-answer">analyze_image</text>
+<text x="70" y="612" font-size="18" fill="#262626" data-box="archov-col-answer">read_artifact</text>
+<text x="70" y="638" font-size="18" fill="#626262" data-box="archov-col-answer">no explore, no skills</text>
+<text x="70" y="678" font-size="18" fill="#626262" data-box="archov-col-answer">thinking · ≤ 5 steps</text>
+<rect x="348" y="398" width="280" height="300" rx="14" fill="#fafafa" stroke="#e5e5e5" stroke-width="1.5" id="archov-col-read"/>
+<text x="370" y="442" font-size="32" font-weight="700" fill="#0a0a0a" data-box="archov-col-read">reader</text>
+<text x="370" y="470" font-size="18" fill="#626262" data-box="archov-col-read">answers from files</text>
+<rect x="370" y="486" width="125" height="28" rx="14" fill="#ffffff" id="archov-chip68-bg"/>
+<rect x="370" y="486" width="125" height="28" rx="14" fill="#262626" fill-opacity="0.08" stroke="#262626" stroke-width="1" id="archov-chip68"/>
+<text x="432.5" y="505.4" font-size="15" font-weight="700" fill="#262626" text-anchor="middle" letter-spacing="0.8" data-box="archov-chip68">READ-ONLY</text>
+<path d="M370 532 H606" fill="none" stroke="#e5e5e5" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="370" y="560" font-size="18" fill="#262626" data-box="archov-col-read">read / search / list files</text>
+<text x="370" y="586" font-size="18" fill="#262626" data-box="archov-col-read">read-only shell</text>
+<text x="370" y="612" font-size="18" fill="#262626" data-box="archov-col-read">explore sub-agent</text>
+<text x="370" y="638" font-size="18" fill="#262626" data-box="archov-col-read">MCP · skills · vision</text>
+<text x="370" y="678" font-size="18" fill="#626262" data-box="archov-col-read">thinking · ≤ 20 steps</text>
+<rect x="648" y="398" width="280" height="300" rx="14" fill="#fafafa" stroke="#e5e5e5" stroke-width="1.5" id="archov-col-inspect"/>
+<text x="670" y="442" font-size="32" font-weight="700" fill="#0a0a0a" data-box="archov-col-inspect">investigator</text>
+<text x="670" y="470" font-size="18" fill="#626262" data-box="archov-col-inspect">shell-first inspection</text>
+<rect x="670" y="486" width="125" height="28" rx="14" fill="#ffffff" id="archov-chip80-bg"/>
+<rect x="670" y="486" width="125" height="28" rx="14" fill="#262626" fill-opacity="0.08" stroke="#262626" stroke-width="1" id="archov-chip80"/>
+<text x="732.5" y="505.4" font-size="15" font-weight="700" fill="#262626" text-anchor="middle" letter-spacing="0.8" data-box="archov-chip80">READ-ONLY</text>
+<path d="M670 532 H906" fill="none" stroke="#e5e5e5" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="670" y="560" font-size="18" fill="#262626" data-box="archov-col-inspect">same toolset as reader</text>
+<text x="670" y="586" font-size="18" fill="#262626" data-box="archov-col-inspect">shell-first prompt</text>
+<text x="670" y="612" font-size="18" fill="#626262" data-box="archov-col-inspect">router fallback when</text>
+<text x="670" y="638" font-size="18" fill="#626262" data-box="archov-col-inspect">the reply is unparseable</text>
+<text x="670" y="678" font-size="18" fill="#626262" data-box="archov-col-inspect">thinking · ≤ 25 steps</text>
+<text x="1024" y="428" font-size="16" font-weight="800" fill="#0055dc" letter-spacing="1.6" data-box="archov-edit">EDIT PATH</text>
+<text x="1024" y="454" font-size="18" fill="#626262" data-box="archov-edit">only path with write tools · only path verified</text>
+<path d="M988 482 L1002 496 L988 510 L974 496 Z" fill="#ffffff" stroke="#006fea" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="1014" y="502" font-size="17" fill="#262626" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">plan_needed?</text>
+<path d="M988 510 V755 Q988 767 1000 767 H1048" fill="none" stroke="#006fea" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-primary)"/>
+<path d="M988 596 H1048" fill="none" stroke="#006fea" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-primary)"/>
+<text x="1019" y="586" font-size="16" fill="#0055dc" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">yes</text>
+<text x="1019" y="757" font-size="16" fill="#0055dc" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">no</text>
+<rect x="1050" y="540" width="312" height="112" rx="14" fill="#ffffff" stroke="#006fea" stroke-width="2" stroke-dasharray="8 6" id="archov-plan"/>
+<text x="1072" y="584" font-size="34" font-weight="700" fill="#0a0a0a" data-box="archov-plan">plan</text>
+<rect x="1219" y="558" width="125" height="28" rx="14" fill="#ffffff" id="archov-chip99-bg"/>
+<rect x="1219" y="558" width="125" height="28" rx="14" fill="#262626" fill-opacity="0.08" stroke="#262626" stroke-width="1" id="archov-chip99"/>
+<text x="1281.5" y="577.4" font-size="15" font-weight="700" fill="#262626" text-anchor="middle" letter-spacing="0.8" data-box="archov-chip99">READ-ONLY</text>
+<text x="1072" y="616" font-size="18" fill="#262626" data-box="archov-plan">≤ 5-item checklist, enforced</text>
+<text x="1072" y="642" font-size="18" fill="#626262" data-box="archov-plan">optional · no-think · ≤ 15</text>
+<rect x="1050" y="696" width="312" height="142" rx="14" fill="#ffffff" stroke="#006fea" stroke-width="2.5" id="archov-coder"/>
+<text x="1072" y="740" font-size="34" font-weight="700" fill="#0a0a0a" data-box="archov-coder">coder</text>
+<rect x="1185" y="714" width="159" height="28" rx="14" fill="#006fea" id="archov-chip106"/>
+<text x="1264.5" y="733.4" font-size="15" font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="0.8" data-box="archov-chip106">READ + WRITE</text>
+<text x="1072" y="772" font-size="18" fill="#262626" data-box="archov-coder">read · shell · 6 edit tools</text>
+<text x="1072" y="798" font-size="18" fill="#626262" data-box="archov-coder">snapshots workspace first</text>
+<text x="1072" y="824" font-size="18" fill="#626262" data-box="archov-coder">no-think · ≤ 35 steps</text>
+<rect x="1050" y="882" width="312" height="164" rx="14" fill="#ffffff" stroke="#006fea" stroke-width="2.5" id="archov-verify"/>
+<text x="1072" y="926" font-size="34" font-weight="700" fill="#0a0a0a" data-box="archov-verify">verify</text>
+<rect x="1230" y="900" width="114" height="28" rx="14" fill="#ffffff" stroke="#626262" stroke-width="1.5" id="archov-chip113"/>
+<text x="1287" y="919.4" font-size="15" font-weight="700" fill="#626262" text-anchor="middle" letter-spacing="0.8" data-box="archov-chip113">NO TOOLS</text>
+<text x="1072" y="958" font-size="18" fill="#262626" data-box="archov-verify">snapshot diff + tool log</text>
+<text x="1072" y="984" font-size="18" fill="#262626" data-box="archov-verify">→ one structured verdict</text>
+<text x="1072" y="1010" font-size="18" fill="#626262" data-box="archov-verify">+ reviewer if ≥ 2 files</text>
+<text x="1072" y="1036" font-size="18" fill="#626262" data-box="archov-verify">  or diff &gt; 2,000 chars</text>
+<path d="M1206 652 V694" fill="none" stroke="#006fea" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-primary)"/>
+<path d="M1206 838 V880" fill="none" stroke="#006fea" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-primary)"/>
+<path d="M1362 964 H1502 Q1514 964 1514 952 V608 Q1514 596 1502 596 H1364" fill="none" stroke="#e7000b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="7 6" marker-end="url(#archov-arrow-rose)"/>
+<path d="M1514 767 H1364" fill="none" stroke="#e7000b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="7 6" marker-end="url(#archov-arrow-rose)"/>
+<text x="1438" y="584" font-size="16" fill="#c8000a" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">if plan_needed</text>
+<text x="1438" y="755" font-size="16" fill="#c8000a" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">otherwise</text>
+<rect x="1364" y="950" width="148" height="28" rx="14" fill="#ffffff" stroke="#e7000b" stroke-width="1.5" id="archov-chip125"/>
+<text x="1438" y="969.4" font-size="15" font-weight="700" fill="#c8000a" text-anchor="middle" letter-spacing="0.8" data-box="archov-chip125">FAIL · ONCE</text>
+<text x="1438" y="1006" font-size="16" fill="#c8000a" text-anchor="middle">with verifier</text>
+<text x="1438" y="1026" font-size="16" fill="#c8000a" text-anchor="middle">feedback</text>
+<path d="M1206 1046 V1094" fill="none" stroke="#006fea" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-primary)"/>
+<text x="1220" y="1084" font-size="16" fill="#0055dc" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">pass, or retry used</text>
+<path d="M188 698 V1094" fill="none" stroke="#8a8a8a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-muted)"/>
+<path d="M488 698 V1094" fill="none" stroke="#8a8a8a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-muted)"/>
+<path d="M788 698 V1094" fill="none" stroke="#8a8a8a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#archov-arrow-muted)"/>
+<rect x="48" y="834" width="880" height="116" rx="24" fill="#ffffff" stroke="#a1a1a1" stroke-width="1.5" stroke-dasharray="5 5" id="archov-noverify"/>
+<text x="488" y="870" font-size="21" font-weight="700" fill="#262626" text-anchor="middle" data-box="archov-noverify">no verify step on read paths</text>
+<text x="488" y="900" font-size="18" fill="#626262" text-anchor="middle" data-box="archov-noverify">they get no write tools; verify gates side effects, not prose</text>
+<text x="488" y="928" font-size="18" fill="#8a5600" text-anchor="middle" data-box="archov-noverify">without bwrap (macOS) the auto-approved read-only shell can write</text>
+<rect x="48" y="1096" width="1504" height="54" rx="12" fill="#f3f3f3" stroke="#a1a1a1" stroke-width="1.5" id="archov-end"/>
+<text x="800" y="1131" font-size="19" fill="#262626" text-anchor="middle" data-box="archov-end"><tspan fill="#0a0a0a" font-weight="800" font-size="22">END</tspan><tspan fill="#626262">   answer streams to the user · chat / TUI append the turn to the session · Langfuse trace per turn, if configured</tspan></text>
+<text x="48" y="1192" font-size="16" fill="#626262" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">Overview. Full diagram with the middleware chain, memory, prompt cache, extensions and providers: docs/architecture.md · koda @ 6d242f2</text>
+</svg>

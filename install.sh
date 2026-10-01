@@ -192,7 +192,7 @@ do_install() {
             note "install bubblewrap (e.g. 'sudo apt install bubblewrap') to run shell commands in an OS sandbox. Without it only koda's deny list and approval gate apply."
         fi
     else
-        note "macOS has no bubblewrap, so shell commands run without an OS sandbox; koda's deny list and approval gate still apply (see 'Safety model' in the README)."
+        note "macOS has no bubblewrap, so shell commands run without an OS sandbox; koda's deny list and approval gate still apply (see docs/safety.md)."
     fi
 
     say ""
