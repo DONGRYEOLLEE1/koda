@@ -14,7 +14,7 @@ export LOCAL_API_KEY=<LiteLLM Virtual Key>
 export REASONING_EFFORT=medium
 ```
 
-다른 PC 에서 쓸 때는 주소만 사내 IP 로 바꾼다.
+다른 PC 에서 쓸 때는 주소만 게이트웨이 호스트로 바꾼다(아래 `llm-gateway.example.com` 은 예시).
 
 ```bash
 export LOCAL_OPENAI_BASE_URL=http://llm-gateway.example.com:4000/v1
@@ -61,4 +61,4 @@ curl -s -H "Authorization: Bearer $LOCAL_API_KEY" $LOCAL_OPENAI_BASE_URL/models
 | statusline 에 `deepseek-v4-flash` 가 뜸 (로컬이 아님) | 헬스체크 실패로 폴백됨 → 게이트웨이 기동 여부, `LOCAL_API_KEY`, 주소(WSL 안이면 `127.0.0.1`) 확인 |
 | `Unexpected reasoning effort high. Supported types are xhigh (default), medium, and low.` | `REASONING_EFFORT=high` → `medium` |
 | `Authentication` 401 | `LOCAL_API_KEY` 가 비었거나 틀림 |
-| `curl` 이 `000` / 연결 실패 | WSL 안에서 `llm-gateway.example.com` 를 씀 → `127.0.0.1:4000/v1` 로. 다른 PC 에서는 방화벽·VPN 확인 |
+| `curl` 이 `000` / 연결 실패 | WSL 안에서 게이트웨이 호스트 주소를 씀 → `127.0.0.1:4000/v1` 로. 다른 PC 에서는 방화벽·VPN 확인 |
