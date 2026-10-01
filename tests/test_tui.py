@@ -38,6 +38,11 @@ def _result(final="완료", **kw):
     return base
 
 
+def _statusbar(app) -> str:
+    """좌우로 나뉜 상태바를 한 줄로 이어 본다."""
+    return _static_text(app.query_one("#status_left")) + "  " + _static_text(app.query_one("#status_right"))
+
+
 def _make_app(tmp_path, run_task_fn, auto_yes=False, approval_timeout=600.0,
               session=None, mcp_tools=None):
     session = session or Session(tmp_path)
@@ -97,7 +102,7 @@ def test_boot_widgets_exist(tmp_path):
             assert app.query_one("#prompt") is not None
             assert app.conv is not None
             assert app.query_one("#statusline") is not None
-            assert "컨텍스트" in _static_text(app.query_one("#statusline"))
+            assert "░" in _statusbar(app) and _statusbar(app).endswith("%")   # 컨텍스트 게이지 (라벨은 좁은 폭에서 접힌다)
     asyncio.run(go())
 
 
@@ -1020,17 +1025,17 @@ def test_mcp_connects_in_background_and_panel_toggles(tmp_path, monkeypatch):
         async with app.run_test(size=(110, 35)) as pilot:
             assert await _wait(pilot, lambda: not app._mcp_connecting)
             assert len(app.runner.mcp_tools) == 1
-            assert "mcp 1 (실패 1)" in _static_text(app.query_one("#statusline"))
+            assert "mcp 1" in _statusbar(app) and "실패 1" in _statusbar(app)
             await _submit(pilot, "/mcp")
             assert await _wait(pilot, lambda: type(app.screen).__name__ == "McpScreen")
             assert "query-docs" in _static_text(app.screen.query_one("#mcp_detail"))   # 강조된 첫 서버의 도구
             await pilot.press("d")                                                        # ctx 끄기
             await pilot.pause()
-            assert app.runner.mcp_tools == [] and "mcp 0" in _static_text(app.query_one("#statusline"))
+            assert app.runner.mcp_tools == [] and "mcp 0" in _statusbar(app)
             assert await _wait(pilot, lambda: not app.workers)                            # 해제 워커 완료(목록 다시 그림)
             await pilot.press("d")                                                        # 다시 켜기 → 재연결
             assert await _wait(pilot, lambda: len(app.runner.mcp_tools) == 1)
-            assert "mcp 1 (실패 1)" in _static_text(app.query_one("#statusline"))
+            assert "mcp 1" in _statusbar(app) and "실패 1" in _statusbar(app)
             await pilot.press("escape")
             assert await _wait(pilot, lambda: type(app.screen).__name__ != "McpScreen")
     asyncio.run(go())
@@ -1105,15 +1110,15 @@ def test_statusline_context_usage_status_and_model_switch(tmp_path, monkeypatch)
     monkeypatch.setattr(A, "select_provider", lambda settings: ("openai", ""))
 
     def pct(app):
-        return int(_static_text(app.query_one("#statusline")).rsplit(" ", 1)[-1].rstrip("%"))
+        return int(_static_text(app.query_one("#status_right")).rsplit(" ", 1)[-1].rstrip("%"))
 
     async def go():
         session = Session(tmp_path)
         app = KodaTui(Workspace(tmp_path), session, Memory(tmp_path), None, auto_yes=True,
                       run_task_fn=None, model_name="deepseek-v4-flash", settings=st)
         async with app.run_test(size=(120, 30)) as pilot:
-            line = _static_text(app.query_one("#statusline"))
-            assert line.startswith("deepseek-v4-flash · yolo") and "컨텍스트" in line
+            line = _statusbar(app)
+            assert line.startswith("deepseek-v4-flash │ yolo") and "컨텍스트" in line
             assert "대기 중" not in line and "koda" not in line     # 진행 상태는 활동바가 말한다
             base = app._baseline_tokens()
             assert base > 0                                          # 첫 턴 전에도 고정 몫이 잡힌다
@@ -1154,7 +1159,7 @@ def test_statusline_context_usage_status_and_model_switch(tmp_path, monkeypatch)
             await _submit(pilot, "/model gpt-5.6 key=ok")
             assert await _wait(pilot, lambda: app.runner.settings.openai_model == "gpt-5.6")
             assert app.runner.settings.openai_api_key == "ok" and app.runner.settings.use_responses_api is True
-            assert _static_text(app.query_one("#statusline")).startswith("gpt-5.6 · yolo")
+            assert _statusbar(app).startswith("gpt-5.6 │ yolo")
     asyncio.run(go())
 
 
@@ -1606,7 +1611,7 @@ def test_model_wizard_picks_provider_then_fills_values(tmp_path, monkeypatch):
             await pilot.press(*"ok", "enter")                                             # 키 → 적용
             assert await _wait(pilot, lambda: app.runner.settings.openai_model == "gpt-5.6")
             assert app.runner.settings.openai_api_key == "ok" and app.runner.settings.primary == "openai"
-            assert _static_text(app.query_one("#statusline")).startswith("gpt-5.6 · yolo")
+            assert _statusbar(app).startswith("gpt-5.6 │ yolo")
             await _submit(pilot, "/model")
             assert await _wait(pilot, lambda: type(app.screen).__name__ == "ModelScreen")
             await pilot.press("enter")                                                    # local 선택: 현재 로컬 값이 채워짐
@@ -1783,4 +1788,46 @@ def test_context_rows_total_matches_gauge(tmp_path):
             rows = app._context_rows(app._active)
             assert sum(tok for _, tok, _, _ in rows) == app._ctx_tokens(app._active)
             assert any(name == "턴 내부 도구 출력" for name, _, _, _ in rows)
+    asyncio.run(go())
+
+
+def test_gauge_keeps_small_ratios_visible():
+    """부분 블록 덕에 낮은 비율도 빈 막대로 보이지 않고, 칸 수는 비율과 무관하게 일정하다."""
+    from koda.tui.app import _GAUGE_CELLS, _gauge
+
+    assert _gauge(0.0) == "░" * _GAUGE_CELLS
+    assert _gauge(1.0) == "█" * _GAUGE_CELLS
+    assert _gauge(0.03)[0] not in ("░", "█")                      # 3% 도 첫 칸에 흔적을 남긴다
+    assert all(len(_gauge(r)) == _GAUGE_CELLS for r in (0.0, 0.03, 0.13, 0.5, 0.87, 1.0))
+
+
+def test_statusbar_folds_by_width_and_marks_yolo(tmp_path):
+    """폭이 좁아지면 컨텍스트 라벨이 먼저, 더 좁아지면 브랜치가 접힌다. yolo 는 모든 도구를 자동 승인하므로 경고색으로 남는다."""
+    async def bar(width, auto_yes=True):
+        session = Session(tmp_path)
+        session.branch = "feat/아주-긴-브랜치-이름"
+        app = KodaTui(Workspace(tmp_path), session, Memory(tmp_path), None, auto_yes=auto_yes,
+                      run_task_fn=None, model_name="m")
+        async with app.run_test(size=(width, 24)) as pilot:
+            app.query_one("#session_panel").add_class("-hidden")   # 상태바가 화면 폭을 다 쓰게 한다
+            await pilot.pause()
+            app._refresh_statusline()
+            await pilot.pause()
+            return app._status_left(), app._status_right()
+
+    async def go():
+        wide_l, wide_r = await bar(120)
+        assert "컨텍스트" in wide_r.plain and "⎇" in wide_l.plain
+        assert "…" in wide_l.plain                                  # 긴 브랜치는 항상 잘린다
+
+        narrow_l, narrow_r = await bar(80)
+        assert "컨텍스트" not in narrow_r.plain and "⎇" in narrow_l.plain
+
+        tight_l, _ = await bar(60)
+        assert "⎇" not in tight_l.plain
+
+        yolo = [s.style for s in wide_l.spans if wide_l.plain[s.start:s.end] == "yolo"]
+        manual_l, _ = await bar(120, auto_yes=False)
+        manual = [s.style for s in manual_l.spans if manual_l.plain[s.start:s.end] == "manual"]
+        assert yolo and yolo != manual                              # yolo 만 다른 색으로 뜬다
     asyncio.run(go())
