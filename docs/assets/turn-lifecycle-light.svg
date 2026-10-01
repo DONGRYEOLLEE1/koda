@@ -169,5 +169,5 @@
 <text x="1086.6666666666665" y="966" font-size="18" fill="#262626" data-box="turn-note2">Still failing: koda run exits 1. Chat and TUI</text>
 <text x="1086.6666666666665" y="990" font-size="18" fill="#262626" data-box="turn-note2">keep the answer but tag it as unverified, so</text>
 <text x="1086.6666666666665" y="1014" font-size="18" fill="#262626" data-box="turn-note2">later turns do not treat it as fact.</text>
-<text x="48" y="1072" font-size="16" fill="#626262" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">Example turn (file names illustrative) · koda @ 63fda57 — agents/graph.py · agents/toollog.py · diffscan.py · prompts/verifier*.md</text>
+<text x="48" y="1072" font-size="16" fill="#626262" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">Example turn (file names illustrative) · koda @ 6d242f2 — agents/graph.py · agents/toollog.py · diffscan.py · prompts/verifier*.md</text>
 </svg>

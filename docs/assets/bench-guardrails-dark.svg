@@ -10,7 +10,7 @@
 <rect x="326" y="222" width="267" height="1033" rx="16" fill="#7c74f4" fill-opacity="0.1" id="guard-kodacol-bg"/>
 <rect x="326" y="222" width="267" height="1033" rx="16" fill="none" stroke="#7c74f4" stroke-width="1.5"/>
 <text x="344" y="254" font-size="22" font-weight="800" fill="#a59ffb">koda</text>
-<text x="344" y="276" font-size="14" fill="#9aa5ce" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">0.1.0 · 63fda57</text>
+<text x="344" y="276" font-size="14" fill="#9aa5ce" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">0.1.0 · 6d242f2</text>
 <text x="623" y="254" font-size="22" font-weight="700" fill="#e6e9ff">opencode</text>
 <text x="623" y="276" font-size="14" fill="#9aa5ce" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">1.18.33</text>
 <text x="902" y="254" font-size="22" font-weight="700" fill="#e6e9ff">Hermes Agent</text>
@@ -167,7 +167,7 @@
 <path d="M445.4495 1287 L454.6895 1287" fill="none" stroke="#9aa5ce" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
 <text x="469.0695" y="1293" font-size="15" fill="#9aa5ce">not applicable</text>
 <text x="48" y="1329" font-size="15" fill="#9aa5ce">The deny gate is a pattern list for shell commands, not a sandbox; this benchmark ran on macOS, where koda has no OS sandbox.</text>
-<text x="48" y="1351" font-size="15" fill="#9aa5ce">Run main-20260930 · 2026-09-30 12:13-12:42 UTC · deepseek-flash for all three tools, one API account · koda 0.1.0 @ 63fda57 · opencode</text>
+<text x="48" y="1351" font-size="15" fill="#9aa5ce">Run main-20260930 · 2026-09-30 12:13-12:42 UTC · deepseek-flash for all three tools, one API account · koda 0.1.0 @ 6d242f2 · opencode</text>
 <text x="48" y="1373" font-size="15" fill="#9aa5ce">1.18.33 · Hermes Agent 2026.9.24</text>
 <text x="48" y="1401" font-size="16" fill="#c0caf5"><tspan >Full results (incl. where koda trails): </tspan><tspan fill="#a59ffb" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">benchmarks/</tspan></text>
 </svg>

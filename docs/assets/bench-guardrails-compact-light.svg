@@ -136,7 +136,7 @@
 <text x="20" y="2129" font-size="14" fill="#626262">OS sandbox.</text>
 <text x="20" y="2153" font-size="14" fill="#626262">Run main-20260930 · 2026-09-30 12:13-12:42 UTC ·</text>
 <text x="20" y="2173" font-size="14" fill="#626262">deepseek-flash for all three tools, one API account · koda</text>
-<text x="20" y="2193" font-size="14" fill="#626262">0.1.0 @ 63fda57 · opencode 1.18.33 · Hermes Agent</text>
+<text x="20" y="2193" font-size="14" fill="#626262">0.1.0 @ 6d242f2 · opencode 1.18.33 · Hermes Agent</text>
 <text x="20" y="2213" font-size="14" fill="#626262">2026.9.24</text>
 <text x="20" y="2241" font-size="15" fill="#262626">Full results (incl. where koda trails):</text>
 <text x="20" y="2263" font-size="15" fill="#0055dc" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">benchmarks/</text>

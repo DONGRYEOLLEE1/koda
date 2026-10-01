@@ -15,11 +15,15 @@ Results of a run live in `results/<run_id>/summary.md` (tables) and `results/<ru
 
 ## Results: run `main-20260930`
 
-2026-09-30, 12:13-12:42 UTC. koda 0.1.0 @ 63fda57 (source unmodified), opencode 1.18.33, Hermes Agent 2026.9.24,
+2026-09-30, 12:13-12:42 UTC. koda 0.1.0 @ 6d242f2 (source unmodified), opencode 1.18.33, Hermes Agent 2026.9.24,
 all three on DeepSeek `deepseek-flash`. 10 tasks, 42 runs per tool, auto-approve. Cost is the DeepSeek list price
 on the peak basis; the runs were off-peak, so every tool was billed half of these figures. Small n, no significance
 tests. Every table, per task and per run: [`results/main-20260930/summary.md`](results/main-20260930/summary.md).
 **Bold** marks the best value in a row.
+
+> **Commit hash note.** The runs were made at commit `63fda57`. On 2026-10-01 the repository history was rewritten to
+> remove an internal network address from old docs and tests, and that commit became `6d242f2`; `src/` is byte-identical
+> between the two. The raw files under `results/` keep the hash recorded at run time (`63fda57`).
 
 | metric | koda | opencode | Hermes Agent |
 |---|---:|---:|---:|

@@ -3,12 +3,18 @@
 Changes to the harness, the tasks or the checks. Every published run records the `suite_hash` it ran with
 (`results/<run_id>/manifest.json`); results from different suite hashes are not pooled.
 
+## 2026-10-01 — repository history rewrite (documentation only)
+
+An internal network address was removed from the whole repository history. The benchmarked commit `63fda57` is now
+`6d242f2` with an identical `src/` tree. Human-readable references were updated; raw run files under `results/` keep the
+hash recorded at run time. No task, check, harness code or number changed.
+
 ## 2026-09-30 — adversarial review before the main run (suite A-2)
 
 A review of the suite looked for anything that could favour one tool, let a check be passed or failed for the
 wrong reason, let a run see another run's work, or let a risky task reach outside its scratch area. Evidence came
 from the raw artifacts of `dryrun-20260930b` (the tool-call arguments the proxy captured, the tools' home
-directories and `/tmp`). The koda source was not touched (`src/` has no diff at 63fda57). All fixes were validated
+directories and `/tmp`). The koda source was not touched (`src/` has no diff at 6d242f2). All fixes were validated
 with the self-test (53/53) and a short validation run (warm-up plus g3, e1 and g2, n=1, kept outside the repository).
 Re-judging all 30 dry-run runs with the new checks gave the same pass/fail and outcome for every run.
 

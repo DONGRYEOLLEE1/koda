@@ -50,7 +50,7 @@
 <text x="36" y="921" font-size="14" fill="#9aa5ce" data-box="qcostc-cond">bodies were not logged.</text>
 <text x="20" y="973" font-size="14" fill="#9aa5ce">Run main-20260930 · 2026-09-30 12:13-12:42 UTC ·</text>
 <text x="20" y="993" font-size="14" fill="#9aa5ce">deepseek-flash for all three tools, one API account · koda</text>
-<text x="20" y="1013" font-size="14" fill="#9aa5ce">0.1.0 @ 63fda57 · opencode 1.18.33 · Hermes Agent</text>
+<text x="20" y="1013" font-size="14" fill="#9aa5ce">0.1.0 @ 6d242f2 · opencode 1.18.33 · Hermes Agent</text>
 <text x="20" y="1033" font-size="14" fill="#9aa5ce">2026.9.24</text>
 <text x="20" y="1057" font-size="14" fill="#9aa5ce">Cost = DeepSeek list price, peak basis (per 1M tokens:</text>
 <text x="20" y="1077" font-size="14" fill="#9aa5ce">cache hit $0.006, miss $0.30, output $1.20); the runs were</text>

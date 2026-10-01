@@ -115,5 +115,5 @@
 <circle cx="84" cy="956" r="19" fill="#7c74f4" stroke="#7c74f4" stroke-width="1.5"/>
 <text x="84" y="963.2" font-size="20" font-weight="800" fill="#14151d" text-anchor="middle">4</text>
 <text x="54" y="1178" font-size="16" fill="#c0caf5"><tspan fill="#a59ffb" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">output → model</tspan></text>
-<text x="1552" y="1178" font-size="16" fill="#9aa5ce" text-anchor="end" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">koda @ 63fda57 — denygate.py · middleware/permission.py · workspace.py · tools/shell.py · artifacts.py</text>
+<text x="1552" y="1178" font-size="16" fill="#9aa5ce" text-anchor="end" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">koda @ 6d242f2 — denygate.py · middleware/permission.py · workspace.py · tools/shell.py · artifacts.py</text>
 </svg>

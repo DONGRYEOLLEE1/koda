@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1206" viewBox="0 0 1600 1206" role="img" aria-labelledby="safe-title safe-desc" lang="ko" xml:lang="ko" font-family="&quot;Apple SD Gothic Neo&quot;, &quot;Pretendard&quot;, &quot;Noto Sans KR&quot;, &quot;Noto Sans CJK KR&quot;, &quot;Malgun Gothic&quot;, system-ui, sans-serif">
+<title id="safe-title">koda: 안전장치 네 겹</title>
+<desc id="safe-desc">도구 호출은 네 계층을 차례로 거친다. 1: 셸 명령에 거는 정적 차단 게이트가 치명적인 명령을 막고, 자격증명이나 워크스페이스 밖에 손대는 명령은 사람 없이 거부한다. 2: 기본 거부 승인은 읽기 전용 도구 8개만 바로 실행하고 나머지는 모두 먼저 묻는다. 3: 파일 경로는 워크스페이스 안으로 제한되고, Linux 에서는 셸 명령이 bubblewrap 안에서 돈다. macOS 에는 bwrap 이 없어 두 셸 모두 OS 샌드박스 밖이다. 4: 모든 도구 출력에서 시크릿을 가린다(verifier 에 가는 스냅샷 diff 는 가리지 않는다). --yolo 가 자동 승인하는 것은 2계층뿐이고, 1·3·4 계층은 그대로 적용된다.</desc>
+<defs><marker id="safe-arrow-muted" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#8a8a8a"/></marker><marker id="safe-arrow-fg" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#626262"/></marker><marker id="safe-arrow-primary" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#006fea"/></marker><marker id="safe-arrow-green" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#0a7e3a"/></marker><marker id="safe-arrow-rose" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#e7000b"/></marker><marker id="safe-arrow-amber" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1.5 1.5 L10.5 6 L1.5 10.5 Z" fill="#aa6a00"/></marker></defs>
+<rect width="1600" height="1206" fill="#ffffff"/>
+<text x="48" y="66" font-size="36" fill="#262626"><tspan fill="#0a0a0a" font-weight="800">koda</tspan><tspan fill="#626262" font-weight="400">  안전장치 네 겹</tspan></text>
+<text x="48" y="102" font-size="19" fill="#626262"><tspan fill="#8a5600" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">--yolo</tspan><tspan > 는 승인 질문만 건너뛴다. 정적 차단 게이트, 워크스페이스 샌드박스, 출력 시크릿 가림은 그대로 적용된다.</tspan></text>
+<text x="128" y="158" font-size="17" font-weight="700" fill="#626262" letter-spacing="0.4">계층</text>
+<text x="500" y="158" font-size="17" font-weight="700" fill="#626262" letter-spacing="0.4">막는 것</text>
+<text x="1204" y="158" font-size="17" font-weight="700" fill="#626262" letter-spacing="0.4"><tspan font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">--yolo</tspan><tspan font-family="&quot;Apple SD Gothic Neo&quot;, &quot;Pretendard&quot;, &quot;Noto Sans KR&quot;, &quot;Noto Sans CJK KR&quot;, &quot;Malgun Gothic&quot;, system-ui, sans-serif"> 일 때</tspan></text>
+<rect x="48" y="182" width="1504" height="236" rx="16" fill="#fafafa" stroke="#e5e5e5" stroke-width="1.5" id="safe-band1"/>
+<text x="128" y="226" font-size="27" font-weight="700" fill="#0a0a0a" data-box="safe-band1">정적 차단 게이트</text>
+<text x="128" y="254" font-size="16" fill="#626262" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band1"><tspan >denygate.py</tspan><tspan font-family="&quot;Apple SD Gothic Neo&quot;, &quot;Pretendard&quot;, &quot;Noto Sans KR&quot;, &quot;Noto Sans CJK KR&quot;, &quot;Malgun Gothic&quot;, system-ui, sans-serif"> · 정규식, 실행 전에 검사</tspan></text>
+<text x="128" y="288" font-size="18" fill="#262626" data-box="safe-band1">셸 명령에만 적용</text>
+<text x="128" y="313" font-size="18" fill="#262626" data-box="safe-band1">읽기 전용 셸에서는 확인 등급도</text>
+<text x="128" y="338" font-size="18" fill="#262626" data-box="safe-band1">곧바로 막는다</text>
+<text x="128" y="398" font-size="16" fill="#c8000a" data-box="safe-band1">걸리면 → 모델에 오류로 돌려줌</text>
+<rect x="1204" y="204" width="107" height="28" rx="14" fill="#fafafa" id="safe-chip12-bg"/>
+<rect x="1204" y="204" width="107" height="28" rx="14" fill="#0a7e3a" fill-opacity="0.08" stroke="#0a7e3a" stroke-width="1" id="safe-chip12"/>
+<text x="1257.5" y="223.4" font-size="15" font-weight="700" fill="#0a7438" text-anchor="middle" letter-spacing="0.3" data-box="safe-chip12">그대로 적용</text>
+<text x="1204" y="266" font-size="18" fill="#262626" data-box="safe-band1">차단 등급: 언제나 막힘</text>
+<text x="1204" y="291" font-size="18" fill="#262626" data-box="safe-band1">확인 등급: 거부. 사람이</text>
+<text x="1204" y="316" font-size="18" fill="#262626" data-box="safe-band1">대화형으로 승인해야 함</text>
+<text x="1204" y="341" font-size="18" fill="#626262" data-box="safe-band1">한계: 정규식 기반, 파일·MCP</text>
+<text x="1204" y="366" font-size="18" fill="#626262" data-box="safe-band1">도구는 검사하지 않음</text>
+<rect x="500" y="205" width="53" height="28" rx="14" fill="#fafafa" stroke="#e7000b" stroke-width="1.5" id="safe-chip20"/>
+<text x="526.5" y="224.4" font-size="15" font-weight="700" fill="#c8000a" text-anchor="middle" letter-spacing="0.3" data-box="safe-chip20">차단</text>
+<text x="650" y="226" font-size="16" fill="#262626" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band1">sudo · su · curl … | sh · git reset --hard</text>
+<text x="650" y="251" font-size="16" fill="#262626" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band1">git clean -f · chmod 777 · mkfs · dd of=/dev/…</text>
+<text x="650" y="276" font-size="16" fill="#262626" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band1"><tspan >find -delete · </tspan><tspan font-family="&quot;Apple SD Gothic Neo&quot;, &quot;Pretendard&quot;, &quot;Noto Sans KR&quot;, &quot;Noto Sans CJK KR&quot;, &quot;Malgun Gothic&quot;, system-ui, sans-serif">포크 폭탄</tspan><tspan > · rm -r /… ~ .. . *</tspan></text>
+<rect x="500" y="299" width="53" height="28" rx="14" fill="#fafafa" stroke="#aa6a00" stroke-width="1.5" id="safe-chip25"/>
+<text x="526.5" y="318.4" font-size="15" font-weight="700" fill="#8a5600" text-anchor="middle" letter-spacing="0.3" data-box="safe-chip25">확인</text>
+<text x="650" y="320" font-size="16" fill="#262626" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band1">~/.ssh ~/.aws ~/.gnupg ~/.kube · id_rsa · *.pem</text>
+<text x="650" y="345" font-size="16" fill="#262626" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band1">credentials · .env · git push --force · find -exec</text>
+<text x="650" y="370" font-size="16" fill="#262626" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band1"><tspan >cp / mv / tee / dd</tspan><tspan font-family="&quot;Apple SD Gothic Neo&quot;, &quot;Pretendard&quot;, &quot;Noto Sans KR&quot;, &quot;Noto Sans CJK KR&quot;, &quot;Malgun Gothic&quot;, system-ui, sans-serif"> 로 절대경로나 </tspan><tspan >../</tspan><tspan font-family="&quot;Apple SD Gothic Neo&quot;, &quot;Pretendard&quot;, &quot;Noto Sans KR&quot;, &quot;Noto Sans CJK KR&quot;, &quot;Malgun Gothic&quot;, system-ui, sans-serif"> 경로에 쓰기</tspan></text>
+<rect x="48" y="436" width="1504" height="212" rx="16" fill="#fafafa" stroke="#aa6a00" stroke-width="2" id="safe-band2"/>
+<text x="128" y="480" font-size="27" font-weight="700" fill="#0a0a0a" data-box="safe-band2">기본 거부 승인</text>
+<text x="128" y="508" font-size="16" fill="#626262" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band2">PermissionMiddleware</text>
+<text x="128" y="542" font-size="18" fill="#262626" data-box="safe-band2">안전 목록 밖의 도구는</text>
+<text x="128" y="567" font-size="18" fill="#262626" data-box="safe-band2">먼저 사람에게 묻는다</text>
+<text x="128" y="628" font-size="16" fill="#c8000a" data-box="safe-band2">거부되면 → 모델에 오류로 돌려줌</text>
+<rect x="1204" y="458" width="93" height="28" rx="14" fill="#8a5600" id="safe-chip36"/>
+<text x="1250.5" y="477.4" font-size="15" font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="0.3" data-box="safe-chip36">자동 승인</text>
+<text x="1204" y="520" font-size="18" fill="#8a5600" data-box="safe-band2">--yolo 가 푸는 유일한 계층</text>
+<text x="1204" y="545" font-size="18" fill="#626262" data-box="safe-band2">MCP 허용 목록(직접 지정):</text>
+<text x="1204" y="570" font-size="18" fill="#626262" data-box="safe-band2">KODA_MCP_AUTO_APPROVE</text>
+<rect x="500" y="459" width="93" height="28" rx="14" fill="#fafafa" stroke="#0a7e3a" stroke-width="1.5" id="safe-chip41"/>
+<text x="546.5" y="478.4" font-size="15" font-weight="700" fill="#0a7438" text-anchor="middle" letter-spacing="0.3" data-box="safe-chip41">묻지 않음</text>
+<text x="650" y="480" font-size="16" fill="#262626" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band2">read_file · search_text · list_files · skill</text>
+<text x="650" y="505" font-size="16" fill="#262626" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band2">run_readonly_command · read_artifact</text>
+<text x="650" y="530" font-size="16" fill="#262626" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band2">analyze_image · explore</text>
+<rect x="500" y="553" width="93" height="28" rx="14" fill="#fafafa" stroke="#aa6a00" stroke-width="1.5" id="safe-chip46"/>
+<text x="546.5" y="572.4" font-size="15" font-weight="700" fill="#8a5600" text-anchor="middle" letter-spacing="0.3" data-box="safe-chip46">먼저 묻기</text>
+<text x="650" y="574" font-size="16" fill="#262626" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band2"><tspan >run_command</tspan><tspan font-family="&quot;Apple SD Gothic Neo&quot;, &quot;Pretendard&quot;, &quot;Noto Sans KR&quot;, &quot;Noto Sans CJK KR&quot;, &quot;Malgun Gothic&quot;, system-ui, sans-serif"> · 편집 도구 6개 · 모든 MCP 도구</tspan></text>
+<text x="650" y="600" font-size="17" fill="#626262" data-box="safe-band2">TUI: 600초 동안 응답이 없으면 → 거부</text>
+<text x="650" y="624" font-size="17" fill="#626262" data-box="safe-band2">--yolo 없는 비대화형 chat → 거부</text>
+<rect x="48" y="666" width="1504" height="236" rx="16" fill="#fafafa" stroke="#e5e5e5" stroke-width="1.5" id="safe-band3"/>
+<text x="128" y="710" font-size="27" font-weight="700" fill="#0a0a0a" data-box="safe-band3">워크스페이스 샌드박스</text>
+<text x="128" y="738" font-size="16" fill="#626262" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band3">workspace.py · bubblewrap</text>
+<text x="128" y="772" font-size="18" fill="#262626" data-box="safe-band3">파일 도구는 워크스페이스</text>
+<text x="128" y="797" font-size="18" fill="#262626" data-box="safe-band3">루트 안에 머문다.</text>
+<text x="128" y="822" font-size="18" fill="#262626" data-box="safe-band3">bwrap 이 있으면 셸 쓰기도 마찬가지</text>
+<rect x="1204" y="688" width="107" height="28" rx="14" fill="#fafafa" id="safe-chip57-bg"/>
+<rect x="1204" y="688" width="107" height="28" rx="14" fill="#0a7e3a" fill-opacity="0.08" stroke="#0a7e3a" stroke-width="1" id="safe-chip57"/>
+<text x="1257.5" y="707.4" font-size="15" font-weight="700" fill="#0a7438" text-anchor="middle" letter-spacing="0.3" data-box="safe-chip57">그대로 적용</text>
+<text x="1204" y="750" font-size="18" fill="#262626" data-box="safe-band3">--yolo 로도 바뀌지 않음</text>
+<text x="1204" y="775" font-size="18" fill="#626262" data-box="safe-band3">한계: bwrap 은 Linux 전용이고</text>
+<text x="1204" y="800" font-size="18" fill="#626262" data-box="safe-band3">설치돼 있을 때만 쓴다</text>
+<rect x="500" y="689" width="85" height="28" rx="14" fill="#fafafa" id="safe-chip63-bg"/>
+<rect x="500" y="689" width="85" height="28" rx="14" fill="#262626" fill-opacity="0.08" stroke="#262626" stroke-width="1" id="safe-chip63"/>
+<text x="542.5" y="708.4" font-size="15" font-weight="700" fill="#262626" text-anchor="middle" letter-spacing="0.3" data-box="safe-chip63">모든 OS</text>
+<text x="650" y="710" font-size="18" fill="#262626" data-box="safe-band3">파일 도구: 모든 경로가 루트 안에 있어야 한다</text>
+<rect x="500" y="733" width="71" height="28" rx="14" fill="#fafafa" id="safe-chip67-bg"/>
+<rect x="500" y="733" width="71" height="28" rx="14" fill="#262626" fill-opacity="0.08" stroke="#262626" stroke-width="1" id="safe-chip67"/>
+<text x="535.5" y="752.4" font-size="15" font-weight="700" fill="#262626" text-anchor="middle" letter-spacing="0.8" data-box="safe-chip67">Linux</text>
+<text x="650" y="754" font-size="18" fill="#262626" data-box="safe-band3">run_command 는 bwrap 안에서: / 는 읽기 전용,</text>
+<text x="650" y="779" font-size="18" fill="#262626" data-box="safe-band3">워크스페이스와 ~/.cache 는 쓰기 가능, 네트워크는 열림</text>
+<text x="650" y="804" font-size="18" fill="#262626" data-box="safe-band3">읽기 전용 셸: --unshare-all(네트워크 없음)</text>
+<rect x="500" y="829" width="71" height="28" rx="14" fill="#fafafa" stroke="#aa6a00" stroke-width="1.5" id="safe-chip73"/>
+<text x="535.5" y="848.4" font-size="15" font-weight="700" fill="#8a5600" text-anchor="middle" letter-spacing="0.8" data-box="safe-chip73">macOS</text>
+<text x="650" y="850" font-size="18" fill="#262626" data-box="safe-band3">bwrap 없음: 두 셸 모두 OS 샌드박스 밖이라,</text>
+<text x="650" y="875" font-size="18" fill="#262626" data-box="safe-band3">자동 승인되는 읽기 전용 셸도 파일을 쓸 수 있다</text>
+<rect x="48" y="920" width="1504" height="204" rx="16" fill="#fafafa" stroke="#e5e5e5" stroke-width="1.5" id="safe-band4"/>
+<text x="128" y="964" font-size="27" font-weight="700" fill="#0a0a0a" data-box="safe-band4">시크릿 가림</text>
+<text x="128" y="992" font-size="16" fill="#626262" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band4">artifacts.redact · ToolOutputTrim</text>
+<text x="128" y="1026" font-size="18" fill="#262626" data-box="safe-band4">모델이 읽기 전에</text>
+<text x="128" y="1051" font-size="18" fill="#262626" data-box="safe-band4">도구 출력에 든</text>
+<text x="128" y="1076" font-size="18" fill="#262626" data-box="safe-band4">시크릿을 가린다</text>
+<rect x="1204" y="942" width="107" height="28" rx="14" fill="#fafafa" id="safe-chip83-bg"/>
+<rect x="1204" y="942" width="107" height="28" rx="14" fill="#0a7e3a" fill-opacity="0.08" stroke="#0a7e3a" stroke-width="1" id="safe-chip83"/>
+<text x="1257.5" y="961.4" font-size="15" font-weight="700" fill="#0a7438" text-anchor="middle" letter-spacing="0.3" data-box="safe-chip83">그대로 적용</text>
+<text x="1204" y="1004" font-size="18" fill="#262626" data-box="safe-band4">--yolo 로도 바뀌지 않음</text>
+<text x="1204" y="1029" font-size="18" fill="#626262" data-box="safe-band4">한계: 패턴 기반이고,</text>
+<text x="1204" y="1054" font-size="18" fill="#626262" data-box="safe-band4">verifier 로 가는 스냅샷</text>
+<text x="1204" y="1079" font-size="18" fill="#626262" data-box="safe-band4">diff 는 가리지 않는다</text>
+<rect x="500" y="943" width="93" height="28" rx="14" fill="#fafafa" id="safe-chip90-bg"/>
+<rect x="500" y="943" width="93" height="28" rx="14" fill="#262626" fill-opacity="0.08" stroke="#262626" stroke-width="1" id="safe-chip90"/>
+<text x="546.5" y="962.4" font-size="15" font-weight="700" fill="#262626" text-anchor="middle" letter-spacing="0.3" data-box="safe-chip90">적용 대상</text>
+<text x="650" y="964" font-size="18" fill="#262626" data-box="safe-band4">모든 도구 출력(MCP 포함), 저장되는 artifact,</text>
+<text x="650" y="989" font-size="18" fill="#262626" data-box="safe-band4">verifier 가 읽는 도구 실행 기록 요약</text>
+<rect x="500" y="1017" width="53" height="28" rx="14" fill="#fafafa" id="safe-chip95-bg"/>
+<rect x="500" y="1017" width="53" height="28" rx="14" fill="#262626" fill-opacity="0.08" stroke="#262626" stroke-width="1" id="safe-chip95"/>
+<text x="526.5" y="1036.4" font-size="15" font-weight="700" fill="#262626" text-anchor="middle" letter-spacing="0.3" data-box="safe-chip95">패턴</text>
+<text x="650" y="1038" font-size="16" fill="#262626" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band4"><tspan >PRIVATE KEY</tspan><tspan font-family="&quot;Apple SD Gothic Neo&quot;, &quot;Pretendard&quot;, &quot;Noto Sans KR&quot;, &quot;Noto Sans CJK KR&quot;, &quot;Malgun Gothic&quot;, system-ui, sans-serif"> 블록</tspan><tspan > · sk- pk- ghp_ gho_ xoxb- xoxp-</tspan></text>
+<text x="650" y="1063" font-size="16" fill="#262626" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band4">api_key / secret / token / password / authorization</text>
+<text x="650" y="1096" font-size="16" font-weight="700" fill="#0a7438" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace" data-box="safe-band4">→ [REDACTED]</text>
+<path d="M84 170 V1148" fill="none" stroke="#006fea" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#safe-arrow-primary)"/>
+<text x="48" y="138" font-size="16" fill="#0055dc">도구 호출</text>
+<circle cx="84" cy="218" r="19" fill="#006fea" stroke="#006fea" stroke-width="1.5"/>
+<text x="84" y="225.2" font-size="20" font-weight="800" fill="#ffffff" text-anchor="middle">1</text>
+<circle cx="84" cy="472" r="19" fill="#8a5600" stroke="#8a5600" stroke-width="1.5"/>
+<text x="84" y="479.2" font-size="20" font-weight="800" fill="#ffffff" text-anchor="middle">2</text>
+<circle cx="84" cy="702" r="19" fill="#006fea" stroke="#006fea" stroke-width="1.5"/>
+<text x="84" y="709.2" font-size="20" font-weight="800" fill="#ffffff" text-anchor="middle">3</text>
+<circle cx="84" cy="956" r="19" fill="#006fea" stroke="#006fea" stroke-width="1.5"/>
+<text x="84" y="963.2" font-size="20" font-weight="800" fill="#ffffff" text-anchor="middle">4</text>
+<text x="54" y="1178" font-size="16" fill="#262626"><tspan fill="#0055dc">출력 → 모델</tspan></text>
+<text x="1552" y="1178" font-size="16" fill="#626262" text-anchor="end" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">koda @ 6d242f2 — denygate.py · middleware/permission.py · workspace.py · tools/shell.py · artifacts.py</text>
+</svg>

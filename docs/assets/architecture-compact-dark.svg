@@ -99,5 +99,5 @@
 <text x="50" y="1633.04" font-size="14" font-weight="800" fill="#14151d" text-anchor="middle">4</text>
 <text x="76" y="1623" font-size="18" font-weight="700" fill="#e6e9ff" data-box="archc-layers">Secret redaction</text>
 <text x="76" y="1646" font-size="16" fill="#9aa5ce" data-box="archc-layers">masks keys and tokens in tool output</text>
-<text x="20" y="1698" font-size="13" fill="#9aa5ce" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">koda @ 63fda57 · compact view of architecture-*.svg</text>
+<text x="20" y="1698" font-size="13" fill="#9aa5ce" font-family="ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace">koda @ 6d242f2 · compact view of architecture-*.svg</text>
 </svg>
