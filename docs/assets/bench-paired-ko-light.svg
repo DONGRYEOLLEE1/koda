@@ -1,0 +1,179 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1775" viewBox="0 0 1200 1775" role="img" aria-labelledby="paired-title paired-desc" lang="ko" xml:lang="ko" font-family='"Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", "Noto Sans CJK KR", "Malgun Gothic", system-ui, sans-serif'>
+<title id="paired-title">koda 벤치마크: opencode·Hermes Agent 와의 짝 비교 배수</title>
+<desc id="paired-desc">(도구 ÷ koda) 짝 비교 중앙값의 롤리팝 차트, 로그 눈금, 런 main-20260930, 2026-09-30, deepseek-flash. 편집 과제와 전체 라운드에서 opencode 는 koda 보다 시간과 비용을 덜 썼고, Hermes Agent 는 비용과 토큰을 더 썼다. koda 가 두 도구보다 덜 쓴 것은 짧은 질문에서뿐이다. 소요 시간(전체 42라운드): opencode 0.66배, koda 가 빠른 라운드 2/42; Hermes Agent 1.05배, koda 가 빠른 라운드 24/42; 중앙값 27.0초 / 13.0초 / 27.4초 [koda 뒤처짐]; 소요 시간, 편집 과제(20라운드): opencode 0.64배, koda 가 빠른 라운드 2/20; Hermes Agent 1.02배, koda 가 빠른 라운드 10/20; 중앙값 35.5초 / 24.0초 / 35.4초 [koda 뒤처짐]; 비용(전체 42라운드, PEAK 기준): opencode 0.92배, koda 가 싼 라운드 19/42; Hermes Agent 1.67배, koda 가 싼 라운드 36/42; 중앙값 $0.0079 / $0.0052 / $0.0109 [koda 뒤처짐]; 비용, 편집 과제(20라운드): opencode 0.76배, koda 가 싼 라운드 2/20; Hermes Agent 1.21배, koda 가 싼 라운드 15/20; 중앙값 $0.0125 / $0.0099 / $0.0153 [koda 뒤처짐]; 비용, 질문(e1 + f1, 10라운드, 런마다 새 디렉터리에서 단발 실행 ¹): opencode 2.52배, koda 가 싼 라운드 10/10; Hermes Agent 4.60배, koda 가 싼 라운드 10/10; 중앙값 $0.0015 / $0.0031 / $0.0050 [koda 앞섬]; 입력 토큰(전체 42라운드, 캐시 적중분 포함): opencode 0.94배, koda 가 적은 라운드 20/42; Hermes Agent 2.70배, koda 가 적은 라운드 37/42; 중앙값 78,670 / 52,428 / 148,932 [koda 뒤처짐]; 입력 토큰, 질문(e1 + f1, 10라운드 ¹): opencode 1.96배, koda 가 적은 라운드 10/10; Hermes Agent 4.59배, koda 가 적은 라운드 10/10; 중앙값 9,969 / 17,491 / 39,380 [koda 앞섬]; 출력 토큰(전체 42라운드, 사고 토큰 포함): opencode 0.77배, koda 가 적은 라운드 12/42; Hermes Agent 1.15배, koda 가 적은 라운드 26/42; 중앙값 3,871 / 2,107 / 3,843 [koda 뒤처짐]; 모델 호출(전체 42라운드): opencode 0.53배, koda 가 적은 라운드 1/42; Hermes Agent 0.70배, koda 가 적은 라운드 2/42; 중앙값 14 / 7 / 9 [koda 뒤처짐]. 속도와 호출: koda 는 라우터, coder, verifier 를 차례로 돌리고 필요하면 planner 와 reviewer 를 더 돌린다(편집 런당 모델 호출 중앙값 20회, 두 도구는 9회와 12.5회). 검증에 실패하면 한 번 더 도는데, 편집 20런 중 3런이 그랬다(b1 r1 163초, d1 r1 126초, d1 r5 128초. 과제 중앙값은 35.5초와 78.6초). ¹ 런마다 이름이 무작위인 새 디렉터리를 썼다. 경로가 없는 koda 프롬프트는 런 사이에 거의 통째로 캐시됐고, 다른 두 도구의 프롬프트는 앞부분 약 1.8k·2.6k 토큰만 재사용됐다. 캐시가 전혀 없을 때의 비용 배수는 1.6배 / 3.6배, 입력이 전부 캐시될 때는 0.90배 / 1.15배라서 이 질문들에서도 koda 가 opencode 보다 싸지 않다. 편집 과제에서는 opencode 가 더 쌌다. opencode 의 토큰 수는 이 중 2런에서 하한값이다(계측되지 않은 요청이 런마다 1건). 비용은 DeepSeek 정가 PEAK 기준. n 이 작고 유의성 검정은 하지 않았다. 전체 결과(koda 가 뒤처진 항목 포함): benchmarks/</desc>
+<rect width="1200" height="1775" fill="#ffffff"/>
+<text x="48" y="76" font-size="36" fill="#262626"><tspan fill='#0a0a0a' font-weight='800'>koda</tspan><tspan fill='#626262'>  같은 라운드에서 도구별로 짝 비교</tspan></text>
+<text x="48" y="118" font-size="21" fill="#262626">편집 과제와 전체 라운드에서 opencode 는 koda 보다 시간과 비용을 덜 썼고, Hermes Agent 는 비용과 토큰을 더 썼다.</text>
+<text x="48" y="146" font-size="21" fill="#262626">koda 가 두 도구보다 덜 쓴 것은 짧은 질문에서뿐이다.</text>
+<text x="48" y="180" font-size="17" fill="#626262">값 = 같은 과제·반복 라운드의 (도구 ÷ koda) 중앙값, 세 도구는 매 라운드 동시에 실행 · 점이 1배 왼쪽이면 그 도구가 koda 보다 덜 쓴 것</text>
+<text x="48" y="204" font-size="17" fill="#626262">모든 행에서 낮을수록 좋다</text>
+<text x="48" y="262" font-size="15" fill="#626262" font-weight="700" letter-spacing="0.3">항목</text>
+<text x="384" y="262" font-size="15" fill="#626262" font-weight="700" letter-spacing="0.3">도구 ÷ koda, 로그 눈금</text>
+<text x="960" y="262" font-size="15" fill="#626262" font-weight="700" letter-spacing="0.3">중앙값 · 라운드</text>
+<path d="M48 278 L1152 278" stroke="#e5e5e5" stroke-width="1" fill="none"/>
+<path d="M429.716 300 L429.716 1208" stroke="#e5e5e5" stroke-width="1" fill="none"/>
+<text x="429.716" y="1232" font-size="15" fill="#626262" text-anchor="middle">0.5배</text>
+<path d="M571.724 300 L571.724 1208" stroke="#a1a1a1" stroke-width="1.5" fill="none"/>
+<text x="571.724" y="1232" font-size="15" fill="#626262" text-anchor="middle">1배 = koda</text>
+<path d="M713.732 300 L713.732 1208" stroke="#e5e5e5" stroke-width="1" fill="none"/>
+<text x="713.732" y="1232" font-size="15" fill="#626262" text-anchor="middle">2배</text>
+<path d="M855.739 300 L855.739 1208" stroke="#e5e5e5" stroke-width="1" fill="none"/>
+<text x="855.739" y="1232" font-size="15" fill="#626262" text-anchor="middle">4배</text>
+<text x="561.724" y="296" font-size="14" fill="#626262" text-anchor="end">◀ 도구가 덜 씀</text>
+<text x="581.724" y="296" font-size="14" fill="#626262">도구가 더 씀 ▶</text>
+<text x="48" y="338" font-size="17" fill="#0a0a0a" font-weight="600">소요 시간</text>
+<text x="48" y="358" font-size="14" fill="#626262">전체 42라운드</text>
+<circle cx="53" cy="377" r="5" fill="#e7000b"/>
+<text x="66" y="382" font-size="14" fill="#e7000b" font-weight="800" letter-spacing="0.2">koda 뒤처짐</text>
+<text x="262" y="343" font-size="15" fill="#262626">opencode</text>
+<path d="M486.596 338 L571.724 338" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="486.596" cy="338" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>opencode ÷ koda, 소요 시간(전체 42라운드): 중앙값 0.66, koda 가 빠른 라운드 2/42. 중앙값 13.0초, koda 27.0초</title></circle>
+<text x="960" y="344" font-size="20" fill="#0a0a0a" font-weight="800">0.66배</text>
+<text x="960" y="363" font-size="14" fill="#626262">koda 가 빠른 라운드 2/42</text>
+<text x="262" y="385" font-size="15" fill="#262626">Hermes Agent</text>
+<path d="M571.724 380 L581.134 380" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="581.134" cy="380" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>Hermes Agent ÷ koda, 소요 시간(전체 42라운드): 중앙값 1.05, koda 가 빠른 라운드 24/42. 중앙값 27.4초, koda 27.0초</title></circle>
+<text x="960" y="386" font-size="20" fill="#0a0a0a" font-weight="800">1.05배</text>
+<text x="960" y="405" font-size="14" fill="#626262">koda 가 빠른 라운드 24/42</text>
+<path d="M48 408 L1152 408" stroke="#e5e5e5" stroke-width="1" fill="none"/>
+<text x="48" y="438" font-size="17" fill="#0a0a0a" font-weight="600">소요 시간, 편집 과제</text>
+<text x="48" y="458" font-size="14" fill="#626262">20라운드</text>
+<circle cx="53" cy="477" r="5" fill="#e7000b"/>
+<text x="66" y="482" font-size="14" fill="#e7000b" font-weight="800" letter-spacing="0.2">koda 뒤처짐</text>
+<text x="262" y="443" font-size="15" fill="#262626">opencode</text>
+<path d="M480.291 438 L571.724 438" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="480.291" cy="438" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>opencode ÷ koda, 소요 시간, 편집 과제(20라운드): 중앙값 0.64, koda 가 빠른 라운드 2/20. 중앙값 24.0초, koda 35.5초</title></circle>
+<text x="960" y="444" font-size="20" fill="#0a0a0a" font-weight="800">0.64배</text>
+<text x="960" y="463" font-size="14" fill="#626262">koda 가 빠른 라운드 2/20</text>
+<text x="262" y="485" font-size="15" fill="#262626">Hermes Agent</text>
+<path d="M571.724 480 L575.982 480" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="575.982" cy="480" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>Hermes Agent ÷ koda, 소요 시간, 편집 과제(20라운드): 중앙값 1.02, koda 가 빠른 라운드 10/20. 중앙값 35.4초, koda 35.5초</title></circle>
+<text x="960" y="486" font-size="20" fill="#0a0a0a" font-weight="800">1.02배</text>
+<text x="960" y="505" font-size="14" fill="#626262">koda 가 빠른 라운드 10/20</text>
+<path d="M48 508 L1152 508" stroke="#e5e5e5" stroke-width="1" fill="none"/>
+<text x="48" y="538" font-size="17" fill="#0a0a0a" font-weight="600">비용</text>
+<text x="48" y="558" font-size="14" fill="#626262">전체 42라운드, PEAK 기준</text>
+<circle cx="53" cy="577" r="5" fill="#e7000b"/>
+<text x="66" y="582" font-size="14" fill="#e7000b" font-weight="800" letter-spacing="0.2">koda 뒤처짐</text>
+<text x="262" y="543" font-size="15" fill="#262626">opencode</text>
+<path d="M555.086 538 L571.724 538" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="555.086" cy="538" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>opencode ÷ koda, 비용(전체 42라운드, PEAK 기준): 중앙값 0.92, koda 가 싼 라운드 19/42. 중앙값 $0.0052, koda $0.0079</title></circle>
+<text x="960" y="544" font-size="20" fill="#0a0a0a" font-weight="800">0.92배</text>
+<text x="960" y="563" font-size="14" fill="#626262">koda 가 싼 라운드 19/42</text>
+<text x="262" y="585" font-size="15" fill="#262626">Hermes Agent</text>
+<path d="M571.724 580 L676.297 580" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="676.297" cy="580" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>Hermes Agent ÷ koda, 비용(전체 42라운드, PEAK 기준): 중앙값 1.67, koda 가 싼 라운드 36/42. 중앙값 $0.0109, koda $0.0079</title></circle>
+<text x="960" y="586" font-size="20" fill="#0a0a0a" font-weight="800">1.67배</text>
+<text x="960" y="605" font-size="14" fill="#626262">koda 가 싼 라운드 36/42</text>
+<path d="M48 608 L1152 608" stroke="#e5e5e5" stroke-width="1" fill="none"/>
+<text x="48" y="638" font-size="17" fill="#0a0a0a" font-weight="600">비용, 편집 과제</text>
+<text x="48" y="658" font-size="14" fill="#626262">20라운드</text>
+<circle cx="53" cy="677" r="5" fill="#e7000b"/>
+<text x="66" y="682" font-size="14" fill="#e7000b" font-weight="800" letter-spacing="0.2">koda 뒤처짐</text>
+<text x="262" y="643" font-size="15" fill="#262626">opencode</text>
+<path d="M514.959 638 L571.724 638" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="514.959" cy="638" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>opencode ÷ koda, 비용, 편집 과제(20라운드): 중앙값 0.76, koda 가 싼 라운드 2/20. 중앙값 $0.0099, koda $0.0125</title></circle>
+<text x="960" y="644" font-size="20" fill="#0a0a0a" font-weight="800">0.76배</text>
+<text x="960" y="663" font-size="14" fill="#626262">koda 가 싼 라운드 2/20</text>
+<text x="262" y="685" font-size="15" fill="#262626">Hermes Agent</text>
+<path d="M571.724 680 L609.929 680" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="609.929" cy="680" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>Hermes Agent ÷ koda, 비용, 편집 과제(20라운드): 중앙값 1.21, koda 가 싼 라운드 15/20. 중앙값 $0.0153, koda $0.0125</title></circle>
+<text x="960" y="686" font-size="20" fill="#0a0a0a" font-weight="800">1.21배</text>
+<text x="960" y="705" font-size="14" fill="#626262">koda 가 싼 라운드 15/20</text>
+<path d="M48 708 L1152 708" stroke="#e5e5e5" stroke-width="1" fill="none"/>
+<text x="48" y="738" font-size="17" fill="#0a0a0a" font-weight="600">비용, 질문</text>
+<text x="48" y="758" font-size="14" fill="#626262">e1 + f1, 10라운드, 런마다 새</text>
+<text x="48" y="776" font-size="14" fill="#626262">디렉터리에서 단발 실행 ¹</text>
+<circle cx="53" cy="795" r="5" fill="#0a7e3a"/>
+<text x="66" y="800" font-size="14" fill="#0a7e3a" font-weight="800" letter-spacing="0.2">koda 앞섬</text>
+<text x="262" y="743" font-size="15" fill="#262626">opencode</text>
+<path d="M571.724 738 L761.162 738" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="761.162" cy="738" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>opencode ÷ koda, 비용, 질문(e1 + f1, 10라운드, 런마다 새 디렉터리에서 단발 실행 ¹): 중앙값 2.52, koda 가 싼 라운드 10/10. 중앙값 $0.0031, koda $0.0015</title></circle>
+<text x="960" y="744" font-size="20" fill="#0a0a0a" font-weight="800">2.52배</text>
+<text x="960" y="763" font-size="14" fill="#626262">koda 가 싼 라운드 10/10</text>
+<text x="262" y="785" font-size="15" fill="#262626">Hermes Agent</text>
+<path d="M571.724 780 L884.284 780" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="884.284" cy="780" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>Hermes Agent ÷ koda, 비용, 질문(e1 + f1, 10라운드, 런마다 새 디렉터리에서 단발 실행 ¹): 중앙값 4.60, koda 가 싼 라운드 10/10. 중앙값 $0.0050, koda $0.0015</title></circle>
+<text x="960" y="786" font-size="20" fill="#0a0a0a" font-weight="800">4.60배</text>
+<text x="960" y="805" font-size="14" fill="#626262">koda 가 싼 라운드 10/10</text>
+<path d="M48 808 L1152 808" stroke="#e5e5e5" stroke-width="1" fill="none"/>
+<text x="48" y="838" font-size="17" fill="#0a0a0a" font-weight="600">입력 토큰</text>
+<text x="48" y="858" font-size="14" fill="#626262">전체 42라운드, 캐시</text>
+<text x="48" y="876" font-size="14" fill="#626262">적중분 포함</text>
+<circle cx="53" cy="895" r="5" fill="#e7000b"/>
+<text x="66" y="900" font-size="14" fill="#e7000b" font-weight="800" letter-spacing="0.2">koda 뒤처짐</text>
+<text x="262" y="843" font-size="15" fill="#262626">opencode</text>
+<path d="M559.7 838 L571.724 838" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="559.7" cy="838" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>opencode ÷ koda, 입력 토큰(전체 42라운드, 캐시 적중분 포함): 중앙값 0.94, koda 가 적은 라운드 20/42. 중앙값 52,428, koda 78,670</title></circle>
+<text x="960" y="844" font-size="20" fill="#0a0a0a" font-weight="800">0.94배</text>
+<text x="960" y="863" font-size="14" fill="#626262">koda 가 적은 라운드 20/42</text>
+<text x="262" y="885" font-size="15" fill="#262626">Hermes Agent</text>
+<path d="M571.724 880 L775.291 880" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="775.291" cy="880" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>Hermes Agent ÷ koda, 입력 토큰(전체 42라운드, 캐시 적중분 포함): 중앙값 2.70, koda 가 적은 라운드 37/42. 중앙값 148,932, koda 78,670</title></circle>
+<text x="960" y="886" font-size="20" fill="#0a0a0a" font-weight="800">2.70배</text>
+<text x="960" y="905" font-size="14" fill="#626262">koda 가 적은 라운드 37/42</text>
+<path d="M48 908 L1152 908" stroke="#e5e5e5" stroke-width="1" fill="none"/>
+<text x="48" y="938" font-size="17" fill="#0a0a0a" font-weight="600">입력 토큰, 질문</text>
+<text x="48" y="958" font-size="14" fill="#626262">e1 + f1, 10라운드 ¹</text>
+<circle cx="53" cy="977" r="5" fill="#0a7e3a"/>
+<text x="66" y="982" font-size="14" fill="#0a7e3a" font-weight="800" letter-spacing="0.2">koda 앞섬</text>
+<text x="262" y="943" font-size="15" fill="#262626">opencode</text>
+<path d="M571.724 938 L709.593 938" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="709.593" cy="938" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>opencode ÷ koda, 입력 토큰, 질문(e1 + f1, 10라운드 ¹): 중앙값 1.96, koda 가 적은 라운드 10/10. 중앙값 17,491, koda 9,969</title></circle>
+<text x="960" y="944" font-size="20" fill="#0a0a0a" font-weight="800">1.96배</text>
+<text x="960" y="963" font-size="14" fill="#626262">koda 가 적은 라운드 10/10</text>
+<text x="262" y="985" font-size="15" fill="#262626">Hermes Agent</text>
+<path d="M571.724 980 L883.838 980" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="883.838" cy="980" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>Hermes Agent ÷ koda, 입력 토큰, 질문(e1 + f1, 10라운드 ¹): 중앙값 4.59, koda 가 적은 라운드 10/10. 중앙값 39,380, koda 9,969</title></circle>
+<text x="960" y="986" font-size="20" fill="#0a0a0a" font-weight="800">4.59배</text>
+<text x="960" y="1005" font-size="14" fill="#626262">koda 가 적은 라운드 10/10</text>
+<path d="M48 1008 L1152 1008" stroke="#e5e5e5" stroke-width="1" fill="none"/>
+<text x="48" y="1038" font-size="17" fill="#0a0a0a" font-weight="600">출력 토큰</text>
+<text x="48" y="1058" font-size="14" fill="#626262">전체 42라운드, 사고 토큰 포함</text>
+<circle cx="53" cy="1077" r="5" fill="#e7000b"/>
+<text x="66" y="1082" font-size="14" fill="#e7000b" font-weight="800" letter-spacing="0.2">koda 뒤처짐</text>
+<text x="262" y="1043" font-size="15" fill="#262626">opencode</text>
+<path d="M517.377 1038 L571.724 1038" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="517.377" cy="1038" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>opencode ÷ koda, 출력 토큰(전체 42라운드, 사고 토큰 포함): 중앙값 0.77, koda 가 적은 라운드 12/42. 중앙값 2,107, koda 3,871</title></circle>
+<text x="960" y="1044" font-size="20" fill="#0a0a0a" font-weight="800">0.77배</text>
+<text x="960" y="1063" font-size="14" fill="#626262">koda 가 적은 라운드 12/42</text>
+<text x="262" y="1085" font-size="15" fill="#262626">Hermes Agent</text>
+<path d="M571.724 1080 L599.465 1080" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="599.465" cy="1080" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>Hermes Agent ÷ koda, 출력 토큰(전체 42라운드, 사고 토큰 포함): 중앙값 1.15, koda 가 적은 라운드 26/42. 중앙값 3,843, koda 3,871</title></circle>
+<text x="960" y="1086" font-size="20" fill="#0a0a0a" font-weight="800">1.15배</text>
+<text x="960" y="1105" font-size="14" fill="#626262">koda 가 적은 라운드 26/42</text>
+<path d="M48 1108 L1152 1108" stroke="#e5e5e5" stroke-width="1" fill="none"/>
+<text x="48" y="1138" font-size="17" fill="#0a0a0a" font-weight="600">모델 호출</text>
+<text x="48" y="1158" font-size="14" fill="#626262">전체 42라운드</text>
+<circle cx="53" cy="1177" r="5" fill="#e7000b"/>
+<text x="66" y="1182" font-size="14" fill="#e7000b" font-weight="800" letter-spacing="0.2">koda 뒤처짐</text>
+<text x="262" y="1143" font-size="15" fill="#262626">opencode</text>
+<path d="M439.712 1138 L571.724 1138" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="439.712" cy="1138" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>opencode ÷ koda, 모델 호출(전체 42라운드): 중앙값 0.53, koda 가 적은 라운드 1/42. 중앙값 7, koda 14</title></circle>
+<text x="960" y="1144" font-size="20" fill="#0a0a0a" font-weight="800">0.53배</text>
+<text x="960" y="1163" font-size="14" fill="#626262">koda 가 적은 라운드 1/42</text>
+<text x="262" y="1185" font-size="15" fill="#262626">Hermes Agent</text>
+<path d="M498.651 1180 L571.724 1180" stroke="#8a8a8a" stroke-width="3" fill="none"/>
+<circle cx="498.651" cy="1180" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"><title>Hermes Agent ÷ koda, 모델 호출(전체 42라운드): 중앙값 0.70, koda 가 적은 라운드 2/42. 중앙값 9, koda 14</title></circle>
+<text x="960" y="1186" font-size="20" fill="#0a0a0a" font-weight="800">0.70배</text>
+<text x="960" y="1205" font-size="14" fill="#626262">koda 가 적은 라운드 2/42</text>
+<circle cx="57" cy="1259" r="9" fill="#8a8a8a" stroke="#ffffff" stroke-width="2"/>
+<text x="74" y="1264" font-size="15" fill="#626262">같은 라운드 비율의 중앙값 · 줄기는 1배에서 시작</text>
+<text x="48" y="1290" font-size="15" fill="#626262">koda 앞섬 = 두 도구 모두 1배 초과 · koda 뒤처짐 = 한 도구라도 1배 미만 · 모두 같음 = 둘 다 1배</text>
+<rect x="48" y="1324" width="1104" height="269" fill="#fafafa" rx="14" stroke="#aa6a00" stroke-width="1.5"/>
+<rect x="72" y="1344" width="60.28" height="26" fill="#fafafa" rx="13" stroke="#aa6a00" stroke-width="1.5"/>
+<text x="102.14" y="1362" font-size="14" fill="#8a5600" font-weight="700" text-anchor="middle" letter-spacing="0.3">조건</text>
+<text x="72" y="1398" font-size="19" fill="#262626">속도와 호출: koda 는 라우터, coder, verifier 를 차례로 돌리고 필요하면 planner 와 reviewer 를 더 돌린다(편집 런당 모델</text>
+<text x="72" y="1425" font-size="19" fill="#262626">호출 중앙값 20회, 두 도구는 9회와 12.5회). 검증에 실패하면 한 번 더 도는데, 편집 20런 중 3런이 그랬다(b1 r1 163초, d1 r1</text>
+<text x="72" y="1452" font-size="19" fill="#262626">126초, d1 r5 128초. 과제 중앙값은 35.5초와 78.6초).</text>
+<text x="72" y="1485" font-size="16" fill="#626262">¹ 런마다 이름이 무작위인 새 디렉터리를 썼다. 경로가 없는 koda 프롬프트는 런 사이에 거의 통째로 캐시됐고, 다른 두 도구의 프롬프트는 앞부분 약</text>
+<text x="72" y="1508" font-size="16" fill="#626262">1.8k·2.6k 토큰만 재사용됐다. 캐시가 전혀 없을 때의 비용 배수는 1.6배 / 3.6배, 입력이 전부 캐시될 때는 0.90배 / 1.15배라서 이 질문들에서도 koda</text>
+<text x="72" y="1531" font-size="16" fill="#626262">가 opencode 보다 싸지 않다. 편집 과제에서는 opencode 가 더 쌌다.</text>
+<text x="72" y="1554" font-size="16" fill="#626262">opencode 의 토큰 수는 이 중 2런에서 하한값이다(계측되지 않은 요청이 런마다 1건).</text>
+<text x="48" y="1629" font-size="15" fill="#626262">런 main-20260930 · 2026-09-30 12:13~12:42 UTC · 세 도구 모두 deepseek-flash, API 계정 1개</text>
+<text x="48" y="1651" font-size="15" fill="#626262">koda 0.1.0 @ 6d242f2 · opencode 1.18.33 · Hermes Agent 2026.9.24</text>
+<text x="48" y="1673" font-size="15" fill="#626262">비용 = DeepSeek 정가 PEAK 기준(100만 토큰당 캐시 적중 $0.006, 캐시 미스 $0.30, 출력 $1.20). 실제 실행은 비피크 시간대라 청구액은 이 값의 50%</text>
+<text x="48" y="1695" font-size="15" fill="#626262">짝 비교 = 같은 라운드의 (도구 ÷ koda) 비율 중앙값. 세 도구는 매 라운드 동시에 실행</text>
+<text x="48" y="1717" font-size="15" fill="#626262">n 이 작고(과제·도구당 5런 또는 3런) 유의성 검정은 하지 않았다.</text>
+<text x="48" y="1745" font-size="16" fill="#262626"><tspan fill='#262626'>전체 결과(koda 가 뒤처진 항목 포함): </tspan><tspan fill='#0055dc' font-family='ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;, &quot;DejaVu Sans Mono&quot;, monospace'>benchmarks/</tspan></text>
+</svg>

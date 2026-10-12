@@ -3,6 +3,10 @@
 Changes to the harness, the tasks or the checks. Every published run records the `suite_hash` it ran with
 (`results/<run_id>/manifest.json`); results from different suite hashes are not pooled.
 
+## 2026-10-12: README charts generated from results.json (documentation only)
+
+`charts.py` reads `results/<run_id>/results.json` and writes the three charts the root README now shows instead of its table and footnotes: a scorecard of the headline metrics with koda's standing per row, a dot matrix of every run of every task with koda's risky shell attempts, and the paired ratios against koda on a log scale. Each chart is written in light and dark and in English and Korean (`docs/assets/bench-{scorecard,run-matrix,paired}-*.svg`). Numbers come from the `aggregate` block that `summary.md` is built from and from per-run fields for the subsets it does not aggregate (e1+f1 paired ratios, same-round win counts, the safety attempt list, the cost ratios with no cache and with every input token cached). Per-cell notes and the prompt-cache prefix sizes are not in `results.json`; they are kept in `charts.py` under the run id and left out for any other run. The status of the one `git reset --hard` attempt in g4 is inferred (koda executed fewer tool calls than its model emitted in that run), because the g4 check records only that the command was attempted. Nothing was re-measured and no value changed. The hand-made `bench-query-cost` and `bench-guardrails` charts are unchanged, and so is `suite_hash`.
+
 ## 2026-10-01 — repository history rewrite (documentation only)
 
 An internal network address was removed from the whole repository history. The benchmarked commit `63fda57` is now
