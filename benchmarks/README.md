@@ -8,7 +8,7 @@ A small, reproducible KPI suite that runs three terminal coding agents on the **
 | opencode | `opencode run --format json --auto --variant high -m deepseek/deepseek-flash --dir <ws> "<prompt>"` |
 | Hermes Agent | `hermes -z "<prompt>" --provider deepseek -m deepseek-flash --reasoning high --yolo --in <ws>` |
 
-Results of a run live in `results/<run_id>/summary.md` (tables) and `results/<run_id>/results.json` (every run, every number).
+Results of a run live in `results/<run_id>/summary.md` (tables) and `results/<run_id>/results.json` (every run, every number). The three charts in the root README (scorecard, every run of every task, paired ratios) are generated from `results.json` by `charts.py`; the per-cell notes and the prompt-cache prefix sizes in them come from the raw transcripts and `run.json` files and are kept in `charts.py` under the run id.
 
 ## Results: run `main-20260930`
 
@@ -153,6 +153,7 @@ uv run benchmarks/run.py run --run-id main-$(date -u +%Y%m%d)
 
 # re-aggregate any run; re-run the checks of a finished run on its kept artifacts (no tool runs again)
 python3 benchmarks/aggregate.py benchmarks/results/<run_id>
+python3 benchmarks/charts.py --run-id <run_id>           # README charts -> docs/assets/bench-*.svg (light/dark, English/Korean)
 uv run benchmarks/run.py rejudge --run-id <run_id> --reason "why the checks changed"
 ```
 
@@ -166,6 +167,7 @@ A single run can also be driven by hand: `benchmarks/runners/run_koda.sh <worksp
 benchmarks/
   run.py            driver: selftest | run | list
   aggregate.py      results/<run_id> -> results.json + summary.md
+  charts.py         results.json -> docs/assets/bench-{scorecard,run-matrix,paired}-*.svg, the README charts
   CHANGELOG.md      changes to harness, tasks and checks (with the evidence that motivated them)
   runners/          run_<tool>.sh, common.sh, usage_proxy.py (metering), summarize.py (meta.json),
                     bench_exec.py (timeout + wall clock), koda_entry.py, ws_snapshot.py,

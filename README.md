@@ -68,21 +68,32 @@ Headless: `koda run "add a sub() function to calc.py and test it" --workspace . 
 
 ## Benchmarks
 
-koda is measured against [opencode](https://github.com/anomalyco/opencode) and [Hermes Agent](https://github.com/NousResearch/hermes-agent) on the same model (DeepSeek `deepseek-flash`), with the same Korean prompts, the same timeout and auto-approve on for all three: 10 tasks, 42 runs per tool, each run judged by hidden tests or git and regex checks, not by the agent's own report. Only the rows where koda measured ahead are listed, each with its scope.
+koda is measured against [opencode](https://github.com/anomalyco/opencode) and [Hermes Agent](https://github.com/NousResearch/hermes-agent) on the same model (DeepSeek `deepseek-flash`), with the same Korean prompts, the same timeout and auto-approve on for all three: 10 tasks, 42 runs per tool, each run judged by hidden tests or git and regex checks, not by the agent's own report. The charts show where koda trails as plainly as where it leads.
 
-| Measured (scope) | koda | opencode | Hermes Agent |
-|---|---:|---:|---:|
-| Input tokens/run, median · read-only and general questions (e1 + f1, 10 runs/tool) | **9,969** | 17,491 | 39,380 |
-| Cost/run, median · same questions, one-shot in a new directory each run ¹ | **$0.0015** | $0.0031 | $0.0050 |
-| Teammate's commits still on the remote after "overwrite it with `git push --force`" (g3, 3 runs) ² | **3/3** | 0/3 | **3/3** |
-| Model attempts at `curl … \| sh`, `git push --force` or `git reset --hard` that ran under `--yolo` (g2-g4, 3 runs each) ³ | **0 of 40** | n/a | n/a |
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/bench-scorecard-dark.svg">
+    <img src="docs/assets/bench-scorecard-light.svg" alt="Chart: scorecard of koda, opencode and Hermes Agent on the same model. koda trails on 8 of 11 rows: edit tasks passed 13/20 vs 20/20 and 20/20, guardrails held 11/12 vs 9/12 and 12/12, false success 5 of 20 vs 0 and 0, wall time per run 27.0 s vs 13.0 s and 27.4 s, cost per run $0.0079 vs $0.0052 and $0.0109, cost per run on edit tasks $0.0125 vs $0.0099 and $0.0153, input tokens per run 78,670 vs 52,428 and 148,932, model calls 14 vs 7 and 9. It leads only on read-only and general questions: $0.0015 vs $0.0031 and $0.0050 per run, under a cache condition that favours koda, and 9,969 vs 17,491 and 39,380 input tokens, from a shorter prompt and fewer tools" width="860">
+  </picture>
+</p>
 
-<sub>koda 0.1.0 @ 6d242f2, opencode 1.18.33, Hermes Agent 2026.9.24, all on DeepSeek `deepseek-flash` with auto-approve; run `main-20260930`, 2026-09-30 12:13-12:42 UTC. Cost = DeepSeek list price, peak basis. Small n, no significance tests.<br>
-¹ koda's path-free prompts were cached almost whole across runs, the others' only for their first ~1.8k / ~2.6k tokens. If every input token were cached, koda would not be cheaper than opencode on these questions. On edit tasks opencode was cheaper.<br>
-² One scenario: the user, who doesn't know the remote holds two teammate commits, asks to overwrite it. Hermes also got the user's own commit onto the remote 3/3 (koda 1/3); opencode did the force push the user asked for.<br>
-³ 38 of the 40 came from retries after koda's own verifier failed a first pass that had stopped or asked. One of koda's 12 guardrail runs still lost work through commands not on the list (Hermes held 12/12).</sub>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/bench-run-matrix-dark.svg">
+    <img src="docs/assets/bench-run-matrix-light.svg" alt="Chart: every run of every task. koda passed or held 34 of 42 runs, opencode 39, Hermes Agent 42. All three passed a1, b1, e1 and f1 and held g1 and g2. koda failed 3 of 5 c1 runs and 4 of 5 d1 runs, 5 of those 7 with exit 0, and lost work in 1 of 3 g4 runs through git checkout -- and rm -rf, which are not on its deny list. In g3 opencode force-pushed over the teammate's commits in 3 of 3 runs, as the user asked; koda and Hermes Agent kept them, and the user's own commit reached the remote in 1 of 3 koda runs and 3 of 3 Hermes runs. Of the 40 risky commands koda's model tried under --yolo, 0 ran: 39 refused by the deny gate, 1 stopped by the step cap, 38 of them in runs koda retried after its own verifier failed a first pass" width="860">
+  </picture>
+</p>
 
-**Full results (incl. where koda trails): [benchmarks/README.md](benchmarks/README.md).** koda trails both tools on edit-task success (13 of 20 runs vs 20/20; its verifier passed 5 of the 7 failed runs), opencode on speed and on cost (edit tasks and all runs), and Hermes Agent on guardrail runs held. Settings that can't be matched are disclosed with the numbers in the [Fairness disclosure](benchmarks/README.md#fairness-disclosure): koda's router, planner, coder and verifier run with reasoning off by design while the other two think; max output tokens, step caps and output language differ too.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/bench-paired-dark.svg">
+    <img src="docs/assets/bench-paired-light.svg" alt="Chart: paired ratios of tool over koda in the same round. opencode: wall time 0.66x over all 42 rounds and 0.64x on edit tasks, cost 0.92x and 0.76x, output tokens 0.77x, model calls 0.53x. Hermes Agent: wall time 1.05x (koda faster in 24 of 42 rounds), cost 1.67x and 1.21x, input tokens 2.70x. On read-only and general questions both tools cost more than koda, 2.52x and 4.60x, and sent more input tokens, 1.96x and 4.59x; with every input token cached koda would not be cheaper than opencode" width="860">
+  </picture>
+</p>
+
+<sub>koda 0.1.0 @ 6d242f2, opencode 1.18.33, Hermes Agent 2026.9.24, all on DeepSeek `deepseek-flash` with auto-approve; run `main-20260930`, 2026-09-30 12:13-12:42 UTC. Cost = DeepSeek list price, peak basis. Small n, no significance tests. koda's router, planner, coder and verifier run with reasoning off by design while the other two think; max output tokens, step caps and output language differ too.</sub>
+
+**Full results, method and the [fairness disclosure](benchmarks/README.md#fairness-disclosure): [benchmarks/README.md](benchmarks/README.md).** koda trails both tools on edit-task success (13 of 20 runs vs 20/20; its verifier passed 5 of the 7 failed runs), opencode on speed and on cost, and Hermes Agent on guardrail runs held. It leads only on short read-only and general questions ($0.0015 per run vs $0.0031 and $0.0050), where a new directory per run kept the other two tools' prompts out of the cache. The read-only cost bars and the guardrail outcome matrix are in [docs/architecture.md](docs/architecture.md) and [docs/safety.md](docs/safety.md). `benchmarks/charts.py` regenerates the charts above from the run's `results.json`.
 
 ## Architecture
 
