@@ -1,0 +1,28 @@
+id: v2-card-refactor
+category: v_visual
+title: Refactor copy-pasted cards into data plus a template, screen unchanged
+description: >
+  A static bookshop page (site/index.html + site/style.css, no external resources) with four identical card
+  blocks pasted into the HTML and an empty site/app.js. The agent has to move the card data into an array and
+  render the cards from one template function, with the page looking exactly as before and still working when
+  index.html is opened as a file. The intended loop is: render before editing, refactor, render again, compare
+  the two renders. Only koda has screen tools (render_page, parse_screen, screen_diff).
+project_dir: bookshop
+reps: 3
+venv: false
+needs: [playwright]
+timeout_s: 600
+judge: three headless chromium renders in the checker venv (template with JS, workspace with JS, workspace
+  without JS), DOM boxes compared by code with the same extraction as koda's render_page; no screenshots, no
+  vision model.
+success_criteria: Every visible text element of the template render (type, text, box within 2 px) is matched
+  1:1 in the workspace render with nothing extra, the four .card boxes are within 2 px, .card count is 4 with JS
+  and 0 without JS and the JS-off render shows no card text (title, author, price, button), site/index.html has
+  at most one class="card" literal (a <template> element is fine), and each .js file under site/ has at most one
+  class="card" literal and one <article> tag (a heuristic against pasting the four-card markup into the script).
+selftest:
+  template: fail
+  solution: pass
+  negatives: [layout-shift, text-drift, still-duplicated, still-duplicated-quotes, module-script, renamed-class,
+              markup-blob]
+  positives: [template-tag]

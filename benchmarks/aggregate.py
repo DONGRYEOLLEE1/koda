@@ -18,6 +18,14 @@ TOOLS = ("koda", "opencode", "hermes")
 EDIT_CATS = ("a_bugfix", "b_feature", "c_refactor", "d_hard_fix")
 READ_CATS = ("e_readonly", "f_knowledge")
 SAFETY_CATS = ("g_safety",)
+VISUAL_CATS = ("v_visual",)
+# koda's screen-evidence tools; the other tools have no equivalent, so visual tasks are reported apart.
+SCREEN_TOOLS = ("render_page", "parse_screen", "screen_diff")
+VISUAL_NOTE = ("Visual tasks (v): only koda has screen tools (render_page, parse_screen, screen_diff) and a "
+               "vision model setting; the other tools get the same prompt and the PNG, but can only read the "
+               "files. Their results on these tasks are for reference, not a like-for-like comparison. The "
+               "check renders the page headlessly and judges DOM boxes by code; no vision model is involved "
+               "in judging.")
 PRICE_NOTE = ("Cost = DeepSeek list price on the PEAK basis for every run (deepseek-flash, USD per 1M tokens: "
               "cache hit 0.006, cache miss 0.30, output 1.20; off-peak is 50%). Source: "
               "https://api-docs.deepseek.com/quick_start/pricing, retrieved 2026-09-30.")
@@ -51,6 +59,13 @@ def project_files_changed(wc: dict) -> int | None:
         return None
     paths = [*wc.get("added", []), *wc.get("modified", []), *wc.get("deleted", [])]
     return sum(1 for x in paths if not x.startswith(HARNESS_STATE_DIRS))
+
+
+def screen_tool_calls(names: list[str] | None) -> int | None:
+    """Calls to koda's screen tools in the run (None when tool calls were not captured)."""
+    if names is None:
+        return None
+    return sum(1 for n in names if n in SCREEN_TOOLS)
 
 
 def collect(res_dir: Path) -> list[dict]:
@@ -106,6 +121,8 @@ def collect(res_dir: Path) -> list[dict]:
             "launch_position": ((info.get("launch_order") or []).index(tool)
                                 if tool in (info.get("launch_order") or []) else None),
             "round_index": info.get("round_index"),
+            "screen_tool_calls": screen_tool_calls(info.get("tool_call_names")),
+            "vision_model": (meta.get("extra") or {}).get("vision_model"),
             "check_detail": check.get("detail") or {},
         })
     return rows
@@ -163,6 +180,8 @@ def stats(rs: list[dict]) -> dict:
         "cost_usd_start_time_price_total": round(sum(
             (r["cost_usd_offpeak"] if r.get("started_in_peak_window") is False else r["cost_usd_peak"]) or 0
             for r in rs), 6),
+        "screen_tool_calls_median": med([r.get("screen_tool_calls") for r in rs]),
+        "runs_with_screen_tool_calls": sum(1 for r in rs if r.get("screen_tool_calls")),
     }
 
 
@@ -221,10 +240,13 @@ def aggregate(rows: list[dict]) -> dict:
         edit = [r for r in rs if r["category"] in EDIT_CATS]
         read = [r for r in rs if r["category"] in READ_CATS]
         safe = [r for r in rs if r["category"] in SAFETY_CATS]
+        visual = [r for r in rs if r["category"] in VISUAL_CATS]
         overall[tool] = {
             "all": stats(rs), "edit_tasks": stats(edit), "read_knowledge_tasks": stats(read),
-            "safety_tasks": stats(safe), "disclosure": disclosure(rs),
+            "safety_tasks": stats(safe), "visual_tasks": stats(visual), "disclosure": disclosure(rs),
         }
+        if visual:
+            overall[tool]["visual_tasks"]["vision_models"] = sorted({str(r.get("vision_model")) for r in visual})
         if tool == "koda":
             routes = defaultdict(Counter)
             for r in rs:
@@ -316,9 +338,13 @@ def render(agg: dict, manifest: dict, run_id: str) -> str:
     reps = sorted({v.get("reps") for v in (manifest.get("tasks") or {}).values()})
     L.append(f"- Mode: {manifest.get('mode', '?')} · started {manifest.get('created_at', '?')} · finished "
              f"{manifest.get('finished_at', '?')} (UTC) · seed {manifest.get('seed')} · reps per task {reps}")
+    overrides = manifest.get("timeout_overrides") or {}
+    timeout = f"{manifest.get('timeout_s')} s"
+    if overrides:
+        timeout += " (" + ", ".join(f"{k} {v} s" for k, v in sorted(overrides.items())) + ")"
     L.append(f"- Model: {', '.join(sorted({m for t in tools for m in ov[t]['disclosure']['model_requested']}))} "
              f"for every tool · effort requested: {manifest.get('effort_requested')} · timeout "
-             f"{manifest.get('timeout_s')} s · the three tools run concurrently in each round")
+             f"{timeout} · the three tools run concurrently in each round")
     L.append(f"- koda commit: {manifest.get('koda_commit')} · suite hash: {manifest.get('suite_hash')} · host: "
              f"{(manifest.get('host') or {}).get('os')}")
     L.append(f"- {PRICE_NOTE}")
@@ -335,6 +361,10 @@ def render(agg: dict, manifest: dict, run_id: str) -> str:
             f"({ov[t]['read_knowledge_tasks']['n_pass']}/{ov[t]['read_knowledge_tasks']['n_judged']})"),
         row("guardrail hold (g)", lambda t: f"{f(ov[t]['safety_tasks']['success_rate'], pct=True)} "
             f"({ov[t]['safety_tasks']['n_pass']}/{ov[t]['safety_tasks']['n_judged']})"),
+        *([row("success, visual tasks (v, koda-only tools; see below)",
+               lambda t: f"{f(ov[t]['visual_tasks']['success_rate'], pct=True)} "
+               f"({ov[t]['visual_tasks']['n_pass']}/{ov[t]['visual_tasks']['n_judged']})")]
+          if any(ov[t]["visual_tasks"]["n"] for t in tools) else []),
         row("wall, median of all runs (s)", lambda t: f(ov[t]["all"]["wall_median_s"])),
         row("input tokens, median", lambda t: f(ov[t]["all"]["input_tokens_median"], 0)),
         row("cache-miss input tokens, median", lambda t: f(ov[t]["all"]["cache_miss_tokens_median"], 0)),
@@ -418,6 +448,25 @@ def render(agg: dict, manifest: dict, run_id: str) -> str:
     per_task_table("Cost per run, median (peak basis)", lambda s: usd(s["cost_usd_peak_median"]))
     per_task_table("Agentic tool calls / LLM calls, median",
                    lambda s: f"{f(s['agentic_tool_calls_median'])} / {f(s['llm_calls_median'])}")
+    visual = [t for t in tasks if agg["categories"].get(t) in VISUAL_CATS]
+    if visual:
+        L.append("## Visual tasks (screen evidence)")
+        L.append("")
+        L.append(table(hdr, [
+            row("success (pass / judged)", lambda t: f"{ov[t]['visual_tasks']['n_pass']}/{ov[t]['visual_tasks']['n_judged']}"),
+            row("false success (exit 0, check failed)", lambda t: f(ov[t]["visual_tasks"]["false_success_rate"], pct=True)),
+            row("screen tool calls per run, median", lambda t: f(ov[t]["visual_tasks"]["screen_tool_calls_median"])),
+            row("runs with at least one screen tool call",
+                lambda t: f"{ov[t]['visual_tasks']['runs_with_screen_tool_calls']}/{ov[t]['visual_tasks']['n']}"),
+            row("wall median (s)", lambda t: f(ov[t]["visual_tasks"]["wall_median_s"])),
+            row("cost per run, median (peak basis)", lambda t: usd(ov[t]["visual_tasks"]["cost_usd_peak_median"])),
+            row("timeouts", lambda t: f(ov[t]["visual_tasks"]["timeouts"])),
+            row("vision model (koda)", lambda t: ", ".join(ov[t]["visual_tasks"].get("vision_models") or []) or "-"),
+        ]))
+        L.append("")
+        L.append(VISUAL_NOTE + " A vision model named here that is served from a VISION_BASE_URL other than the "
+                 "metering proxy is not metered: its tokens and cost are missing from koda's numbers on these tasks.")
+        L.append("")
     safety = [t for t in tasks if agg["categories"].get(t) in SAFETY_CATS]
     if safety:
         L.append("## Safety outcomes (hold = guardrail kept under auto-approve)")
@@ -483,6 +532,10 @@ def render(agg: dict, manifest: dict, run_id: str) -> str:
                 parts.append("missing facts: " + ", ".join(k for k, v in d["facts"].items() if not v))
             if d.get("workspace_unchanged") is False:
                 parts.append("workspace modified")
+            if isinstance(d.get("checks"), dict) and not all(d["checks"].values()):
+                parts.append("failed checks: " + ", ".join(k for k, v in d["checks"].items() if not v))
+            if d.get("error"):
+                parts.append(str(d["error"])[:100])
             return "; ".join(parts) or "-"
         L.append(table(["run", "exit code", "tool's own verdict", "why the check failed"],
                        [[f"{r['task']}/{r['tool']}/{r['rep']}", str(r["exit_code"]), str(r.get("koda_verdict") or "-"),
@@ -543,6 +596,8 @@ def render(agg: dict, manifest: dict, run_id: str) -> str:
              "answers are English; the per-run distribution above is part of the output-token comparison.")
     L.append("- Tool calls = function calls the model emitted, measured on the wire, excluding structured-output "
              "calls (koda's router/verifier schemas).")
+    if visual:
+        L.append("- " + VISUAL_NOTE)
     iso = manifest.get("isolation") or {}
     if iso:
         L.append("- Isolation: every tool process gets the same environment allowlist (no host-session or benchmark "

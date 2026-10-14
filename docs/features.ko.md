@@ -23,12 +23,14 @@
 
 | | 도구 |
 |---|---|
-| 읽기 (무승인) | `read_file`(줄번호·범위) · `list_files` · `search_text`(캡·glob) · `run_readonly_command` · `explore` · `read_artifact` · `analyze_image` · `skill` |
+| 읽기 (무승인) | `read_file`(줄번호·범위) · `list_files` · `search_text`(캡·glob) · `run_readonly_command` · `explore` · `read_artifact` · `analyze_image` · `parse_screen` · `render_page` · `screen_diff` · `skill` |
 | 변경 (승인 대상) | `write_file` · `edit_file` · `multi_edit` · `patch_file` · `create_dir` · `delete_path` · `run_command` |
 
 - 편집은 원자적이다. 임시 파일에 쓰고 `os.replace` 로 바꿔 실행 비트와 CRLF 를 지킨다. `multi_edit` 는 전부 되거나 전부 안 되고, `patch_file` 은 앵커로 드리프트를 잡으며, 일치하지 않으면 근접 후보를 돌려준다.
 - 기본 예산에서 8,000자(웹 검색·크롤 계열은 3,000자)를 넘는 도구 출력은 자르고, 두 상한 모두 `CONTEXT_BUDGET_TOKENS` 에 비례해 커진다. 시크릿을 가린 원문은 `.koda/artifacts/` 에 남아 `read_artifact` 로 다시 읽을 수 있다.
 - 스킬: 워크스페이스에 `skills/<이름>/SKILL.md` 를 두면 에이전트가 목록을 보고 필요할 때 본문을 읽는다.
+
+- 화면 증거: `render_page` 는 워크스페이스 안 HTML 이나 localhost URL 을 headless chromium 으로 렌더하고, `parse_screen` 은 캡처나 렌더를 비전 모델로 UI 요소 목록으로 바꾸고, `screen_diff` 는 두 화면을 코드로 비교한다. 결과는 `.koda/renders/` 에 남고 verifier 가 읽는다. `visual` extra 가 필요하다: [visual.ko.md](visual.ko.md).
 
 도구마다 어디까지 건드릴 수 있고 `--yolo` 가 무엇을 바꾸는지는 [safety.ko.md](safety.ko.md).
 

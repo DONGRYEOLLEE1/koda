@@ -29,7 +29,7 @@ curl -fsSL https://raw.githubusercontent.com/DONGRYEOLLEE1/koda/main/install.sh 
 uv tool install --python 3.13 "koda[tui] @ git+https://github.com/DONGRYEOLLEE1/koda"
 ```
 
-버전 고정·클론 설치·TUI 없는 설치·제거는 [docs/install.ko.md](docs/install.ko.md).
+버전 고정·클론 설치·TUI 없는 설치·제거는 [docs/install.ko.md](docs/install.ko.md). 화면 도구는 `visual` extra(`koda[tui,visual]`)와 chromium 이 필요하다: [docs/visual.ko.md](docs/visual.ko.md#설치).
 
 <!-- DEMO, public 전환 후: GIF 를 영상으로 바꾼다.
      1. 한국어 자막 하이라이트 컷(koda-readme.ko.mp4, 32초, 약 1.8MB. 한도 10MB)을 github.com 의 이슈나 PR 코멘트 입력창에
@@ -61,6 +61,7 @@ TUI 없이: `koda run "calc.py 에 두 수를 빼는 sub 함수를 추가하고 
 
 - **요청을 성격대로 나누고, 권한은 필요한 만큼만 준다.** 라우터가 모든 요청을 `answer`·`read`·`inspect`·`edit` 중 하나로 보낸다. 일반 질문에는 파일 도구를 주지 않고, 쓰기 도구와 검증은 `edit` 경로에만 붙는다. [자세히 →](docs/architecture.ko.md#라우팅-권한은-필요한-만큼만)
 - **편집은 diff 와 도구 실행 기록을 보고 판정한다.** verifier 는 해시 스냅샷 대비 diff 와 런타임이 실제로 기록한 도구 호출을 받고, coder 가 쓴 요약은 증거가 아닌 주장으로 다룬다. 실패하면 한 번 다시 시도하고, 그래도 판정이 fail 이면 `koda run` 은 exit 1 로 끝난다. 다만 최종 판정은 모델 호출이라 정답을 보장하지는 않는다. [자세히 →](docs/architecture.ko.md#편집을-판정하는-방식)
+- **화면을 증거로 쓴다.** 스크린샷 기반 버그 수정, 화면을 그대로 두는 리팩토링, 시안 맞추기에서 coder 가 페이지를 headless 로 렌더하고 캡처를 비전 모델로 파싱하고 두 화면을 코드로 비교한다. verifier 는 coder 의 주장보다 이 증거를 먼저 본다. `visual` extra 와 chromium 이 필요하다. [화면 증거 →](docs/visual.ko.md)
 - **`--yolo` 로도 풀리지 않는 안전장치가 있다.** 정적 차단 목록이 승인 게이트보다 먼저 돈다. 목록에 오른 명령(`sudo`·`curl … | sh`·`git reset --hard` 등)은 어떤 모드에서도 실행되지 않고, 자격증명·`.env`·`git push --force` 를 건드리는 명령은 사람이 직접 승인해야 하므로 `--yolo` 에서는 거부된다. 차단 목록은 정규식 기반이고, OS 샌드박스는 Linux 에 bubblewrap 이 있을 때만 동작한다. [안전 모델 →](docs/safety.ko.md)
 - **한 TUI 에서 세션 여러 개를 동시에 돌린다.** 세션마다 워커가 따로 돈다. 배경 세션은 답변을 이어 가고, 승인 요청은 그 세션을 열 때까지 기다린다. [TUI →](docs/features.ko.md#tui-와-세션)
 
@@ -109,7 +110,7 @@ koda 의 에이전트 그래프는 턴마다 새로 만드는 LangGraph `StateGr
 | 주제 | 문서 |
 |---|---|
 | 시작하기 | [설치](docs/install.ko.md) · [온보딩](docs/onboarding.md) · [TUI 가이드](docs/tui.md) |
-| 동작 방식 | [기능](docs/features.ko.md) · [아키텍처](docs/architecture.ko.md) · [안전 모델](docs/safety.ko.md) |
+| 동작 방식 | [기능](docs/features.ko.md) · [아키텍처](docs/architecture.ko.md) · [안전 모델](docs/safety.ko.md) · [화면 증거](docs/visual.ko.md) |
 | 설정 | [설정과 provider](docs/configuration.ko.md) · [provider 별 설정](docs/providers/README.md) · [MCP](docs/mcp/README.md) |
 | 평가와 개발 | [벤치마크](benchmarks/README.md)(영문) · [개발](docs/development.ko.md) |
 

@@ -76,6 +76,26 @@ def build_model(settings: ModelSettings):
     return chat, provider, reason
 
 
+# Vision parses list up to 80 elements with text, which does not fit the chat cap.
+VISION_MAX_OUTPUT_TOKENS = 16384
+
+
+def build_vision_model(settings: ModelSettings, fallback, provider: str = ""):
+    """The model for image calls. Without VISION_MODEL the fallback (the fast model) is returned as is.
+    VISION_BASE_URL and VISION_API_KEY default to the endpoint and key of `provider`, the one
+    select_provider actually chose (fallback included); without it, of PRIMARY."""
+    if not settings.vision_model:
+        return fallback
+    if (provider or settings.primary) == "local":
+        base, key = settings.local_base_url, settings.local_api_key
+    else:
+        base, key = settings.openai_base_url, settings.openai_api_key
+    return _chat(
+        settings.vision_model, settings.vision_base_url or base, settings.vision_api_key or key,
+        temperature=0, max_tokens=VISION_MAX_OUTPUT_TOKENS, use_responses_api=False,
+    )
+
+
 def reasoning_params(settings: ModelSettings, enabled: bool, budget: int = 0) -> dict:
     """엔드포인트가 존중하는 reasoning 파라미터만 조립한다. 미지원(off)이면 빈 dict — 알 수 없는 필드를 실어 보내 400 으로 거절당하지 않게 한다."""
     if settings.reasoning_style == "qwen":  # llama.cpp 는 chat_template 인자로 사고를 켜고 끈다
@@ -130,8 +150,13 @@ def _remember_if_unsupported(model_name: str, method: str, exc: Exception) -> No
         _UNSUPPORTED_METHODS.add((model_name, method))
 
 
-async def astructured(model, schema, messages, config=None, methods=None):
-    """지원되는 방식으로 구조화 출력을 받는다. 전부 실패하면 None — 호출부가 텍스트 폴백을 쓴다."""
+async def astructured(model, schema, messages, config=None, methods=None, remember=True, errors=None):
+    """Structured output by the first method the endpoint accepts. None when all fail, so the caller falls back to text.
+
+    remember=False keeps a failure out of _UNSUPPORTED_METHODS: a vision call can get a 400 for the
+    image rather than the method, and must not switch the text calls off that method. errors, when
+    given a list, receives every exception caught so the caller can tell why nothing came back.
+    """
     name = getattr(model, "model_name", "") or ""
     methods = methods or _METHOD_OVERRIDE or STRUCTURED_METHODS
     for method in methods:
@@ -140,12 +165,15 @@ async def astructured(model, schema, messages, config=None, methods=None):
         try:
             return await model.with_structured_output(schema, method=method).ainvoke(messages, config=config)
         except Exception as e:
-            _remember_if_unsupported(name, method, e)
+            if errors is not None:
+                errors.append(e)
+            if remember:
+                _remember_if_unsupported(name, method, e)
     return None
 
 
-def structured(model, schema, messages, config=None, methods=None):
-    """astructured 의 동기 버전 (도구 안에서 쓴다)."""
+def structured(model, schema, messages, config=None, methods=None, remember=True, errors=None):
+    """Sync astructured, for use inside tools. Same arguments."""
     name = getattr(model, "model_name", "") or ""
     methods = methods or _METHOD_OVERRIDE or STRUCTURED_METHODS
     for method in methods:
@@ -154,7 +182,10 @@ def structured(model, schema, messages, config=None, methods=None):
         try:
             return model.with_structured_output(schema, method=method).invoke(messages, config=config)
         except Exception as e:
-            _remember_if_unsupported(name, method, e)
+            if errors is not None:
+                errors.append(e)
+            if remember:
+                _remember_if_unsupported(name, method, e)
     return None
 
 

@@ -78,13 +78,13 @@ def test_probe_none_on_non_llamacpp_server_attempts_analysis(monkeypatch, tmp_pa
         raise vision.httpx.HTTPError("404")
 
     monkeypatch.setattr(vision.httpx, "get", fake_get)
-    monkeypatch.setattr(vision, "structured", lambda model, schema, messages: schema(summary="화면 캡처", details=["로고"]))
+    monkeypatch.setattr(vision, "structured", lambda model, schema, messages, **kw: schema(summary="화면 캡처", details=["로고"]))
     (tmp_path / "shot.png").write_bytes(b"png")
     out = _tool(Workspace(tmp_path), "http://gateway.test/props").invoke({"path": "shot.png"})
     assert "mmproj" not in out and "화면 캡처" in out
 
     # 요청이 실패하면 llama.cpp 를 지목하지 않는 일반 오류로 돌아온다
-    def boom(model, schema, messages):
+    def boom(model, schema, messages, **kw):
         raise RuntimeError("image input not supported")
 
     monkeypatch.setattr(vision, "structured", boom)

@@ -20,6 +20,10 @@ dependencies = [
 tui = [
     "textual>=8.2,<9",
 ]
+# Headless rendering for the screen tools, optional like `tui`.
+visual = [
+    "playwright>=1.64",
+]
 
 [dependency-groups]
 dev = [

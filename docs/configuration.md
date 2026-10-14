@@ -24,6 +24,19 @@ How the profile is picked, local fallback with `PRIMARY=local`, and switching pr
 - `KODA_MCP_AUTO_APPROVE`: [safety.md](safety.md) (layer 2) and [mcp/](mcp/README.md) (Korean).
 - `LANGFUSE_*`: [features.md → Tracing](features.md#tracing-langfuse).
 
+## Vision model
+
+Image calls (`parse_screen`, `analyze_image`) go to the fast model (the primary model with thinking off) unless these are set. Empty values fall back to the provider in use.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `VISION_MODEL` | empty | Model for image calls. Empty means the fast model (the primary model without thinking) takes them. |
+| `VISION_BASE_URL` | empty | Endpoint for that model; empty uses the URL of the provider in use (the fallback when the primary is down). Also where koda probes `/props` for llama.cpp vision support. |
+| `VISION_API_KEY` | empty | Key for that endpoint; empty uses the key of the provider in use. |
+| `VISION_STRUCTURED_METHOD` | empty | `json_schema`, `function_calling` or `auto` for the vision model alone; empty follows `STRUCTURED_METHOD`. |
+
+What the screen tools do and what they need installed: [visual.md](visual.md).
+
 ## More
 
 - Per-provider blocks and troubleshooting: [providers/](providers/README.md) (Korean).

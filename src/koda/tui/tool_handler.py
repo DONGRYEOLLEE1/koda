@@ -54,6 +54,14 @@ def tool_title(name: str, args: dict) -> str:
         return f"삭제 · {path}" if path else "삭제"
     if name == "explore":
         return "탐색 위임"
+    if name == "parse_screen":
+        return f"화면 분석 · {path}" if path else "화면 분석"
+    if name == "render_page":
+        target = args.get("target")
+        return f"렌더 · {target}" if target else "렌더"
+    if name == "screen_diff":
+        before, after = args.get("before"), args.get("after")
+        return f"화면 비교 · {before} vs {after}" if before and after else "화면 비교"
     return short  # MCP·기타 도구는 이름 그대로
 
 

@@ -33,7 +33,7 @@ git clone https://github.com/DONGRYEOLLEE1/koda && cd koda
 uv tool install --python 3.13 -e ".[tui]"
 ```
 
-Drop the `[tui]` extra for a headless install (`koda run`, `koda chat`). Remove koda with `uv tool uninstall koda`.
+Drop the `[tui]` extra for a headless install (`koda run`, `koda chat`). Add `visual` for the screen tools (`koda[tui,visual]`) and run `python -m playwright install chromium` with that interpreter: [visual.md](visual.md#install). Remove koda with `uv tool uninstall koda`.
 
 ## Next
 

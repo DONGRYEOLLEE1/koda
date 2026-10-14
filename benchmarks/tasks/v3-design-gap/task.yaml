@@ -1,0 +1,26 @@
+id: v3-design-gap
+category: v_visual
+title: Match the page to a design mock-up (missing sections, different wording)
+description: >
+  A static product landing page (site/index.html + site/style.css, no external resources) and design.png, the
+  designer's mock-up: a full-height 1280 px wide capture of the finished page with four sections. The page
+  implements only the first two, and three strings differ from the mock-up (the headline, the call to action,
+  a feature name). The stylesheet already has rules for every section. The agent has to find what is missing
+  and different and make the page match. Only koda has screen tools (render_page, parse_screen, screen_diff).
+project_dir: wavenote
+reps: 3
+venv: false
+needs: [playwright]
+timeout_s: 600
+judge: headless chromium render of the workspace (checker venv) compared by code with a render of the
+  reference page (template + solution overlay, rendered at check time); no pixel comparison, no vision model.
+success_criteria: Eight required strings (the four section titles, both calls to action, the feature name and
+  the pro price) are each the whole text of a visible element (not a substring of a longer text, not text with
+  no visible box); the four section titles are found as elements, their top edges are in the design's order, and
+  each is within 5% of the reference document height of the reference position. Extra content (a footer) is
+  allowed.
+selftest:
+  template: fail
+  solution: pass
+  negatives: [missing-section, wrong-order, text-mismatch, feature-name-kept, hidden-cta]
+  positives: [extra-footer]

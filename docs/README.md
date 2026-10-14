@@ -13,6 +13,7 @@ New to koda: [install](install.md), then the README [quick start](../README.md#q
 | [features.md](features.md) | TUI and sessions, tools, MCP, memory, context budget and prompt cache, providers, tracing |
 | [architecture.md](architecture.md) | Routing, the agent graph (diagram and Mermaid), components, how an edit is judged |
 | [safety.md](safety.md) | The four safety layers, their limits, guardrail results under auto-approve |
+| [visual.md](visual.md) | Screen evidence: the three scenarios, the three screen tools, where results are stored, install, settings, limits |
 | [configuration.md](configuration.md) | Settings order, provider table, tuning variables |
 | [tui.md](tui.md) (Korean) | TUI layout, session panel, status line, keys and slash commands, how turns are displayed |
 | [providers/](providers/README.md) (Korean) | Environment blocks per provider, endpoint compatibility, adding a provider, troubleshooting |
@@ -33,6 +34,7 @@ Overview (install, demo, why koda, benchmark summary): the root README ([English
 | [features.ko.md](features.ko.md) | TUI 와 세션, 도구, MCP, 메모리, 컨텍스트 예산과 프롬프트 캐시, provider, 추적 | koda 가 무엇을 할 수 있는지 한눈에 볼 때 |
 | [architecture.ko.md](architecture.ko.md) | 라우팅, 에이전트 그래프(다이어그램·Mermaid), 구성 요소, 편집을 판정하는 방식 | 내부 동작을 이해하거나 에이전트를 붙일 때 |
 | [safety.ko.md](safety.ko.md) | 안전장치 네 겹과 한계, 자동 승인 상태의 가드레일 결과 | `--yolo` 를 쓰기 전에 |
+| [visual.ko.md](visual.ko.md) | 화면 증거: 시나리오 세 가지, 화면 도구 세 개, 저장 위치, 설치, 설정, 한계 | 캡처나 시안을 들고 화면을 고치게 하거나, 화면을 그대로 두는 리팩토링을 시킬 때 |
 | [configuration.ko.md](configuration.ko.md) | 설정이 읽히는 순서, provider 표, 튜닝 항목 | 모델·키·예산을 바꿀 때 |
 | [tui.md](tui.md) | TUI 화면 구성, 세션 패널, 상태줄, 키·슬래시 명령, 턴 표시 규칙 | TUI 화면의 표시가 무슨 뜻인지 알고 싶을 때 |
 | [providers/](providers/README.md) | provider 별 환경변수 블록, 엔드포인트 호환 표, 새 provider 추가, 문제 해결 | 모델·엔드포인트를 바꿀 때, 401·400 이 날 때 |

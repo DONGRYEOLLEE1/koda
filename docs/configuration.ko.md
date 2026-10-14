@@ -24,6 +24,19 @@
 - `KODA_MCP_AUTO_APPROVE`: [safety.ko.md](safety.ko.md)(2계층)와 [mcp/](mcp/README.md).
 - `LANGFUSE_*`: [features.ko.md 의 추적](features.ko.md#추적-langfuse).
 
+## 비전 모델
+
+이미지 호출(`parse_screen`, `analyze_image`)은 아래를 두지 않으면 fast 모델(생각을 끈 주 모델)이 받는다. 비운 값은 실제로 쓰는 provider 를 따른다.
+
+| 변수 | 기본값 | 의미 |
+|---|---|---|
+| `VISION_MODEL` | 비움 | 이미지 호출용 모델. 비우면 fast 모델(생각을 끈 주 모델)이 받는다. |
+| `VISION_BASE_URL` | 비움 | 그 모델의 엔드포인트. 비우면 실제로 쓰는 provider(주 provider 가 죽어 폴백했으면 그쪽) 주소. llama.cpp 비전 지원을 `/props` 로 확인하는 주소이기도 하다. |
+| `VISION_API_KEY` | 비움 | 그 엔드포인트의 키. 비우면 실제로 쓰는 provider 의 키. |
+| `VISION_STRUCTURED_METHOD` | 비움 | 비전 모델만의 구조화 출력 방식(`json_schema`, `function_calling`, `auto`). 비우면 `STRUCTURED_METHOD` 를 따른다. |
+
+화면 도구가 하는 일과 설치할 것: [visual.ko.md](visual.ko.md).
+
 ## 더 보기
 
 - provider 별 환경변수 블록과 문제 해결: [providers/](providers/README.md).

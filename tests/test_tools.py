@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from koda.tools import DANGEROUS_TOOLS, make_all_tools, make_editor_tools
+from koda.tools import DANGEROUS_TOOLS, SAFE_TOOLS, make_all_tools, make_editor_tools
 from koda.tools.filesystem import make_filesystem_tools
 from koda.tools.shell import make_shell_tools
 from koda.workspace import SandboxError
@@ -21,6 +21,12 @@ def test_tool_names_are_namespaced(make_workspace):
         "run_command", "write_file", "edit_file", "multi_edit", "patch_file",
         "create_dir", "delete_path",
     }
+
+
+def test_screen_tools_are_safe_and_not_dangerous():
+    # The screen tools only read the workspace and write under .koda/renders/, so they pass the approval gate.
+    assert {"parse_screen", "render_page", "screen_diff"} <= SAFE_TOOLS
+    assert not {"parse_screen", "render_page", "screen_diff"} & DANGEROUS_TOOLS
 
 
 def test_read_and_search_tools(make_workspace):

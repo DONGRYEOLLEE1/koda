@@ -1,0 +1,28 @@
+id: v1-screenshot-bugfix
+category: v_visual
+title: Fix a layout bug from a screenshot (title over the navigation)
+description: >
+  A static coffee-shop landing page (site/index.html + site/style.css, no external resources) and bug.png, a
+  1280x800 capture of the broken page in which the hero title is drawn over the top menu. The cause is
+  `.hero h1 { position: absolute; top: 0; ... }` with no positioned ancestor, so the title leaves the hero and
+  lands on the header. The agent has to read the capture, find the rule, fix it and confirm with a fresh render.
+  Only koda has screen tools (render_page, parse_screen, screen_diff); the other tools see the same prompt and
+  can only read the files.
+project_dir: cafe
+reps: 3
+venv: false
+needs: [playwright]
+timeout_s: 600
+judge: headless chromium render of the workspace page (checker venv, same DOM box extraction as koda's
+  render_page) judged by code, no screenshot comparison and no vision model.
+success_criteria: The first h1 has a visible box inside the 1280x800 viewport (display, visibility, opacity and
+  text color alpha all non-hidden), a hit test at its centre lands on the h1, its box intersects no other
+  text-bearing element (menu links, the lead paragraph), the set of innerText lines equals the template's, every
+  header text box (brand, menu links, reserve link) matches the template render within 2 px, and the h1 is as
+  tall as in the template within 2 px (the title was not shrunk or clipped, the header not hidden or moved).
+selftest:
+  template: fail
+  solution: pass
+  negatives: [hide-title, offscreen-title, transparent-title, shift-down, remove-nav, tiny-title, clipped-title,
+              hidden-header, header-pushed]
+  positives: [alt-fix]

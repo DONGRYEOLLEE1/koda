@@ -475,6 +475,9 @@ def test_tool_title_templates():
     assert tool_title("search_text", {"query": "foo"}) == "검색 · foo"
     assert tool_title("edit_file", {"path": "b.py"}) == "수정 · b.py"
     assert tool_title("explore", {}) == "탐색 위임"
+    assert tool_title("parse_screen", {"path": "shots/bug.png"}) == "화면 분석 · shots/bug.png"
+    assert tool_title("render_page", {"target": "site/index.html", "name": "before"}) == "렌더 · site/index.html"
+    assert tool_title("screen_diff", {"before": "a.png", "after": "b.png"}) == "화면 비교 · a.png vs b.png"
     assert tool_title("read_file", {}) == "파일 읽기"      # 빈 args 폴백
     assert tool_title("some_mcp_tool", {}) == "some_mcp_tool"       # MCP/기타
 

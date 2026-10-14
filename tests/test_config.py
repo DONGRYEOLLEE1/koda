@@ -265,3 +265,40 @@ def test_explicit_env_base_url_beats_profile_repull(tmp_path, monkeypatch):
     monkeypatch.setenv("MODEL", "gpt-5.6-terra")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://my-proxy/v1")
     assert load_model_settings().openai_base_url == "https://my-proxy/v1"
+
+
+# --- vision model settings ---
+
+def test_vision_settings_default_empty_and_read_env(monkeypatch):
+    s = ModelSettings(_env_file=None)
+    assert (s.vision_model, s.vision_base_url, s.vision_api_key, s.vision_structured_method) == ("", "", "", "")
+    monkeypatch.setenv("VISION_MODEL", "qwen3.6-vl")
+    monkeypatch.setenv("VISION_BASE_URL", "http://127.0.0.1:8081/v1")
+    monkeypatch.setenv("VISION_API_KEY", "vk")
+    monkeypatch.setenv("VISION_STRUCTURED_METHOD", "json_schema")
+    s = ModelSettings(_env_file=None)
+    assert (s.vision_model, s.vision_base_url, s.vision_api_key, s.vision_structured_method) == \
+        ("qwen3.6-vl", "http://127.0.0.1:8081/v1", "vk", "json_schema")
+
+
+def test_vision_settings_load_from_env_file(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text("VISION_MODEL=gemma-vl\nVISION_BASE_URL=https://v.example/v1\n", encoding="utf-8")
+    s = ModelSettings(_env_file=str(env))
+    assert s.vision_model == "gemma-vl" and s.vision_base_url == "https://v.example/v1"
+    assert s.openai_model == "deepseek-v4-flash"        # the main model is untouched
+
+
+def test_vision_base_url_and_method_are_validated():
+    with pytest.raises(ValidationError):
+        ModelSettings(_env_file=None, vision_base_url="ftp://nope")
+    with pytest.raises(ValidationError):
+        ModelSettings(_env_file=None, vision_structured_method="grammar")
+    assert ModelSettings(_env_file=None, vision_structured_method="auto").vision_structured_method == "auto"
+
+
+def test_switch_model_keeps_vision_settings():
+    from koda.config import switch_model
+    base = ModelSettings(_env_file=None, vision_model="qwen-vl", vision_base_url="http://v:1/v1", vision_api_key="vk")
+    switched = switch_model(base, "gpt-5.6", api_key="ok")
+    assert (switched.vision_model, switched.vision_base_url, switched.vision_api_key) == ("qwen-vl", "http://v:1/v1", "vk")

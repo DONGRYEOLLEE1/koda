@@ -7,9 +7,11 @@ from pydantic import BaseModel
 from koda.config import ModelSettings
 from koda.llm import (
     _UNSUPPORTED_METHODS,
+    VISION_MAX_OUTPUT_TOKENS,
     _no_think,
     _thinking,
     astructured,
+    build_vision_model,
     select_provider,
     set_structured_method,
     structured,
@@ -246,3 +248,62 @@ def test_reasoning_content_is_kept_from_stream_chunks_and_responses():
     g2 = m._convert_chunk_to_generation_chunk({"choices": [{"delta": {"content": "답", "reasoning_content": "생각"}, "index": 0}]}, AIMessageChunk, None)
     merged = g.message + g2.message
     assert merged.additional_kwargs["reasoning_content"] == "먼저 생각"   # 청크 병합 시 이어 붙는다
+
+
+def test_structured_remember_false_leaves_no_cache_and_reports_errors():
+    # A vision call may get a 400 for the image, not the method. Caching that would switch the
+    # text calls off json_schema for the whole session.
+    m = _FakeModel(works=None)
+    errors = []
+    assert structured(m, _Schema, [], remember=False, errors=errors) is None
+    assert m.attempts == ["json_schema", "function_calling"]
+    assert not _UNSUPPORTED_METHODS
+    assert [getattr(e, "status_code", None) for e in errors] == [400, 400]
+    # the default still remembers, and a later remember=False call skips what was remembered
+    structured(_FakeModel(works="function_calling"), _Schema, [])
+    assert ("fake", "json_schema") in _UNSUPPORTED_METHODS
+    m2 = _FakeModel(works="function_calling")
+    assert structured(m2, _Schema, [], remember=False) is not None
+    assert m2.attempts == ["function_calling"]
+
+
+def test_astructured_remember_false_leaves_no_cache():
+    import asyncio
+    m = _FakeModel(works=None)
+    errors = []
+    assert asyncio.run(astructured(m, _Schema, [], remember=False, errors=errors)) is None
+    assert not _UNSUPPORTED_METHODS and len(errors) == 2
+
+
+def test_build_vision_model_returns_fallback_without_vision_model():
+    fallback = object()
+    assert build_vision_model(_cfg(), fallback) is fallback
+    assert build_vision_model(_cfg(vision_base_url="http://v:1/v1", vision_api_key="vk"), fallback) is fallback
+
+
+def test_build_vision_model_uses_vision_settings_and_primary_defaults():
+    m = build_vision_model(_cfg(vision_model="qwen-vl", vision_base_url="http://v:1/v1", vision_api_key="vk"), object())
+    assert m.model_name == "qwen-vl" and m.openai_api_base == "http://v:1/v1"
+    assert m.openai_api_key.get_secret_value() == "vk"
+    assert m.max_tokens == VISION_MAX_OUTPUT_TOKENS == 16384
+    assert m.use_responses_api is False and m.temperature == 0
+
+    local = build_vision_model(_cfg(vision_model="qwen-vl"), object())          # primary=local in _BASE
+    assert local.openai_api_base == "http://h:1/v1" and local.openai_api_key.get_secret_value() == "nothing"
+
+    cloud = build_vision_model(_cfg(primary="openai", openai_api_key="sk-oai", vision_model="gpt-vl"), object())
+    assert cloud.openai_api_base == "https://api.openai.com/v1" and cloud.openai_api_key.get_secret_value() == "sk-oai"
+    assert cloud.use_responses_api is False
+
+
+def test_build_vision_model_follows_the_selected_provider():
+    # PRIMARY=openai without a key falls back to local in select_provider; the vision calls must hit the same
+    # server the /props probe looked at, not api.openai.com with an empty key.
+    cfg = _cfg(primary="openai", openai_api_key="", vision_model="qwen-vl")
+    fell_back = build_vision_model(cfg, object(), provider="local")
+    assert fell_back.openai_api_base == "http://h:1/v1" and fell_back.openai_api_key.get_secret_value() == "nothing"
+    cloud = build_vision_model(_cfg(primary="local", openai_api_key="sk-oai", vision_model="qwen-vl"), object(), provider="openai")
+    assert cloud.openai_api_base == "https://api.openai.com/v1" and cloud.openai_api_key.get_secret_value() == "sk-oai"
+    # explicit VISION_* still win
+    pinned = build_vision_model(_cfg(vision_model="qwen-vl", vision_base_url="http://v:1/v1", vision_api_key="vk"), object(), provider="openai")
+    assert pinned.openai_api_base == "http://v:1/v1" and pinned.openai_api_key.get_secret_value() == "vk"
