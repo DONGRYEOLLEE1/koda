@@ -4,14 +4,24 @@ import asyncio
 import tempfile
 from pathlib import Path
 
+import pytest
+
 import koda.agents.graph as G
 from contextlib import contextmanager
 from types import SimpleNamespace
-from koda.agents.graph import _build_graph, _planner_tools, enforce_checklist
+from koda.agents.graph import _build_graph, _planner_tools, _vision_methods, enforce_checklist
 from koda.agents.streaming import AgentResult
 from koda.agents.toollog import ToolLog
+from koda.llm import STRUCTURED_METHODS, set_structured_method
 from koda.prompts import load_prompt
 from koda.workspace import Workspace
+
+
+@pytest.fixture(autouse=True)
+def _reset_structured_method():
+    # run_task pins the structured-output method process-wide; later test files must not inherit it.
+    yield
+    set_structured_method("")
 
 
 # --- enforce_checklist: LLM 없는 결정론 게이트 ---
@@ -70,6 +80,18 @@ def test_planner_tools_drops_web_search_keeps_docs():
              _FakeTool("resolve-library-id"), _FakeTool("firecrawl_scrape")]
     kept = [t.name for t in _planner_tools(tools)]
     assert kept == ["query-docs", "resolve-library-id"]  # 벌크 검색/크롤만 제외
+
+
+def test_planner_tools_drops_render_and_diff_keeps_parse():
+    # The planner may read a capture while planning but never renders or diffs; that is the coder's loop.
+    tools = [_FakeTool("parse_screen"), _FakeTool("render_page"), _FakeTool("screen_diff"), _FakeTool("analyze_image")]
+    assert [t.name for t in _planner_tools(tools)] == ["parse_screen", "analyze_image"]
+
+
+def test_vision_methods_follow_vision_structured_method():
+    assert _vision_methods(SimpleNamespace(vision_structured_method="")) is None
+    assert _vision_methods(SimpleNamespace(vision_structured_method="json_schema")) == ("json_schema",)
+    assert _vision_methods(SimpleNamespace(vision_structured_method="auto")) == STRUCTURED_METHODS
 
 
 def test_checklist_common_variants_recognized():
@@ -473,12 +495,14 @@ class _NoTracer:
         yield SimpleNamespace(done=done)
 
 
-def _dummy_settings():
+def _dummy_settings(**overrides):
     from koda.config import ModelSettings
-    return ModelSettings(primary="local", local_api_key="x",
-                         local_base_url="http://localhost:9", local_model="m",
-                         fallback_enabled=False, openai_api_key="x",
-                         openai_base_url="http://localhost:8", openai_model="o")
+    values = dict(primary="local", local_api_key="x",
+                  local_base_url="http://localhost:9", local_model="m",
+                  fallback_enabled=False, openai_api_key="x",
+                  openai_base_url="http://localhost:8", openai_model="o")
+    values.update(overrides)
+    return ModelSettings(**values)
 
 
 def test_run_task_appends_extra_callbacks_without_touching_core(monkeypatch, tmp_path):
@@ -587,6 +611,62 @@ def test_run_task_probes_vision_on_active_provider(monkeypatch, tmp_path):
     asyncio.run(G.run_task("q", Workspace(tmp_path), lambda n, a: True, lambda t: None,
                            settings=_dummy_settings(), mcps_dir=None, trace_name="t"))
     assert seen == ["http://localhost:8/props"]          # openai_base_url 기준(local 은 :9)
+
+
+def _capture_extra_tools(monkeypatch, captured: dict):
+    """Stub the graph build to record the extra_tools run_task assembles, with the usual run_task stubs."""
+
+    class _FakeGraph:
+        async def ainvoke(self, state, config=None):
+            return {"answer": "완료", "route": "read"}
+
+    def fake_build_graph(model, fast_model, ws, approver, on_token, on_phase, mcp_tools, *a, **k):
+        captured["tools"] = list(mcp_tools)
+        return _FakeGraph()
+
+    monkeypatch.setattr(G, "_build_graph", fake_build_graph)
+    monkeypatch.setattr(G, "build_model", lambda s: (object(), "openai", None))
+    monkeypatch.setattr(G, "_no_think", lambda m, s: m)
+    monkeypatch.setattr(G, "_thinking", lambda m, s, b: m)
+    monkeypatch.setattr(G, "get_tracer", lambda: _NoTracer())
+
+
+def test_run_task_puts_screen_tools_in_extra_tools(monkeypatch, tmp_path):
+    """The three screen tools ride extra_tools next to analyze_image and the MCP tools, so every agent receives them."""
+    captured: dict = {}
+    _capture_extra_tools(monkeypatch, captured)
+    asyncio.run(G.run_task("q", Workspace(tmp_path), lambda n, a: True, lambda t: None,
+                           settings=_dummy_settings(), mcps_dir=None, trace_name="t",
+                           mcp_tools=[_FakeTool("web_search_exa")]))
+    names = [getattr(t, "name", "") for t in captured["tools"]]
+    assert names == ["web_search_exa", "analyze_image", "parse_screen", "render_page", "screen_diff"]
+
+
+def test_run_task_shares_the_vision_model_and_props_url(monkeypatch, tmp_path):
+    """analyze_image and the screen tools get the same build_vision_model result; the /props probe follows VISION_BASE_URL when set."""
+    captured: dict = {}
+    _capture_extra_tools(monkeypatch, captured)
+    vision_model, seen = object(), {}
+    monkeypatch.setattr(G, "build_vision_model",
+                        lambda s, fallback, provider="": seen.update(fallback=fallback, provider=provider) or vision_model)
+    monkeypatch.setattr(G, "make_vision_tools",
+                        lambda ws, model, props_url: seen.update(vision=(model, props_url)) or [])
+    monkeypatch.setattr(G, "make_screen_tools",
+                        lambda ws, model, props_url, methods=None: seen.update(screen=(model, props_url, methods)) or [])
+
+    asyncio.run(G.run_task("q", Workspace(tmp_path), lambda n, a: True, lambda t: None,
+                           settings=_dummy_settings(), mcps_dir=None, trace_name="t"))
+    assert seen["fallback"] is not None                      # the fast model is the fallback
+    assert seen["provider"] == "openai"                       # the provider build_model chose, not PRIMARY
+    assert seen["vision"] == (vision_model, "http://localhost:8/props")
+    assert seen["screen"] == (vision_model, "http://localhost:8/props", None)
+
+    settings = _dummy_settings(vision_model="qwen-vl", vision_base_url="http://vision:7/v1",
+                               vision_structured_method="json_schema")
+    asyncio.run(G.run_task("q", Workspace(tmp_path), lambda n, a: True, lambda t: None,
+                           settings=settings, mcps_dir=None, trace_name="t"))
+    assert seen["vision"] == (vision_model, "http://vision:7/props")
+    assert seen["screen"] == (vision_model, "http://vision:7/props", ("json_schema",))
 
 
 def test_verify_fail_retry_follows_router_decision(monkeypatch, tmp_path):

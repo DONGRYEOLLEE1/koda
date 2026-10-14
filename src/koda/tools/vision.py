@@ -102,7 +102,9 @@ def make_vision_tools(ws: Workspace, model, props_url: str) -> list:
                 {"type": "text", "text": _analysis_instruction(question)},
                 {"type": "image_url", "image_url": {"url": f"data:image/{ext};base64,{b64}"}},
             ]
-            result = structured(model, VisionAnalysis, [HumanMessage(content=content)])
+            # remember=False: a 400 here may be about the image, not the method, and must not
+            # switch the text calls off json_schema.
+            result = structured(model, VisionAnalysis, [HumanMessage(content=content)], remember=False)
             if result is None:
                 return "오류: 이 엔드포인트는 구조화 출력을 지원하지 않는다. 텍스트 정보로만 진행하라."
             raw = result.model_dump_json(indent=None)

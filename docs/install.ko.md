@@ -33,7 +33,7 @@ git clone https://github.com/DONGRYEOLLEE1/koda && cd koda
 uv tool install --python 3.13 -e ".[tui]"
 ```
 
-TUI 없이 `koda run`·`koda chat` 만 쓸 거라면 `[tui]` 를 뺀다. 제거는 `uv tool uninstall koda`.
+TUI 없이 `koda run`·`koda chat` 만 쓸 거라면 `[tui]` 를 뺀다. 화면 도구를 쓰려면 `visual` 을 더하고(`koda[tui,visual]`) 그 인터프리터로 `python -m playwright install chromium` 을 실행한다: [visual.ko.md](visual.ko.md#설치). 제거는 `uv tool uninstall koda`.
 
 ## 다음 단계
 

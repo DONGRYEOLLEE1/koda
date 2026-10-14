@@ -12,13 +12,22 @@ from pydantic import BaseModel
 from ..artifacts import ArtifactStore
 from ..config import DEFAULT_CONTEXT_BUDGET, load_model_settings
 from ..diffscan import diff_report, snapshot
-from ..llm import _no_think, _thinking, astructured, build_model, set_structured_method
+from ..llm import (
+    STRUCTURED_METHODS,
+    _no_think,
+    _thinking,
+    astructured,
+    build_model,
+    build_vision_model,
+    set_structured_method,
+)
 from ..mcp import load_mcp_tools
 from ..memory import Memory
 from ..prompts import load_prompt
 from ..skills import load_skills
 from ..tracing import get_tracer
 from ..workspace import Workspace
+from ..tools.screen import make_screen_tools
 from ..tools.vision import make_vision_tools
 from .recall import make_title
 from .toollog import ToolLog
@@ -62,14 +71,24 @@ def enforce_checklist(plan_text: str, max_items: int = 5) -> str:
     return "\n".join(items[:max_items])
 
 
-# planner 는 계획만 세운다 — 벌크 웹검색/크롤 도구를 쥐면 과다 조사로 컨텍스트를 넘기므로 이 부류만 뺀다. context7 같은 압축 문서조회는 가벼워 남긴다.
-_PLANNER_TOOL_DENY = ("web_search", "crawl", "scrape", "deep_research")
+# The planner only plans. Bulk web search and crawl tools overflow its context with research (light document
+# lookups such as context7 stay), and rendering or diffing screens is the coder's job (parse_screen stays so a
+# capture can be read while planning).
+_PLANNER_TOOL_DENY = ("web_search", "crawl", "scrape", "deep_research", "render_page", "screen_diff")
 
 
 def _planner_tools(mcp_tools: list) -> list:
-    """planner 에 넘길 MCP 도구에서 벌크 웹검색/크롤 부류를 이름으로 제외한다."""
+    """Drop the tools the planner must not hold from the extra tools, matched by name."""
     return [t for t in mcp_tools
             if not any(k in (getattr(t, "name", "") or "").lower() for k in _PLANNER_TOOL_DENY)]
+
+
+def _vision_methods(settings) -> tuple[str, ...] | None:
+    """Structured-output methods for the vision model: VISION_STRUCTURED_METHOD alone when set, every method for auto, None keeps the global rule."""
+    method = settings.vision_structured_method
+    if not method:
+        return None
+    return STRUCTURED_METHODS if method == "auto" else (method,)
 
 
 def _build_graph(model, fast_model, ws: Workspace, approver, on_token, on_phase, mcp_tools,
@@ -340,10 +359,14 @@ async def run_task(
     skills = load_skills(ws.root)  # 워크스페이스 스킬 (없으면 빈 리스트)
     artifact_ns = run_id or uuid4().hex[:8]
     store = ArtifactStore(ws.root, artifact_ns)  # 절단 원문 보존
-    # vision 도구: 실제로 선택된 provider 의 서버를 본다. llama.cpp 가 mmproj 없이 떠 있으면 도구가 복구 가능한 에러 문자열을 반환한다
-    base_url = settings.local_base_url if provider == "local" else settings.openai_base_url
+    # Image calls go to VISION_MODEL when set, else to the fast model. The /props probe looks at the server those
+    # calls actually hit (VISION_BASE_URL, else the selected provider); a llama.cpp without mmproj then makes the
+    # tools return a recoverable error string.
+    vision_model = build_vision_model(settings, fast_model, provider)
+    base_url = settings.vision_base_url or (settings.local_base_url if provider == "local" else settings.openai_base_url)
     props_url = base_url.rstrip("/").removesuffix("/v1") + "/props"
-    extra_tools = [*mcp_tools, *make_vision_tools(ws, fast_model, props_url)]
+    extra_tools = [*mcp_tools, *make_vision_tools(ws, vision_model, props_url),
+                   *make_screen_tools(ws, vision_model, props_url, _vision_methods(settings))]
     tracer = get_tracer()
     tool_log = ToolLog()   # 이 턴의 실제 도구 실행 기록 — 검증 증거·히스토리 요약에 쓴다
     graph = _build_graph(reader_model, fast_model, ws, approver, on_token, on_phase, extra_tools,

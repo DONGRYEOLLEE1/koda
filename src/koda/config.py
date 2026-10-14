@@ -121,6 +121,14 @@ class ModelSettings(BaseSettings):
     # 구조화 출력 방식 (json_schema|function_calling|auto=강제력 순 탐색). 비면 프로필. llama.cpp 는 json_schema 를 지정한다.
     structured_method: str = Field(default="", alias="STRUCTURED_METHOD")
 
+    # Separate model for image calls (parse_screen, analyze_image). Empty VISION_MODEL means the fast
+    # model takes them too; empty URL and key default to the primary provider's. VISION_STRUCTURED_METHOD
+    # pins the structured-output method for that model alone.
+    vision_model: str = Field(default="", alias="VISION_MODEL")
+    vision_base_url: str = Field(default="", alias="VISION_BASE_URL")
+    vision_api_key: str = Field(default="", alias="VISION_API_KEY")
+    vision_structured_method: str = Field(default="", alias="VISION_STRUCTURED_METHOD")
+
     # 에이전트별 reasoning 예산 (qwen 스타일의 `thinking_budget_tokens`).
     thinking_budget_reader: int = Field(default=1024, alias="THINKING_BUDGET_READER")
     thinking_budget_explore: int = Field(default=512, alias="THINKING_BUDGET_EXPLORE")
@@ -135,7 +143,7 @@ class ModelSettings(BaseSettings):
     def mcp_auto_approve_set(self) -> frozenset[str]:
         return frozenset(x.strip() for x in self.mcp_auto_approve.split(",") if x.strip())
 
-    @field_validator("local_base_url", "openai_base_url")
+    @field_validator("local_base_url", "openai_base_url", "vision_base_url")
     @classmethod
     def _must_be_http(cls, v: str) -> str:
         if v and not v.startswith(("http://", "https://")):  # 빈 값은 프로필에서 채운다
@@ -200,7 +208,7 @@ class ModelSettings(BaseSettings):
             raise ValueError("reasoning_style 은 'off', 'qwen', 'effort' 중 하나여야 합니다")
         return v
 
-    @field_validator("structured_method")
+    @field_validator("structured_method", "vision_structured_method")
     @classmethod
     def _valid_structured_method(cls, v: str) -> str:
         if v and v not in ("json_schema", "function_calling", "auto"):

@@ -60,11 +60,11 @@ flowchart TD
 - **모델.** provider 와 상관없이 OpenAI 호환 클라이언트 하나를 쓴다. `reasoning_content` 까지 보존하도록 `ChatOpenAI` 를 확장한 클래스다. 모델명 접두로 provider 프로필(base_url·reasoning 방식·구조화 출력 방식·API 형태)을 고르고, 같은 이름의 환경변수를 주면 그 값이 이긴다. router·planner·coder·verifier·reviewer 는 사고를 끄고, answer·reader·investigator·explore 는 `REASONING_EFFORT` 수준으로 켠다. `temperature=0`, `max_tokens=4096`.
 - **구조화 출력.** router `{route, plan_needed}` 와 verifier `{verdict, reasoning}` 는 `STRUCTURED_METHOD` 방식으로 받는다. DeepSeek 와 프로필이 없는 엔드포인트는 function calling, OpenAI 는 `json_schema` 가 기본이고, llama.cpp 는 `json_schema` 를 지정하면 문법으로 형식을 강제한다. 구조화 출력이 실패하면 둘 다 일반 응답으로 폴백한다. router 는 첫 단어를 보고 애매하면 `inspect` 로 보내고, verifier 는 비어 있지 않은 첫 줄이 `PASS` 일 때만 통과시킨다.
 - **미들웨어(바깥 → 안).** 도구 스텝 상한 → 승인 게이트(차단 목록 먼저) → 출력 트림·시크릿 가림 → 토큰 예산에 맞춘 이력 트림.
-- **프롬프트.** 에이전트 지시문은 [`src/koda/prompts/`](../src/koda/prompts) 의 마크다운 23개이고, 코드는 컨텍스트 예산 안내·메모리·오늘 날짜만 덧붙인다. 에이전트를 새로 붙이려면 [`agents/specs.py`](../src/koda/agents/specs.py) 의 `AGENTS` 항목과 `prompts/<이름>.md` 를 추가하고, 그 에이전트를 부르는 노드나 도구를 `graph.py` 에 둔다.
+- **프롬프트.** 에이전트 지시문은 [`src/koda/prompts/`](../src/koda/prompts) 의 마크다운 파일이고, 코드는 컨텍스트 예산 안내·메모리·오늘 날짜만 덧붙인다. 에이전트를 새로 붙이려면 [`agents/specs.py`](../src/koda/agents/specs.py) 의 `AGENTS` 항목과 `prompts/<이름>.md` 를 추가하고, 그 에이전트를 부르는 노드나 도구를 `graph.py` 에 둔다.
 
 ## 편집을 판정하는 방식
 
-verifier 는 coder 가 시작할 때 떠 둔 해시 스냅샷 대비 diff(새 파일 포함)와 런타임이 실제로 기록한 도구 호출을 받는다. coder 가 쓴 요약은 "증거가 아닌 주장" 이라고 표시해서 넘긴다. 도구를 한 번도 안 쓰고 바뀐 것도 없으면 LLM 을 부르지 않고 실패 처리하고, 실패하면 그 이유를 들고 한 번 다시 시도한다. 그래도 판정이 fail 이면 `koda run` 은 exit 1 로 끝난다.
+verifier 는 coder 가 시작할 때 떠 둔 해시 스냅샷 대비 diff(새 파일 포함)와 런타임이 실제로 기록한 도구 호출을 받는다. coder 가 쓴 요약은 "증거가 아닌 주장" 이라고 표시해서 넘긴다. 도구를 한 번도 안 쓰고 바뀐 것도 없으면 LLM 을 부르지 않고 실패 처리하고, 실패하면 그 이유를 들고 한 번 다시 시도한다. 그래도 판정이 fail 이면 `koda run` 은 exit 1 로 끝난다. 턴에서 화면 도구를 썼으면 도구 기록 끝에 화면 증거 블록(렌더·파싱·비교 호출과 그 첫 줄, 첫 편집 전에 기준 렌더가 있었는지, 마지막 비교 전문)이 붙고, verifier 는 화면에 대한 coder 의 주장보다 이 블록을 먼저 본다([visual.ko.md](visual.ko.md)).
 
 - 코드: [`diffscan.py`](../src/koda/diffscan.py), [`agents/toollog.py`](../src/koda/agents/toollog.py), [`prompts/verifier.md`](../src/koda/prompts/verifier.md).
 - 최종 판정은 이 증거를 받은 모델 호출이라 정답을 보장하지는 않는다.

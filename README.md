@@ -29,7 +29,7 @@ Installs [uv](https://docs.astral.sh/uv/) if it is missing, then koda and its TU
 uv tool install --python 3.13 "koda[tui] @ git+https://github.com/DONGRYEOLLEE1/koda"
 ```
 
-Pinning a version, installing from a clone, headless installs and uninstalling: [docs/install.md](docs/install.md).
+Pinning a version, installing from a clone, headless installs and uninstalling: [docs/install.md](docs/install.md). The screen tools need the `visual` extra (`koda[tui,visual]`) and a chromium build: [docs/visual.md](docs/visual.md#install).
 
 > [!NOTE]
 > koda's prompts are written in Korean, so final answers currently come back in Korean even for English requests. The CLI help and TUI labels are Korean as well.
@@ -63,6 +63,7 @@ Headless: `koda run "add a sub() function to calc.py and test it" --workspace . 
 
 - **Routes by intent, least privilege first.** A router sends every request to `answer`, `read`, `inspect` or `edit`. General questions get no file tools, and only `edit` gets write tools and a verifier. [How →](docs/architecture.md#routing-least-privilege-first)
 - **Judges edits from the diff and the tool log.** The verifier reads a file-hash diff and the tool calls the runtime actually recorded; the coder's own summary counts as a claim, not evidence. A fail gets one retry; if the verdict is still fail, `koda run` exits 1. The verdict itself is a model call, not a guarantee. [How →](docs/architecture.md#how-an-edit-is-judged)
+- **Uses the screen as evidence.** For screenshot bug fixes, refactors that must not change the screen and design matching, the coder renders the page headless, parses captures with a vision model and diffs two screens in code; the verifier reads that evidence before the coder's claims. Needs the `visual` extra and chromium. [Screen evidence →](docs/visual.md)
 - **A safety floor that `--yolo` can't lift.** A static deny list runs before the approval gate. Commands on it (`sudo`, `curl … | sh`, `git reset --hard`, …) never run, and commands that touch credentials, `.env` or `git push --force` need a person, so `--yolo` refuses them. The deny list is regex-based; the OS sandbox needs Linux with bubblewrap. [Safety model →](docs/safety.md)
 - **Parallel sessions in one TUI.** Each session runs on its own worker. Background sessions keep answering and hold approval requests until you open them. [TUI →](docs/features.md#tui-and-sessions)
 
@@ -111,7 +112,7 @@ A LangGraph `StateGraph` built per turn. Every agent node runs the same middlewa
 | Topic | Guides |
 |---|---|
 | Getting started | [Install](docs/install.md) · [Onboarding](docs/onboarding.md) (Korean) · [TUI guide](docs/tui.md) (Korean) |
-| How it works | [Features](docs/features.md) · [Architecture](docs/architecture.md) · [Safety model](docs/safety.md) |
+| How it works | [Features](docs/features.md) · [Architecture](docs/architecture.md) · [Safety model](docs/safety.md) · [Screen evidence](docs/visual.md) |
 | Configuration | [Settings and providers](docs/configuration.md) · [Per-provider setup](docs/providers/README.md) (Korean) · [MCP](docs/mcp/README.md) (Korean) |
 | Evaluation and development | [Benchmarks](benchmarks/README.md) · [Development](docs/development.md) |
 

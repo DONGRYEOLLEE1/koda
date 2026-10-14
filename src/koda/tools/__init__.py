@@ -13,6 +13,8 @@ DANGEROUS_TOOLS = _SHELL_DANGER | _EDIT_DANGER
 SAFE_TOOLS = {
     "read_file", "search_text", "list_files", "run_readonly_command",
     "read_artifact", "analyze_image", "explore", "skill",
+    # Screen evidence tools: they only read the workspace and write under .koda/renders/.
+    "parse_screen", "render_page", "screen_diff",
 }
 
 __all__ = [

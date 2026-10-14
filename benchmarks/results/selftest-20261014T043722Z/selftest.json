@@ -1,0 +1,2199 @@
+{
+  "created_at": "2026-10-14T04:38:14+00:00",
+  "suite_hash": "8535b3d1a223672c",
+  "cases": [
+    {
+      "task": "v1-screenshot-bugfix",
+      "case": "template",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "h1_in_viewport": true,
+          "h1_visible": true,
+          "h1_hit_test": true,
+          "h1_no_overlap": false,
+          "text_set_equal": true,
+          "header_unchanged": true,
+          "h1_size_kept": true
+        },
+        "h1": {
+          "found": true,
+          "bbox": [
+            0,
+            0,
+            1280,
+            65
+          ],
+          "display": "block",
+          "visibility": "visible",
+          "opacity": 1,
+          "color": "rgb(31, 26, 23)",
+          "hit_tag": "h1"
+        },
+        "h1_height": {
+          "reference": 65,
+          "workspace": 65
+        },
+        "overlaps": [
+          "LINK '노리 커피' [48, 25, 122, 55]",
+          "LINK '메뉴' [514, 28, 541, 52]",
+          "LINK '이야기' [573, 28, 615, 52]",
+          "LINK '오시는 길' [647, 28, 707, 52]",
+          "LINK '문의' [739, 28, 766, 52]",
+          "LINK '예약하기' [1150, 20, 1232, 59]"
+        ],
+        "text_missing": [],
+        "text_extra": [],
+        "header": {
+          "reference": 6,
+          "matched": 6,
+          "missing": [],
+          "tolerance_px": 2
+        },
+        "doc_height": 852,
+        "workspace_changes": {
+          "added": [],
+          "modified": [],
+          "deleted": [],
+          "n_changed": 0
+        }
+      }
+    },
+    {
+      "task": "v1-screenshot-bugfix",
+      "case": "solution",
+      "expect": "pass",
+      "got": "pass",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "h1_in_viewport": true,
+          "h1_visible": true,
+          "h1_hit_test": true,
+          "h1_no_overlap": true,
+          "text_set_equal": true,
+          "header_unchanged": true,
+          "h1_size_kept": true
+        },
+        "h1": {
+          "found": true,
+          "bbox": [
+            308,
+            152,
+            972,
+            217
+          ],
+          "display": "block",
+          "visibility": "visible",
+          "opacity": 1,
+          "color": "rgb(31, 26, 23)",
+          "hit_tag": "h1"
+        },
+        "h1_height": {
+          "reference": 65,
+          "workspace": 65
+        },
+        "overlaps": [],
+        "text_missing": [],
+        "text_extra": [],
+        "header": {
+          "reference": 6,
+          "matched": 6,
+          "missing": [],
+          "tolerance_px": 2
+        },
+        "doc_height": 937,
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/style.css"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v1-screenshot-bugfix",
+      "case": "negative:hide-title",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "h1_in_viewport": false,
+          "h1_visible": false,
+          "h1_hit_test": false,
+          "h1_no_overlap": false,
+          "text_set_equal": false,
+          "header_unchanged": true,
+          "h1_size_kept": false
+        },
+        "h1": {
+          "found": true,
+          "bbox": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "display": "none",
+          "visibility": "visible",
+          "opacity": 1,
+          "color": "rgb(31, 26, 23)",
+          "hit_tag": "header"
+        },
+        "h1_height": {
+          "reference": 65,
+          "workspace": 0
+        },
+        "overlaps": [],
+        "text_missing": [
+          "아침을 깨우는 한 잔"
+        ],
+        "text_extra": [],
+        "header": {
+          "reference": 6,
+          "matched": 6,
+          "missing": [],
+          "tolerance_px": 2
+        },
+        "doc_height": 852,
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/style.css"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v1-screenshot-bugfix",
+      "case": "negative:offscreen-title",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "h1_in_viewport": false,
+          "h1_visible": true,
+          "h1_hit_test": false,
+          "h1_no_overlap": false,
+          "text_set_equal": true,
+          "header_unchanged": true,
+          "h1_size_kept": true
+        },
+        "h1": {
+          "found": true,
+          "bbox": [
+            0,
+            -200,
+            1280,
+            -135
+          ],
+          "display": "block",
+          "visibility": "visible",
+          "opacity": 1,
+          "color": "rgb(31, 26, 23)",
+          "hit_tag": null
+        },
+        "h1_height": {
+          "reference": 65,
+          "workspace": 65
+        },
+        "overlaps": [],
+        "text_missing": [],
+        "text_extra": [],
+        "header": {
+          "reference": 6,
+          "matched": 6,
+          "missing": [],
+          "tolerance_px": 2
+        },
+        "doc_height": 852,
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/style.css"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v1-screenshot-bugfix",
+      "case": "negative:transparent-title",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "h1_in_viewport": true,
+          "h1_visible": false,
+          "h1_hit_test": true,
+          "h1_no_overlap": true,
+          "text_set_equal": true,
+          "header_unchanged": true,
+          "h1_size_kept": true
+        },
+        "h1": {
+          "found": true,
+          "bbox": [
+            308,
+            152,
+            972,
+            217
+          ],
+          "display": "block",
+          "visibility": "visible",
+          "opacity": 1,
+          "color": "rgba(0, 0, 0, 0)",
+          "hit_tag": "h1"
+        },
+        "h1_height": {
+          "reference": 65,
+          "workspace": 65
+        },
+        "overlaps": [],
+        "text_missing": [],
+        "text_extra": [],
+        "header": {
+          "reference": 6,
+          "matched": 6,
+          "missing": [],
+          "tolerance_px": 2
+        },
+        "doc_height": 937,
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/style.css"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v1-screenshot-bugfix",
+      "case": "negative:shift-down",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "h1_in_viewport": true,
+          "h1_visible": true,
+          "h1_hit_test": true,
+          "h1_no_overlap": false,
+          "text_set_equal": true,
+          "header_unchanged": true,
+          "h1_size_kept": true
+        },
+        "h1": {
+          "found": true,
+          "bbox": [
+            0,
+            140,
+            1280,
+            205
+          ],
+          "display": "block",
+          "visibility": "visible",
+          "opacity": 1,
+          "color": "rgb(31, 26, 23)",
+          "hit_tag": "h1"
+        },
+        "h1_height": {
+          "reference": 65,
+          "workspace": 65
+        },
+        "overlaps": [
+          "TEXT '매일 아침 직접 볶은 원두로 내립니다. 산미와 단맛의 균형을 찾는 골목 ' [308, 152, 972, 183]"
+        ],
+        "text_missing": [],
+        "text_extra": [],
+        "header": {
+          "reference": 6,
+          "matched": 6,
+          "missing": [],
+          "tolerance_px": 2
+        },
+        "doc_height": 852,
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/style.css"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v1-screenshot-bugfix",
+      "case": "negative:remove-nav",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "h1_in_viewport": true,
+          "h1_visible": true,
+          "h1_hit_test": true,
+          "h1_no_overlap": true,
+          "text_set_equal": false,
+          "header_unchanged": false,
+          "h1_size_kept": true
+        },
+        "h1": {
+          "found": true,
+          "bbox": [
+            308,
+            152,
+            972,
+            217
+          ],
+          "display": "block",
+          "visibility": "visible",
+          "opacity": 1,
+          "color": "rgb(31, 26, 23)",
+          "hit_tag": "h1"
+        },
+        "h1_height": {
+          "reference": 65,
+          "workspace": 65
+        },
+        "overlaps": [],
+        "text_missing": [
+          "메뉴",
+          "문의",
+          "오시는 길",
+          "이야기"
+        ],
+        "text_extra": [],
+        "header": {
+          "reference": 6,
+          "matched": 1,
+          "missing": [
+            "LINK '메뉴' [514, 28, 541, 52]",
+            "LINK '이야기' [573, 28, 615, 52]",
+            "LINK '오시는 길' [647, 28, 707, 52]",
+            "LINK '문의' [739, 28, 766, 52]",
+            "LINK '예약하기' [1150, 20, 1232, 59]"
+          ],
+          "tolerance_px": 2
+        },
+        "doc_height": 937,
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/index.html",
+            "site/style.css"
+          ],
+          "deleted": [],
+          "n_changed": 2
+        }
+      }
+    },
+    {
+      "task": "v1-screenshot-bugfix",
+      "case": "negative:tiny-title",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "h1_in_viewport": true,
+          "h1_visible": true,
+          "h1_hit_test": true,
+          "h1_no_overlap": true,
+          "text_set_equal": true,
+          "header_unchanged": true,
+          "h1_size_kept": false
+        },
+        "h1": {
+          "found": true,
+          "bbox": [
+            308,
+            152,
+            972,
+            160
+          ],
+          "display": "block",
+          "visibility": "visible",
+          "opacity": 1,
+          "color": "rgb(31, 26, 23)",
+          "hit_tag": "h1"
+        },
+        "h1_height": {
+          "reference": 65,
+          "workspace": 8
+        },
+        "overlaps": [],
+        "text_missing": [],
+        "text_extra": [],
+        "header": {
+          "reference": 6,
+          "matched": 6,
+          "missing": [],
+          "tolerance_px": 2
+        },
+        "doc_height": 879,
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/style.css"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v1-screenshot-bugfix",
+      "case": "negative:clipped-title",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "h1_in_viewport": true,
+          "h1_visible": true,
+          "h1_hit_test": true,
+          "h1_no_overlap": true,
+          "text_set_equal": true,
+          "header_unchanged": true,
+          "h1_size_kept": false
+        },
+        "h1": {
+          "found": true,
+          "bbox": [
+            308,
+            152,
+            972,
+            154
+          ],
+          "display": "block",
+          "visibility": "visible",
+          "opacity": 1,
+          "color": "rgb(31, 26, 23)",
+          "hit_tag": "h1"
+        },
+        "h1_height": {
+          "reference": 65,
+          "workspace": 2
+        },
+        "overlaps": [],
+        "text_missing": [],
+        "text_extra": [],
+        "header": {
+          "reference": 6,
+          "matched": 6,
+          "missing": [],
+          "tolerance_px": 2
+        },
+        "doc_height": 874,
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/style.css"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v1-screenshot-bugfix",
+      "case": "negative:hidden-header",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "h1_in_viewport": true,
+          "h1_visible": true,
+          "h1_hit_test": true,
+          "h1_no_overlap": true,
+          "text_set_equal": true,
+          "header_unchanged": false,
+          "h1_size_kept": true
+        },
+        "h1": {
+          "found": true,
+          "bbox": [
+            0,
+            0,
+            1280,
+            65
+          ],
+          "display": "block",
+          "visibility": "visible",
+          "opacity": 1,
+          "color": "rgb(31, 26, 23)",
+          "hit_tag": "h1"
+        },
+        "h1_height": {
+          "reference": 65,
+          "workspace": 65
+        },
+        "overlaps": [],
+        "text_missing": [],
+        "text_extra": [],
+        "header": {
+          "reference": 6,
+          "matched": 0,
+          "missing": [
+            "LINK '노리 커피' [48, 25, 122, 55]",
+            "LINK '메뉴' [514, 28, 541, 52]",
+            "LINK '이야기' [573, 28, 615, 52]",
+            "LINK '오시는 길' [647, 28, 707, 52]",
+            "LINK '문의' [739, 28, 766, 52]",
+            "LINK '예약하기' [1150, 20, 1232, 59]"
+          ],
+          "tolerance_px": 2
+        },
+        "doc_height": 852,
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/style.css"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v1-screenshot-bugfix",
+      "case": "negative:header-pushed",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "h1_in_viewport": true,
+          "h1_visible": true,
+          "h1_hit_test": true,
+          "h1_no_overlap": true,
+          "text_set_equal": true,
+          "header_unchanged": false,
+          "h1_size_kept": true
+        },
+        "h1": {
+          "found": true,
+          "bbox": [
+            0,
+            0,
+            1280,
+            65
+          ],
+          "display": "block",
+          "visibility": "visible",
+          "opacity": 1,
+          "color": "rgb(31, 26, 23)",
+          "hit_tag": "h1"
+        },
+        "h1_height": {
+          "reference": 65,
+          "workspace": 65
+        },
+        "overlaps": [],
+        "text_missing": [],
+        "text_extra": [],
+        "header": {
+          "reference": 6,
+          "matched": 0,
+          "missing": [
+            "LINK '노리 커피' [48, 25, 122, 55]",
+            "LINK '메뉴' [514, 28, 541, 52]",
+            "LINK '이야기' [573, 28, 615, 52]",
+            "LINK '오시는 길' [647, 28, 707, 52]",
+            "LINK '문의' [739, 28, 766, 52]",
+            "LINK '예약하기' [1150, 20, 1232, 59]"
+          ],
+          "tolerance_px": 2
+        },
+        "doc_height": 928,
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/style.css"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v1-screenshot-bugfix",
+      "case": "positive:alt-fix",
+      "expect": "pass",
+      "got": "pass",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "h1_in_viewport": true,
+          "h1_visible": true,
+          "h1_hit_test": true,
+          "h1_no_overlap": true,
+          "text_set_equal": true,
+          "header_unchanged": true,
+          "h1_size_kept": true
+        },
+        "h1": {
+          "found": true,
+          "bbox": [
+            260,
+            136,
+            1020,
+            201
+          ],
+          "display": "block",
+          "visibility": "visible",
+          "opacity": 1,
+          "color": "rgb(31, 26, 23)",
+          "hit_tag": "h1"
+        },
+        "h1_height": {
+          "reference": 65,
+          "workspace": 65
+        },
+        "overlaps": [],
+        "text_missing": [],
+        "text_extra": [],
+        "header": {
+          "reference": 6,
+          "matched": 6,
+          "missing": [],
+          "tolerance_px": 2
+        },
+        "doc_height": 930,
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/style.css"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v2-card-refactor",
+      "case": "template",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "boxes_unchanged": true,
+          "cards_unchanged": true,
+          "cards_from_js": false,
+          "one_card_literal": false,
+          "one_card_literal_js": true
+        },
+        "boxes": {
+          "reference": 25,
+          "matched": 25,
+          "missing": [],
+          "extra": [],
+          "tolerance_px": 2
+        },
+        "cards": {
+          "reference": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_on": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_off_count": 4,
+          "js_off_card_texts": [
+            "13,200원",
+            "14,000원",
+            "16,500원",
+            "18,000원",
+            "김하늘",
+            "느린 바다",
+            "박서윤",
+            "밤의 도서관",
+            "이도현",
+            "작은 기계들"
+          ]
+        },
+        "card_literals_in_index_html": 4,
+        "scripts": {
+          "site/app.js": {
+            "card_literals": 0,
+            "article_tags": 0
+          }
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [],
+          "deleted": [],
+          "n_changed": 0
+        }
+      }
+    },
+    {
+      "task": "v2-card-refactor",
+      "case": "solution",
+      "expect": "pass",
+      "got": "pass",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "boxes_unchanged": true,
+          "cards_unchanged": true,
+          "cards_from_js": true,
+          "one_card_literal": true,
+          "one_card_literal_js": true
+        },
+        "boxes": {
+          "reference": 25,
+          "matched": 25,
+          "missing": [],
+          "extra": [],
+          "tolerance_px": 2
+        },
+        "cards": {
+          "reference": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_on": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_off_count": 0,
+          "js_off_card_texts": []
+        },
+        "card_literals_in_index_html": 0,
+        "scripts": {
+          "site/app.js": {
+            "card_literals": 1,
+            "article_tags": 1
+          }
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/app.js",
+            "site/index.html"
+          ],
+          "deleted": [],
+          "n_changed": 2
+        }
+      }
+    },
+    {
+      "task": "v2-card-refactor",
+      "case": "negative:layout-shift",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "boxes_unchanged": false,
+          "cards_unchanged": false,
+          "cards_from_js": true,
+          "one_card_literal": true,
+          "one_card_literal_js": true
+        },
+        "boxes": {
+          "reference": 25,
+          "matched": 6,
+          "missing": [
+            "HEADING '밤의 도서관' [145, 424, 349, 451]",
+            "TEXT '김하늘' [145, 455, 349, 476]",
+            "TEXT '14,000원' [145, 488, 349, 512]",
+            "BUTTON '장바구니 담기' [145, 526, 349, 563]",
+            "HEADING '느린 바다' [407, 424, 611, 451]",
+            "TEXT '박서윤' [407, 455, 611, 476]",
+            "TEXT '16,500원' [407, 488, 611, 512]",
+            "BUTTON '장바구니 담기' [407, 526, 611, 563]",
+            "HEADING '정원사의 수첩' [669, 424, 873, 451]",
+            "TEXT '이도현' [669, 455, 873, 476]"
+          ],
+          "extra": [
+            "HEADING '밤의 도서관' [149, 428, 345, 455]",
+            "TEXT '김하늘' [149, 459, 345, 480]",
+            "TEXT '14,000원' [149, 492, 345, 516]",
+            "BUTTON '장바구니 담기' [149, 530, 345, 567]",
+            "HEADING '느린 바다' [411, 428, 607, 455]",
+            "TEXT '박서윤' [411, 459, 607, 480]",
+            "TEXT '16,500원' [411, 492, 607, 516]",
+            "BUTTON '장바구니 담기' [411, 530, 607, 567]",
+            "HEADING '정원사의 수첩' [673, 428, 869, 455]",
+            "TEXT '이도현' [673, 459, 869, 480]"
+          ],
+          "tolerance_px": 2
+        },
+        "cards": {
+          "reference": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_on": [
+            [
+              128,
+              243,
+              366,
+              588
+            ],
+            [
+              390,
+              243,
+              628,
+              588
+            ],
+            [
+              652,
+              243,
+              890,
+              588
+            ],
+            [
+              914,
+              243,
+              1152,
+              588
+            ]
+          ],
+          "js_off_count": 0,
+          "js_off_card_texts": []
+        },
+        "card_literals_in_index_html": 0,
+        "scripts": {
+          "site/app.js": {
+            "card_literals": 1,
+            "article_tags": 1
+          }
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/app.js",
+            "site/index.html",
+            "site/style.css"
+          ],
+          "deleted": [],
+          "n_changed": 3
+        }
+      }
+    },
+    {
+      "task": "v2-card-refactor",
+      "case": "negative:text-drift",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "boxes_unchanged": false,
+          "cards_unchanged": true,
+          "cards_from_js": true,
+          "one_card_literal": true,
+          "one_card_literal_js": true
+        },
+        "boxes": {
+          "reference": 25,
+          "matched": 24,
+          "missing": [
+            "TEXT '13,200원' [669, 488, 873, 512]"
+          ],
+          "extra": [
+            "TEXT '13,500원' [669, 488, 873, 512]"
+          ],
+          "tolerance_px": 2
+        },
+        "cards": {
+          "reference": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_on": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_off_count": 0,
+          "js_off_card_texts": []
+        },
+        "card_literals_in_index_html": 0,
+        "scripts": {
+          "site/app.js": {
+            "card_literals": 1,
+            "article_tags": 1
+          }
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/app.js",
+            "site/index.html"
+          ],
+          "deleted": [],
+          "n_changed": 2
+        }
+      }
+    },
+    {
+      "task": "v2-card-refactor",
+      "case": "negative:still-duplicated",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "boxes_unchanged": true,
+          "cards_unchanged": true,
+          "cards_from_js": false,
+          "one_card_literal": false,
+          "one_card_literal_js": true
+        },
+        "boxes": {
+          "reference": 25,
+          "matched": 25,
+          "missing": [],
+          "extra": [],
+          "tolerance_px": 2
+        },
+        "cards": {
+          "reference": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_on": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_off_count": 4,
+          "js_off_card_texts": [
+            "13,200원",
+            "14,000원",
+            "16,500원",
+            "18,000원",
+            "김하늘",
+            "느린 바다",
+            "박서윤",
+            "밤의 도서관",
+            "이도현",
+            "작은 기계들"
+          ]
+        },
+        "card_literals_in_index_html": 4,
+        "scripts": {
+          "site/app.js": {
+            "card_literals": 1,
+            "article_tags": 1
+          }
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/app.js"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v2-card-refactor",
+      "case": "negative:still-duplicated-quotes",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "boxes_unchanged": true,
+          "cards_unchanged": true,
+          "cards_from_js": false,
+          "one_card_literal": false,
+          "one_card_literal_js": true
+        },
+        "boxes": {
+          "reference": 25,
+          "matched": 25,
+          "missing": [],
+          "extra": [],
+          "tolerance_px": 2
+        },
+        "cards": {
+          "reference": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_on": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_off_count": 4,
+          "js_off_card_texts": [
+            "13,200원",
+            "14,000원",
+            "16,500원",
+            "18,000원",
+            "김하늘",
+            "느린 바다",
+            "박서윤",
+            "밤의 도서관",
+            "이도현",
+            "작은 기계들"
+          ]
+        },
+        "card_literals_in_index_html": 4,
+        "scripts": {
+          "site/app.js": {
+            "card_literals": 1,
+            "article_tags": 1
+          }
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/app.js",
+            "site/index.html"
+          ],
+          "deleted": [],
+          "n_changed": 2
+        }
+      }
+    },
+    {
+      "task": "v2-card-refactor",
+      "case": "negative:module-script",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "boxes_unchanged": false,
+          "cards_unchanged": false,
+          "cards_from_js": false,
+          "one_card_literal": true,
+          "one_card_literal_js": true
+        },
+        "boxes": {
+          "reference": 25,
+          "matched": 6,
+          "missing": [
+            "HEADING '밤의 도서관' [145, 424, 349, 451]",
+            "TEXT '김하늘' [145, 455, 349, 476]",
+            "TEXT '14,000원' [145, 488, 349, 512]",
+            "BUTTON '장바구니 담기' [145, 526, 349, 563]",
+            "HEADING '느린 바다' [407, 424, 611, 451]",
+            "TEXT '박서윤' [407, 455, 611, 476]",
+            "TEXT '16,500원' [407, 488, 611, 512]",
+            "BUTTON '장바구니 담기' [407, 526, 611, 563]",
+            "HEADING '정원사의 수첩' [669, 424, 873, 451]",
+            "TEXT '이도현' [669, 455, 873, 476]"
+          ],
+          "extra": [
+            "HEADING '이번 달 행사' [128, 316, 1152, 349]",
+            "TEXT '매주 토요일 오후 3시, 추천 도서 낭독회가 열립니다.' [128, 357, 1152, 381]",
+            "TEXT '골목 책방 · 서울 종로구 자하문로 7 · 화-일 11:00-20:00' [48, 458, 1232, 479]"
+          ],
+          "tolerance_px": 2
+        },
+        "cards": {
+          "reference": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_on": [],
+          "js_off_count": 0,
+          "js_off_card_texts": []
+        },
+        "card_literals_in_index_html": 0,
+        "scripts": {
+          "site/app.js": {
+            "card_literals": 1,
+            "article_tags": 1
+          }
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/app.js",
+            "site/index.html"
+          ],
+          "deleted": [],
+          "n_changed": 2
+        }
+      }
+    },
+    {
+      "task": "v2-card-refactor",
+      "case": "negative:renamed-class",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "boxes_unchanged": true,
+          "cards_unchanged": true,
+          "cards_from_js": false,
+          "one_card_literal": true,
+          "one_card_literal_js": true
+        },
+        "boxes": {
+          "reference": 25,
+          "matched": 25,
+          "missing": [],
+          "extra": [],
+          "tolerance_px": 2
+        },
+        "cards": {
+          "reference": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_on": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_off_count": 0,
+          "js_off_card_texts": [
+            "13,200원",
+            "14,000원",
+            "16,500원",
+            "18,000원",
+            "김하늘",
+            "느린 바다",
+            "박서윤",
+            "밤의 도서관",
+            "이도현",
+            "작은 기계들"
+          ]
+        },
+        "card_literals_in_index_html": 0,
+        "scripts": {
+          "site/app.js": {
+            "card_literals": 0,
+            "article_tags": 0
+          }
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/app.js",
+            "site/index.html"
+          ],
+          "deleted": [],
+          "n_changed": 2
+        }
+      }
+    },
+    {
+      "task": "v2-card-refactor",
+      "case": "negative:markup-blob",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "boxes_unchanged": true,
+          "cards_unchanged": true,
+          "cards_from_js": true,
+          "one_card_literal": true,
+          "one_card_literal_js": false
+        },
+        "boxes": {
+          "reference": 25,
+          "matched": 25,
+          "missing": [],
+          "extra": [],
+          "tolerance_px": 2
+        },
+        "cards": {
+          "reference": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_on": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_off_count": 0,
+          "js_off_card_texts": []
+        },
+        "card_literals_in_index_html": 0,
+        "scripts": {
+          "site/app.js": {
+            "card_literals": 4,
+            "article_tags": 4
+          }
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/app.js",
+            "site/index.html"
+          ],
+          "deleted": [],
+          "n_changed": 2
+        }
+      }
+    },
+    {
+      "task": "v2-card-refactor",
+      "case": "positive:template-tag",
+      "expect": "pass",
+      "got": "pass",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "boxes_unchanged": true,
+          "cards_unchanged": true,
+          "cards_from_js": true,
+          "one_card_literal": true,
+          "one_card_literal_js": true
+        },
+        "boxes": {
+          "reference": 25,
+          "matched": 25,
+          "missing": [],
+          "extra": [],
+          "tolerance_px": 2
+        },
+        "cards": {
+          "reference": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_on": [
+            [
+              128,
+              243,
+              366,
+              580
+            ],
+            [
+              390,
+              243,
+              628,
+              580
+            ],
+            [
+              652,
+              243,
+              890,
+              580
+            ],
+            [
+              914,
+              243,
+              1152,
+              580
+            ]
+          ],
+          "js_off_count": 0,
+          "js_off_card_texts": []
+        },
+        "card_literals_in_index_html": 1,
+        "scripts": {
+          "site/app.js": {
+            "card_literals": 0,
+            "article_tags": 0
+          }
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/app.js",
+            "site/index.html"
+          ],
+          "deleted": [],
+          "n_changed": 2
+        }
+      }
+    },
+    {
+      "task": "v3-design-gap",
+      "case": "template",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "required_texts": false,
+          "section_order": false,
+          "section_position": false
+        },
+        "texts": {
+          "생각을 물결처럼 기록하세요": false,
+          "주요 기능": true,
+          "요금제": true,
+          "자주 묻는 질문": false,
+          "무료로 시작하기": false,
+          "공유 링크": false,
+          "월 4,900원": false,
+          "프로 시작하기": false
+        },
+        "sections": [
+          {
+            "title": "생각을 물결처럼 기록하세요",
+            "ref_top": 148,
+            "top": null,
+            "delta": null
+          },
+          {
+            "title": "주요 기능",
+            "ref_top": 450,
+            "top": 450,
+            "delta": 0
+          },
+          {
+            "title": "요금제",
+            "ref_top": 771,
+            "top": null,
+            "delta": null
+          },
+          {
+            "title": "자주 묻는 질문",
+            "ref_top": 1190,
+            "top": null,
+            "delta": null
+          }
+        ],
+        "tolerance_px": 77.4,
+        "doc_height": {
+          "reference": 1548,
+          "workspace": 800
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [],
+          "deleted": [],
+          "n_changed": 0
+        }
+      }
+    },
+    {
+      "task": "v3-design-gap",
+      "case": "solution",
+      "expect": "pass",
+      "got": "pass",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "required_texts": true,
+          "section_order": true,
+          "section_position": true
+        },
+        "texts": {
+          "생각을 물결처럼 기록하세요": true,
+          "주요 기능": true,
+          "요금제": true,
+          "자주 묻는 질문": true,
+          "무료로 시작하기": true,
+          "공유 링크": true,
+          "월 4,900원": true,
+          "프로 시작하기": true
+        },
+        "sections": [
+          {
+            "title": "생각을 물결처럼 기록하세요",
+            "ref_top": 148,
+            "top": 148,
+            "delta": 0
+          },
+          {
+            "title": "주요 기능",
+            "ref_top": 450,
+            "top": 450,
+            "delta": 0
+          },
+          {
+            "title": "요금제",
+            "ref_top": 771,
+            "top": 771,
+            "delta": 0
+          },
+          {
+            "title": "자주 묻는 질문",
+            "ref_top": 1190,
+            "top": 1190,
+            "delta": 0
+          }
+        ],
+        "tolerance_px": 77.4,
+        "doc_height": {
+          "reference": 1548,
+          "workspace": 1548
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/index.html"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v3-design-gap",
+      "case": "negative:missing-section",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "required_texts": false,
+          "section_order": false,
+          "section_position": false
+        },
+        "texts": {
+          "생각을 물결처럼 기록하세요": true,
+          "주요 기능": true,
+          "요금제": true,
+          "자주 묻는 질문": true,
+          "무료로 시작하기": true,
+          "공유 링크": true,
+          "월 4,900원": false,
+          "프로 시작하기": false
+        },
+        "sections": [
+          {
+            "title": "생각을 물결처럼 기록하세요",
+            "ref_top": 148,
+            "top": 148,
+            "delta": 0
+          },
+          {
+            "title": "주요 기능",
+            "ref_top": 450,
+            "top": 450,
+            "delta": 0
+          },
+          {
+            "title": "요금제",
+            "ref_top": 771,
+            "top": null,
+            "delta": null
+          },
+          {
+            "title": "자주 묻는 질문",
+            "ref_top": 1190,
+            "top": 771,
+            "delta": -419
+          }
+        ],
+        "tolerance_px": 77.4,
+        "doc_height": {
+          "reference": 1548,
+          "workspace": 1129
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/index.html"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v3-design-gap",
+      "case": "negative:wrong-order",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "required_texts": true,
+          "section_order": false,
+          "section_position": false
+        },
+        "texts": {
+          "생각을 물결처럼 기록하세요": true,
+          "주요 기능": true,
+          "요금제": true,
+          "자주 묻는 질문": true,
+          "무료로 시작하기": true,
+          "공유 링크": true,
+          "월 4,900원": true,
+          "프로 시작하기": true
+        },
+        "sections": [
+          {
+            "title": "생각을 물결처럼 기록하세요",
+            "ref_top": 148,
+            "top": 148,
+            "delta": 0
+          },
+          {
+            "title": "주요 기능",
+            "ref_top": 450,
+            "top": 450,
+            "delta": 0
+          },
+          {
+            "title": "요금제",
+            "ref_top": 771,
+            "top": 1194,
+            "delta": 423
+          },
+          {
+            "title": "자주 묻는 질문",
+            "ref_top": 1190,
+            "top": 771,
+            "delta": -419
+          }
+        ],
+        "tolerance_px": 77.4,
+        "doc_height": {
+          "reference": 1548,
+          "workspace": 1548
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/index.html"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v3-design-gap",
+      "case": "negative:text-mismatch",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "required_texts": false,
+          "section_order": false,
+          "section_position": false
+        },
+        "texts": {
+          "생각을 물결처럼 기록하세요": true,
+          "주요 기능": true,
+          "요금제": true,
+          "자주 묻는 질문": false,
+          "무료로 시작하기": true,
+          "공유 링크": true,
+          "월 4,900원": true,
+          "프로 시작하기": true
+        },
+        "sections": [
+          {
+            "title": "생각을 물결처럼 기록하세요",
+            "ref_top": 148,
+            "top": 148,
+            "delta": 0
+          },
+          {
+            "title": "주요 기능",
+            "ref_top": 450,
+            "top": 450,
+            "delta": 0
+          },
+          {
+            "title": "요금제",
+            "ref_top": 771,
+            "top": 771,
+            "delta": 0
+          },
+          {
+            "title": "자주 묻는 질문",
+            "ref_top": 1190,
+            "top": null,
+            "delta": null
+          }
+        ],
+        "tolerance_px": 77.4,
+        "doc_height": {
+          "reference": 1548,
+          "workspace": 1548
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/index.html"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v3-design-gap",
+      "case": "negative:feature-name-kept",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "required_texts": false,
+          "section_order": true,
+          "section_position": true
+        },
+        "texts": {
+          "생각을 물결처럼 기록하세요": true,
+          "주요 기능": true,
+          "요금제": true,
+          "자주 묻는 질문": true,
+          "무료로 시작하기": true,
+          "공유 링크": false,
+          "월 4,900원": true,
+          "프로 시작하기": true
+        },
+        "sections": [
+          {
+            "title": "생각을 물결처럼 기록하세요",
+            "ref_top": 148,
+            "top": 148,
+            "delta": 0
+          },
+          {
+            "title": "주요 기능",
+            "ref_top": 450,
+            "top": 450,
+            "delta": 0
+          },
+          {
+            "title": "요금제",
+            "ref_top": 771,
+            "top": 771,
+            "delta": 0
+          },
+          {
+            "title": "자주 묻는 질문",
+            "ref_top": 1190,
+            "top": 1190,
+            "delta": 0
+          }
+        ],
+        "tolerance_px": 77.4,
+        "doc_height": {
+          "reference": 1548,
+          "workspace": 1548
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/index.html"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v3-design-gap",
+      "case": "negative:hidden-cta",
+      "expect": "fail",
+      "got": "fail",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "required_texts": false,
+          "section_order": true,
+          "section_position": true
+        },
+        "texts": {
+          "생각을 물결처럼 기록하세요": true,
+          "주요 기능": true,
+          "요금제": true,
+          "자주 묻는 질문": true,
+          "무료로 시작하기": false,
+          "공유 링크": true,
+          "월 4,900원": true,
+          "프로 시작하기": true
+        },
+        "sections": [
+          {
+            "title": "생각을 물결처럼 기록하세요",
+            "ref_top": 148,
+            "top": 148,
+            "delta": 0
+          },
+          {
+            "title": "주요 기능",
+            "ref_top": 450,
+            "top": 450,
+            "delta": 0
+          },
+          {
+            "title": "요금제",
+            "ref_top": 771,
+            "top": 771,
+            "delta": 0
+          },
+          {
+            "title": "자주 묻는 질문",
+            "ref_top": 1190,
+            "top": 1190,
+            "delta": 0
+          }
+        ],
+        "tolerance_px": 77.4,
+        "doc_height": {
+          "reference": 1548,
+          "workspace": 1548
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/index.html"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    },
+    {
+      "task": "v3-design-gap",
+      "case": "positive:extra-footer",
+      "expect": "pass",
+      "got": "pass",
+      "ok": true,
+      "detail": {
+        "checks": {
+          "required_texts": true,
+          "section_order": true,
+          "section_position": true
+        },
+        "texts": {
+          "생각을 물결처럼 기록하세요": true,
+          "주요 기능": true,
+          "요금제": true,
+          "자주 묻는 질문": true,
+          "무료로 시작하기": true,
+          "공유 링크": true,
+          "월 4,900원": true,
+          "프로 시작하기": true
+        },
+        "sections": [
+          {
+            "title": "생각을 물결처럼 기록하세요",
+            "ref_top": 148,
+            "top": 148,
+            "delta": 0
+          },
+          {
+            "title": "주요 기능",
+            "ref_top": 450,
+            "top": 450,
+            "delta": 0
+          },
+          {
+            "title": "요금제",
+            "ref_top": 771,
+            "top": 771,
+            "delta": 0
+          },
+          {
+            "title": "자주 묻는 질문",
+            "ref_top": 1190,
+            "top": 1190,
+            "delta": 0
+          }
+        ],
+        "tolerance_px": 77.4,
+        "doc_height": {
+          "reference": 1548,
+          "workspace": 1627
+        },
+        "workspace_changes": {
+          "added": [],
+          "modified": [
+            "site/index.html"
+          ],
+          "deleted": [],
+          "n_changed": 1
+        }
+      }
+    }
+  ],
+  "all_ok": true
+}

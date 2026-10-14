@@ -23,12 +23,14 @@ The model decides what to call; code enforces gates, caps and the sandbox.
 
 | | Tools |
 |---|---|
-| Read, no approval | `read_file` (line numbers, ranges) · `list_files` · `search_text` (capped, glob) · `run_readonly_command` · `explore` · `read_artifact` · `analyze_image` · `skill` |
+| Read, no approval | `read_file` (line numbers, ranges) · `list_files` · `search_text` (capped, glob) · `run_readonly_command` · `explore` · `read_artifact` · `analyze_image` · `parse_screen` · `render_page` · `screen_diff` · `skill` |
 | Change, approval | `write_file` · `edit_file` · `multi_edit` · `patch_file` · `create_dir` · `delete_path` · `run_command` |
 
 - Edits are atomic: temp file plus `os.replace`, keeping the exec bit and CRLF. `multi_edit` is all-or-nothing, `patch_file` checks an anchor for drift, and a mismatch returns near-miss candidates.
 - At the default budget, tool output over 8,000 characters (3,000 for web search and crawl tools) is cut; both caps grow with `CONTEXT_BUDGET_TOKENS`. The redacted original stays in `.koda/artifacts/` for `read_artifact`.
 - Skills: put `skills/<name>/SKILL.md` in the workspace; agents see the list and load a body on demand.
+
+- Screen evidence: `render_page` renders a workspace HTML file or a localhost URL in headless chromium, `parse_screen` turns a capture or a render into a list of UI elements with a vision model, and `screen_diff` compares two screens in code. Results go under `.koda/renders/` and the verifier reads them. Needs the `visual` extra: [visual.md](visual.md).
 
 What each tool may touch, and what `--yolo` changes: [safety.md](safety.md).
 

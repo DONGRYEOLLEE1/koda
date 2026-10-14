@@ -6,8 +6,9 @@
 """koda KPI benchmark driver: koda vs opencode vs hermes on the same model (DeepSeek deepseek-flash).
 
   uv run benchmarks/run.py list
-  uv run benchmarks/run.py selftest                    # offline: every check FAILs on its negative fixtures
-                                                       # and PASSes on the reference solution
+  uv run benchmarks/run.py selftest                    # no model: every check FAILs on its negative fixtures
+                                                       # and PASSes on the reference solution (the first run
+                                                       # downloads chromium for the visual tasks)
   uv run benchmarks/run.py run --dry-run               # 1 rep per task (+ warm-up), pipeline end-to-end
   uv run benchmarks/run.py run --run-id main-YYYYMMDD  # full run: reps from task.yaml (5 or 3)
   uv run benchmarks/run.py rejudge --run-id ID --reason "..."   # re-run checks on kept artifacts
@@ -16,8 +17,9 @@ Design (see benchmarks/README.md):
   * A round is (task, rep). The three tools run *concurrently* in a round, each in a fresh copy of the task
     template, so latency, provider prompt cache and peak/off-peak effects hit all tools in the same window.
   * Round order is shuffled with a fixed seed. Each invocation starts with one discarded warm-up round.
-  * Every run: template -> new directory (+ git init, optional setup.sh, a .venv with pytest), 300 s timeout,
-    then the task's check.py judges the result independently of the tool's own exit code.
+  * Every run: template -> new directory (+ git init, optional setup.sh, a .venv with pytest), 300 s timeout
+    (task.yaml `timeout_s` can raise it), then the task's check.py judges the result independently of the
+    tool's own exit code.
   * Results: results/<run_id>/<task>/<tool>/<rep>/{meta.json, check.json, answer.txt, run.json}.
     Raw artifacts (workspaces, proxy logs, stdout) stay in the work dir outside the repo.
   * Restartable: runs that already have check.json are skipped.
@@ -49,6 +51,10 @@ RUNNERS_DIR = BENCH_DIR / "runners"
 RESULTS_DIR = BENCH_DIR / "results"
 TOOLS = ("koda", "opencode", "hermes")
 PYTEST_VERSION = os.environ.get("BENCH_PYTEST_VERSION", "9.1.1")
+# Pinned for the checker venv; the visual tasks' checks render with it (task.yaml `needs: [playwright]`).
+BENCH_PLAYWRIGHT_VERSION = "1.64.0"
+KNOWN_NEEDS = {"playwright"}
+DEFAULT_TIMEOUT_S = 300
 WS_PYTHON = os.environ.get("BENCH_WS_PYTHON", "3.13")
 STRUCTURED_SCHEMA_NAMES = {"_Route", "Verdict", "MemoryJudgement"}
 DEFAULT_SEED = 20261001
@@ -103,7 +109,16 @@ class Task:
 
     @property
     def timeout(self) -> int:
-        return int(self.cfg.get("timeout_s", 300))
+        return int(self.cfg.get("timeout_s", DEFAULT_TIMEOUT_S))
+
+    @property
+    def needs(self) -> set[str]:
+        """Extra packages the task's check.py imports in the checker venv (task.yaml `needs`)."""
+        needs = set(self.cfg.get("needs") or [])
+        unknown = needs - KNOWN_NEEDS
+        if unknown:
+            sys.exit(f"{self.id}: unknown needs {sorted(unknown)} (known: {sorted(KNOWN_NEEDS)})")
+        return needs
 
 
 def load_tasks(selected: list[str] | None = None, include_warmup: bool = False) -> list[Task]:
@@ -146,27 +161,70 @@ def assert_outside_git(path: Path) -> None:
                  "to a directory outside any repo so agents' git commands cannot reach it.")
 
 
-def ensure_checker_venv() -> Path:
-    """A private interpreter with pytest for check.py (never the agent's workspace venv)."""
+def ensure_checker_venv(needs: set[str] | None = None) -> Path:
+    """A private interpreter with pytest for check.py (never the agent's workspace venv).
+
+    With "playwright" in `needs` it also holds playwright==BENCH_PLAYWRIGHT_VERSION and its chromium. Both
+    steps are idempotent; the first one downloads the browser (network), later ones are no-ops.
+    """
     venv = WORK_ROOT / "_checker-venv"
     py = venv / "bin" / "python"
     if not py.exists():
         run(["uv", "venv", "-q", "--python", WS_PYTHON, venv])
         run(["uv", "pip", "install", "-q", "--python", py, f"pytest=={PYTEST_VERSION}"])
+    if "playwright" in (needs or ()):
+        have = run([py, "-c", "from importlib.metadata import version; print(version('playwright'))"],
+                   check=False).stdout.strip()
+        if have != BENCH_PLAYWRIGHT_VERSION:
+            run(["uv", "pip", "install", "-q", "--python", py, f"playwright=={BENCH_PLAYWRIGHT_VERSION}"])
+        run([py, "-m", "playwright", "install", "chromium"], timeout=900)
     return py
 
 
-def read_key() -> str:
-    """DeepSeek key via runners/load_key.sh, kept in memory only (used to scrub artifacts)."""
-    cp = subprocess.run(["bash", "-c", '. "$1/load_key.sh" >/dev/null 2>&1 && printf %s "$DEEPSEEK_API_KEY"',
+def needs_of(tasks: list[Task]) -> set[str]:
+    return {n for t in tasks for n in t.needs}
+
+
+def _key_from_env_file(name: str) -> str:
+    cp = subprocess.run(["bash", "-c", f'. "$1/load_key.sh" >/dev/null 2>&1; printf %s "${{{name}:-}}"',
                          "_", str(RUNNERS_DIR)], capture_output=True, text=True,
                         env={**os.environ, "KODA_DIR": str(KODA_DIR)})
     return cp.stdout.strip()
 
 
-def scrub_secret(root: Path, secret: str) -> int:
-    """Replace the real API key in every text file under root. Returns the number of files changed."""
-    if not secret or not root.exists():
+def read_key() -> str:
+    """DeepSeek key via runners/load_key.sh, kept in memory only (used to scrub artifacts)."""
+    return _key_from_env_file("DEEPSEEK_API_KEY")
+
+
+# Shorter values are placeholders local servers accept ("none", "EMPTY", "ollama", "sk-1234"); scrubbing them
+# would rewrite ordinary text in the judged workspace ("display: none") into [REDACTED:API_KEY].
+MIN_SECRET_LEN = 16
+
+
+def looks_like_secret(value: str) -> bool:
+    return len(value) >= MIN_SECRET_LEN and not value.isalpha()
+
+
+def read_secrets() -> list[str]:
+    """Every key the runners hand to a tool (DeepSeek, and the vision endpoint's when set) that looks like a
+    real secret, for scrubbing. A placeholder vision key is reported and left alone."""
+    keys = []
+    for name in ("DEEPSEEK_API_KEY", "VISION_API_KEY"):
+        value = _key_from_env_file(name)
+        if not value or value in keys:
+            continue
+        if not looks_like_secret(value):
+            log(f"{name} looks like a placeholder ({len(value)} chars); not scrubbed from artifacts")
+            continue
+        keys.append(value)
+    return keys
+
+
+def scrub_secret(root: Path, secrets: str | list[str]) -> int:
+    """Replace the real API keys in every text file under root. Returns the number of files changed."""
+    secrets = [s for s in ([secrets] if isinstance(secrets, str) else secrets) if s]
+    if not secrets or not root.exists():
         return 0
     n = 0
     for dp, dns, fns in os.walk(root):
@@ -179,8 +237,11 @@ def scrub_secret(root: Path, secret: str) -> int:
                 data = p.read_bytes()
             except OSError:
                 continue
-            if secret.encode() in data:
-                p.write_bytes(data.replace(secret.encode(), b"[REDACTED:DEEPSEEK_API_KEY]"))
+            new = data
+            for s in secrets:
+                new = new.replace(s.encode(), b"[REDACTED:API_KEY]")
+            if new != data:
+                p.write_bytes(new)
                 n += 1
     return n
 
@@ -297,6 +358,7 @@ def prepare_workspace(task: Task, p: RunPaths) -> dict:
 def run_check(task: Task, p: RunPaths, checker_py: Path, tool_home: Path | None = None) -> dict:
     env = dict(os.environ)
     env.pop("BENCH_TOOL_HOME", None)
+    env["KODA_DIR"] = str(KODA_DIR)   # _lib/domboxes.py loads koda's DOM extraction JS from the repo
     if tool_home is not None:
         env["BENCH_TOOL_HOME"] = str(tool_home)   # harness snapshot stores (g4)
     try:
@@ -392,6 +454,7 @@ class Ctx:
     timeout_override: int | None = None
     hermes_baseline: Path | None = None
     reviewer_chars: int | None = None
+    secrets: list[str] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
@@ -427,11 +490,13 @@ def move_hermes_volatile(dst: Path) -> list[str]:
 
 # ------------------------------------------------------------------------ outside-the-workspace audit
 TMP_ROOT = Path("/tmp").resolve()
+# Scratch entries chromium itself makes while koda's render_page runs; they are not the model writing to /tmp.
+TMP_AUDIT_IGNORE_PREFIXES = ("playwright_chromiumdev_profile-", "playwright-artifacts-", ".org.chromium.Chromium.")
 
 
 def tmp_listing() -> set[str]:
     try:
-        return set(os.listdir(TMP_ROOT))
+        return {n for n in os.listdir(TMP_ROOT) if not n.startswith(TMP_AUDIT_IGNORE_PREFIXES)}
     except OSError:
         return set()
 
@@ -507,7 +572,8 @@ def infra_flags(meta: dict, reqs: list[dict], runner_rc: int | None) -> dict:
 
 def postprocess(ctx: Ctx, task: Task, tool: str, rep: str, p: RunPaths, round_info: dict, res_path: Path,
                 tmp_created: set[str] | None = None, runner_rc: int | None = None) -> dict:
-    scrubbed = scrub_secret(p.out, ctx.key) + scrub_secret(p.ws, ctx.key)
+    secrets = ctx.secrets or ([ctx.key] if looks_like_secret(ctx.key) else [])
+    scrubbed = scrub_secret(p.out, secrets) + scrub_secret(p.ws, secrets)
     answer = extract_answer(tool, p.out)
     (p.out / "answer.txt").write_text(answer, encoding="utf-8")
     tc = build_tool_calls(p.out)
@@ -691,11 +757,15 @@ def lock_run_dirs(lock: bool) -> list[str]:
 
 def prepare_koda_venv() -> dict:
     """koda runs with its venv interpreter directly (see run_koda.sh). Sync the venv once, exactly like the
-    `uv run --project` the runner used before (inexact, lockfile untouched)."""
-    run(["uv", "run", "--quiet", "--frozen", "--project", KODA_DIR, "python", "-c", "import koda"], cwd=KODA_DIR)
+    `uv run --project` the runner used before (inexact, lockfile untouched), with the tui and visual extras so
+    render_page has playwright; the browser itself comes from PLAYWRIGHT_BROWSERS_PATH (run_koda.sh)."""
+    run(["uv", "run", "--quiet", "--frozen", "--project", KODA_DIR, "--extra", "tui", "--extra", "visual",
+         "python", "-c", "import koda"], cwd=KODA_DIR)
     py = KODA_DIR / ".venv" / "bin" / "python"
     ver = run([py, "-c", "import sys; print(sys.version.split()[0])"], check=False).stdout.strip()
-    return {"interpreter": "<koda>/.venv/bin/python", "python": ver}
+    pw = run([py, "-c", "from importlib.metadata import version; print(version('playwright'))"],
+             check=False).stdout.strip() or None
+    return {"interpreter": "<koda>/.venv/bin/python", "python": ver, "playwright": pw}
 
 
 def archive_rerun(ctx: Ctx, target: str, reason: str, manifest: dict) -> None:
@@ -732,9 +802,11 @@ def cmd_run(args) -> int:
     key = read_key()
     if not key:
         sys.exit("DEEPSEEK_API_KEY not available (export it or put it in $KODA_DIR/.env)")
+    needs = needs_of(tasks)
     ctx = Ctx(run_id=run_id, run_dir=WORK_ROOT / run_id, res_dir=RESULTS_DIR / run_id,
-              checker_py=ensure_checker_venv(), key=key, san=Sanitizer(), effort=args.effort,
-              proxy="1", timeout_override=args.timeout, reviewer_chars=koda_reviewer_prompt_chars())
+              checker_py=ensure_checker_venv(needs), key=key, san=Sanitizer(), effort=args.effort,
+              proxy="1", timeout_override=args.timeout, reviewer_chars=koda_reviewer_prompt_chars(),
+              secrets=read_secrets())
     ctx.run_dir.mkdir(parents=True, exist_ok=True)
     (ctx.run_dir / "runs").mkdir(exist_ok=True)
     ctx.res_dir.mkdir(parents=True, exist_ok=True)
@@ -758,11 +830,15 @@ def cmd_run(args) -> int:
     manifest.update({
         "run_id": run_id, "mode": "dry-run" if args.dry_run else "full",
         "created_at": manifest.get("created_at") or utcnow(), "seed": args.seed, "tools": args.tools,
-        "tasks": {t.id: {"category": t.category, "reps": reps[t.id], "title": t.cfg.get("title")} for t in tasks},
-        "schedule": schedule, "timeout_s": args.timeout or 300, "effort_requested": args.effort,
+        "tasks": {t.id: {"category": t.category, "reps": reps[t.id], "title": t.cfg.get("title"),
+                         "timeout_s": args.timeout or t.timeout} for t in tasks},
+        "schedule": schedule, "timeout_s": args.timeout or DEFAULT_TIMEOUT_S,
+        "timeout_overrides": {} if args.timeout else {t.id: t.timeout for t in tasks if t.timeout != DEFAULT_TIMEOUT_S},
+        "effort_requested": args.effort,
         "koda_commit": git_rev(KODA_DIR), "suite_hash": suite_hash(), "host": {
             "os": platform.platform(), "machine": platform.machine(), "python_ws": WS_PYTHON,
-            "pytest": PYTEST_VERSION},
+            "pytest": PYTEST_VERSION,
+            "playwright_checker": BENCH_PLAYWRIGHT_VERSION if "playwright" in needs else None},
         "koda_launch": koda_env,
         "isolation": {
             "tool_env": "allowlist (runners/common.sh BENCH_ENV_ALLOW_BASE + per-tool BENCH_TOOL_ENV), TERM pinned",
@@ -825,9 +901,13 @@ def apply_fixture(fx: Path, p: RunPaths) -> None:
 
 
 def cmd_selftest(args) -> int:
+    """Run every task's check.py on its fixtures without any model: the template must fail, solution/ and
+    positives/ must pass, negatives/ must fail. Needs no API key and no network, except that the first
+    self-test of a task with `needs: [playwright]` installs playwright into the checker venv and downloads
+    chromium."""
     assert_outside_git(WORK_ROOT)
     tasks = load_tasks(args.tasks, include_warmup=True)
-    checker = ensure_checker_venv()
+    checker = ensure_checker_venv(needs_of(tasks))
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = WORK_ROOT / f"selftest-{stamp}"
     san = Sanitizer()
@@ -870,7 +950,7 @@ def cmd_rejudge(args) -> int:
         sys.exit(f"no run {args.run_id}")
     manifest = json.loads(manifest_p.read_text())
     tasks = load_tasks(args.tasks)
-    checker = ensure_checker_venv()
+    checker = ensure_checker_venv(needs_of(tasks))
     san = Sanitizer()
     changes, n = [], 0
     for t in tasks:

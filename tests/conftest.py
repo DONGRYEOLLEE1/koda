@@ -10,7 +10,7 @@ from koda.workspace import Workspace
 # 결과가 사람마다 갈린다(koda 로 koda 를 개발하면 이 변수들이 셸에 상주한다). 값이 필요한 테스트는
 # monkeypatch.setenv 로 직접 세운다.
 _SETTINGS_ENV_PREFIXES = ("OPENAI_", "LOCAL_", "DEEPSEEK_", "LANGFUSE_", "KODA_",
-                          "THINKING_BUDGET_", "REASONING_")
+                          "THINKING_BUDGET_", "REASONING_", "VISION_")
 _SETTINGS_ENV_NAMES = ("MODEL", "PRIMARY", "FALLBACK_ENABLED", "STRUCTURED_METHOD",
                        "CONTEXT_BUDGET_TOKENS")
 

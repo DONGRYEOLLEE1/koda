@@ -6,8 +6,10 @@
 #   BENCH_STATE_DIR   Root for competitor installs and isolated homes. Default: $HOME/.cache/koda-bench
 #   BENCH_TOOLS_DIR   Where opencode / hermes are installed (setup_competitors.sh). Default: $BENCH_STATE_DIR/tools
 #   BENCH_HOME        Parent of the per-tool isolated HOME dirs. Default: $BENCH_STATE_DIR/home
-#   BENCH_ENV_FILE    .env to read DEEPSEEK_API_KEY / DEEPSEEK_MODEL from when they are not already exported.
-#                     Default: $KODA_DIR/.env
+#   BENCH_ENV_FILE    .env to read DEEPSEEK_API_KEY / DEEPSEEK_MODEL (and VISION_* for koda's screen tools)
+#                     from when they are not already exported. Default: $KODA_DIR/.env
+#   PLAYWRIGHT_BROWSERS_PATH  Where koda's render_page finds chromium (visual tasks). run_koda.sh defaults it
+#                     to the real user's playwright cache before HOME is isolated.
 # Run knobs:
 #   BENCH_PROXY=1             Route traffic through the metering proxy (default). 0 = direct to api.deepseek.com
 #                             (tokens then come from each tool's own report only).
@@ -132,7 +134,7 @@ snapdiff() {  # snapdiff <before.json> <after.json> <out.json>
 # BENCH_WATCH_REGEX, ...). Same allowlist for every tool; TERM is pinned.
 BENCH_ENV_ALLOW_BASE="PATH HOME USER LOGNAME SHELL LANG LC_ALL LC_CTYPE TMPDIR __CF_USER_TEXT_ENCODING \
 XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME XDG_CACHE_HOME npm_config_cache DEVELOPER_DIR \
-GIT_CEILING_DIRECTORIES GIT_TERMINAL_PROMPT GIT_PAGER PAGER DEEPSEEK_API_KEY"
+GIT_CEILING_DIRECTORIES GIT_TERMINAL_PROMPT GIT_PAGER PAGER DEEPSEEK_API_KEY PLAYWRIGHT_BROWSERS_PATH"
 
 bench_run() {  # bench_run <cmd...>  - cwd=workspace, stdin=/dev/null, timeout + wall clock
   snap "$WS" "$OUT/.ws_before.json"
